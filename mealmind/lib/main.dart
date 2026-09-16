@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'pages/ai.dart';
+import 'pages/foods.dart';
 import 'pages/home.dart';
-import 'pages/placeholders.dart';
+import 'pages/profile.dart';
 import 'pages/recipes.dart';
 import 'theme.dart';
 
@@ -83,6 +84,18 @@ class RootShell extends StatefulWidget {
 
 class _RootShellState extends State<RootShell> {
   int _index = 0;
+  int _aiRequestToken = 0;
+  String? _pendingAiPrompt;
+
+  void _selectTab(int index) => setState(() => _index = index);
+
+  void _askAiWithFoods(List<String> foodNames) {
+    setState(() {
+      _pendingAiPrompt = '请用我选中的${foodNames.join('、')}推荐一顿家常饭';
+      _aiRequestToken++;
+      _index = 3;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,12 +103,18 @@ class _RootShellState extends State<RootShell> {
       // IndexedStack 会保留每个页面的滚动位置，切回来不会跳顶
       body: IndexedStack(
         index: _index,
-        children: const [
-          HomePage(),
-          FoodsPage(),
-          RecipesPage(),
-          AiPage(),
-          ProfilePage(),
+        children: [
+          HomePage(
+            onOpenFoods: () => _selectTab(1),
+            onOpenRecipes: () => _selectTab(2),
+          ),
+          FoodsPage(onAskAi: _askAiWithFoods),
+          const RecipesPage(),
+          AiPage(
+            initialPrompt: _pendingAiPrompt,
+            requestToken: _aiRequestToken,
+          ),
+          const ProfilePage(),
         ],
       ),
       bottomNavigationBar: DecoratedBox(
@@ -105,7 +124,7 @@ class _RootShellState extends State<RootShell> {
         ),
         child: NavigationBar(
           selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
+          onDestinationSelected: _selectTab,
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.white,
           indicatorColor: green100,

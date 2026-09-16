@@ -43,7 +43,14 @@ class _Item {
 }
 
 class AiPage extends StatefulWidget {
-  const AiPage({super.key});
+  final String? initialPrompt;
+  final int requestToken;
+
+  const AiPage({
+    super.key,
+    this.initialPrompt,
+    this.requestToken = 0,
+  });
 
   @override
   State<AiPage> createState() => _AiPageState();
@@ -59,6 +66,17 @@ class _AiPageState extends State<AiPage> {
   void initState() {
     super.initState();
     _items.add(_Item.ai(mockAiGreeting));
+  }
+
+  @override
+  void didUpdateWidget(covariant AiPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.requestToken != oldWidget.requestToken &&
+        widget.initialPrompt != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _send(widget.initialPrompt!);
+      });
+    }
   }
 
   @override
