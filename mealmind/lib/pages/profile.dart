@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../state/app_state.dart';
 import '../theme.dart';
 
 /// 个人中心：家庭档案是求解器的输入，不只是展示信息。
@@ -20,10 +21,49 @@ class _ProfilePageState extends State<ProfilePage> {
   final Set<String> _avoid = <String>{'辛辣'};
   final Set<String> _tools = <String>{'炒锅', '汤锅'};
 
+  @override
+  void initState() {
+    super.initState();
+    // 回填已保存的档案。不回填的话每次进这一页都回到默认值，
+    // 用户会以为自己上次的修改丢了。
+    final p = AppState.instance.profile;
+    _people = p.people;
+    _budget = p.budget;
+    _cookMinutes = p.cookMinutes;
+    _lowSodium = p.lowSodium;
+    _reminders = p.reminders;
+    _preferences
+      ..clear()
+      ..addAll(p.preferences);
+    _avoid
+      ..clear()
+      ..addAll(p.avoid);
+    _tools
+      ..clear()
+      ..addAll(p.tools);
+  }
+
+  /// 保存 = 写进全局共享状态，并通知菜单页立即重算。
+  ///
+  /// ⚠️ 注意这里和之前的区别：以前这个方法只弹了个 SnackBar，
+  ///    什么也没存 —— 那句「下次生成菜单将使用这些约束」是假的。
+  ///    现在它真的存了，菜单页也真的会跟着变。
   void _saveProfile() {
+    AppState.instance.saveProfile(
+      AppState.instance.profile.copyWith(
+        people: _people,
+        budget: _budget,
+        cookMinutes: _cookMinutes,
+        lowSodium: _lowSodium,
+        reminders: _reminders,
+        preferences: Set<String>.of(_preferences),
+        avoid: Set<String>.of(_avoid),
+        tools: Set<String>.of(_tools),
+      ),
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('家庭档案已保存，下次生成菜单将使用这些约束'),
+        content: Text('家庭档案已保存 —— 菜单与购物清单已按新约束重算'),
         behavior: SnackBarBehavior.floating,
         backgroundColor: Color(0xFF163A26),
       ),

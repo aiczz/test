@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../models/plan.dart';
+import '../state/app_state.dart';
+import 'local_estimator.dart';
 
 /// =====================================================================
 /// 接口层
@@ -48,13 +50,29 @@ Future<Plan> fetchPlan({
   String? week,
   int days = 7,
   int people = 3,
+  double budget = 300,
+  bool lowSodium = true,
   List<String> preferences = const <String>[],
+  List<String> avoid = const <String>[],
 }) async {
   if (useMock) {
     final raw = await rootBundle.loadString('assets/mock/plan.json');
     // 模拟一点网络延迟，方便看加载状态（真实接口快的话可以删掉）
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    return Plan.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    final base = Plan.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    // ★ 把家庭档案作用到基准方案上。
+    //   不做这一步，用户在「我的」页把人数 3 改成 5、再切回菜单页，
+    //   界面会毫无反应 —— 「家庭档案是求解器的输入」这句话就是假的。
+    return applyProfile(
+      base,
+      FamilyProfile(
+        people: people,
+        budget: budget,
+        lowSodium: lowSodium,
+        preferences: preferences.toSet(),
+        avoid: avoid.toSet(),
+      ),
+    );
   }
 
   try {
@@ -65,7 +83,10 @@ Future<Plan> fetchPlan({
         'week': week,
         'days': days,
         'people': people,
+        'budget': budget,
+        'low_sodium': lowSodium,
         'preferences': preferences,
+        'avoid': avoid,
       },
     );
     final data = res.data;

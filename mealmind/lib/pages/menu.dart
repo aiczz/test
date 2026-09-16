@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/plan.dart';
 import '../services/api.dart';
+import '../state/app_state.dart';
 import '../theme.dart';
 
 /// =====================================================================
@@ -31,10 +32,37 @@ class _MenuPageState extends State<MenuPage> {
   @override
   void initState() {
     super.initState();
-    _future = fetchPlan();
+    _future = _load();
+    // ★ 监听家庭档案：用户在「我的」页一点保存，这里立刻按新约束重算。
+    //   这是「家庭档案是求解器的输入」这句注释的兑现处 ——
+    //   在此之前它只是一句注释，界面上没有任何东西真的用到了家庭档案。
+    AppState.instance.addListener(_onProfileChanged);
   }
 
-  void _reload() => setState(() => _future = fetchPlan());
+  @override
+  void dispose() {
+    AppState.instance.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    if (!mounted) return;
+    _reload();
+  }
+
+  /// 从共享状态取家庭档案，作为求解输入
+  Future<Plan> _load() {
+    final p = AppState.instance.profile;
+    return fetchPlan(
+      people: p.people,
+      budget: p.budget,
+      lowSodium: p.lowSodium,
+      preferences: p.preferences.toList(),
+      avoid: p.avoid.toList(),
+    );
+  }
+
+  void _reload() => setState(() => _future = _load());
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +198,8 @@ class _PlanBody extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             children: [
+              const _ActiveConstraintsCard(),
+              const SizedBox(height: 12),
               _WeightSlider(value: weight, onChanged: onWeightChanged),
               const SizedBox(height: 14),
               _SummaryCard(plan: plan),
@@ -185,6 +215,77 @@ class _PlanBody extends StatelessWidget {
         ),
         _ShoppingBar(plan: plan),
       ],
+    );
+  }
+}
+
+// ---- 本次求解实际采用的约束 ----
+//
+// 这一栏是「家庭档案 → 求解输入」这条链路的显式证据：
+// 在「我的」页改完设置再回到这一页，人数 / 预算 / 钠上限立刻对得上号。
+// 答辩时这是最省事的一段演示。
+
+class _ActiveConstraintsCard extends StatelessWidget {
+  const _ActiveConstraintsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppState.instance.profile;
+    final prefText = p.preferences.isEmpty ? '无' : p.preferences.join('、');
+    final avoidText = p.avoid.isEmpty ? '无' : p.avoid.join('、');
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: cardDeco(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.tune, size: 16, color: green700),
+              const SizedBox(width: 6),
+              const Text(
+                '本次求解采用的约束',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: ink,
+                ),
+              ),
+              const Spacer(),
+              const Text(
+                '来自「我的」家庭档案',
+                style: TextStyle(fontSize: 10, color: muted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _Tag(text: '${p.people} 人', bg: green100, fg: green700),
+              _Tag(
+                text: '预算 ¥${p.budget.toStringAsFixed(0)}',
+                bg: green100,
+                fg: green700,
+              ),
+              _Tag(
+                text: '钠上限 ${p.sodiumLimitMg}mg',
+                bg: p.lowSodium ? green100 : orange100,
+                fg: p.lowSodium ? green700 : orange,
+              ),
+              _Tag(text: '忌口 $avoidText', bg: green100, fg: green700),
+              _Tag(text: '口味 $prefText', bg: green100, fg: green700),
+              _Tag(
+                text: '厨具 ${p.tools.length} 种',
+                bg: green100,
+                fg: green700,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

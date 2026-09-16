@@ -114,4 +114,54 @@ flutter build web             # 网页版（演示保底）
 - [x] 菜谱页 / 菜谱详情
 - [x] AI 助手（多智能体协作轨迹）
 - [x] 家庭设置（人数 / 预算 / 慢病 / 忌口 / 厨具 / 时间）
-- [ ] 后端接口接入
+- [x] ★ 家庭档案 → 菜单 / 购物清单 **联动闭环**
+      （改人数/预算/限钠，切回菜单页会真的重算 —— 约束不是摆设）
+- [ ] 真 CP-SAT 求解器（当前由 `lib/services/local_estimator.dart` 本地派生顶上）
+- [ ] 后端接口接入（`lib/services/api.dart` 的 `useMock` 改成 `false`）
+
+### 关于「联动」是怎么实现的
+
+`lib/state/app_state.dart` 是一个**零第三方依赖**的共享状态层（Flutter 自带的
+`ChangeNotifier`），不违背上面第 4 节「不引入状态管理框架」的约定 ——
+但家庭档案是**求解器的输入**，必须跨页面流动，`setState` 管不到别的页面。
+
+```
+profile.dart「保存」
+   → AppState.saveProfile()
+   → notifyListeners()
+   → menu.dart 监听到 → 带着新约束重新求解 → 界面立即变化
+```
+
+当前求解结果是 `local_estimator.dart` 按**确定性规则**从基准方案派生的
+（人数缩放采购量、限钠收紧钠上限、忌口过滤菜品）。它**不是求解器也不是 AI**，
+界面上如实标注为「本地估算（待接 CP-SAT 求解器）」。
+
+---
+
+## 七、部署到公网（GitHub Pages）
+
+CI 已配好：push 到 `main` 会自动构建 Flutter Web 并发布。本地不用装任何工具链。
+
+**预期地址**：`https://aiczz.github.io/test/`
+
+### 首次启用（只需做一次）
+
+1. Settings → General → 拉到底 → **Change visibility → Make public**
+   —— 免费版组织的私有仓库**不能**用 GitHub Pages。
+2. Settings → Pages → **Source 选 "GitHub Actions"**。
+3. 推一次 `main`，或在 Actions 页手动运行 `Deploy Web`。
+
+### 改了仓库名怎么办
+
+`.github/workflows/deploy-pages.yml` 里的 `--base-href "/test/"` 要同步改成新仓库名。
+GitHub Pages 项目站点发在 `/<仓库名>/` 这个**子路径**下，不是域名根路径 ——
+**这一行不改，页面就是白屏**，而且控制台只会报一堆 404，很难查。
+
+### 排错
+
+| 现象 | 原因 |
+|---|---|
+| 页面全白 + 控制台一堆 404 | `--base-href` 和仓库名不一致 |
+| deploy 报 `Pages site not found` | Settings → Pages 里没选 "GitHub Actions" |
+| build 报仓库不可用 | 仓库还是 private |
+| 一直转圈加载不出来 | CanvasKit 从境外 CDN 拉取慢。可在 build 命令上加 `--dart-define=FLUTTER_WEB_CANVASKIT_URL=canvaskit/` 改用同源文件 |
