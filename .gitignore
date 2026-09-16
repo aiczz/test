@@ -42,6 +42,10 @@ desktop.ini
 *.tmp
 _fx/
 
+# ---- 图标预览（scripts/make_icons.py 生成，仅用于肉眼检查，不参与打包）----
+icon-preview.png
+icon-sizes.png
+
 # ---- 本地预览 / 托管产物（项目不发布到 GPT Sites）----
 .sites-runtime/
 .openai/hosting.json
