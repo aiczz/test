@@ -354,7 +354,7 @@ class _MiniRecipeCard extends StatelessWidget {
           SizedBox(
             height: 110,
             width: double.infinity,
-            child: Image.asset(recipe.image, fit: BoxFit.cover),
+            child: Image.asset(recipe.image, fit: BoxFit.cover, filterQuality: FilterQuality.high),
           ),
           Padding(
             padding: const EdgeInsets.all(12),

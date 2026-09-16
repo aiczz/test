@@ -135,6 +135,7 @@ class _Hero extends StatelessWidget {
             child: Image.asset(
               'assets/images/hero-soup.jpg',
               fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
             ),
           ),
           Padding(
@@ -280,7 +281,7 @@ class _FoodCard extends StatelessWidget {
         children: [
           AspectRatio(
             aspectRatio: 1.25,
-            child: Image.asset(food.image, fit: BoxFit.cover),
+            child: Image.asset(food.image, fit: BoxFit.cover, filterQuality: FilterQuality.high),
           ),
           Padding(
             padding: const EdgeInsets.all(10),
@@ -345,7 +346,7 @@ class _RecipeCard extends StatelessWidget {
           children: [
             SizedBox(
               width: 112,
-              child: Image.asset(recipe.image, fit: BoxFit.cover),
+              child: Image.asset(recipe.image, fit: BoxFit.cover, filterQuality: FilterQuality.high),
             ),
             Expanded(
               child: Padding(

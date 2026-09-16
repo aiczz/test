@@ -297,7 +297,7 @@ class _RecipeListCard extends StatelessWidget {
           children: [
             SizedBox(
               width: 116,
-              child: Image.asset(recipe.image, fit: BoxFit.cover),
+              child: Image.asset(recipe.image, fit: BoxFit.cover, filterQuality: FilterQuality.high),
             ),
             Expanded(
               child: Padding(
@@ -436,7 +436,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                 SizedBox(
                   height: 200,
                   width: double.infinity,
-                  child: Image.asset(recipe.image, fit: BoxFit.cover),
+                  child: Image.asset(recipe.image, fit: BoxFit.cover, filterQuality: FilterQuality.high),
                 ),
                 Positioned(
                   top: 12,

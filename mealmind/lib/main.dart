@@ -35,6 +35,21 @@ class ShishiApp extends StatelessWidget {
         fontFamily: null,
       ),
       home: const RootShell(),
+      // 桌面浏览器 / 平板上，把界面限制成「手机宽度」居中显示。
+      // 两个好处：
+      //   1. 看起来就是一台手机，答辩投影时更像 App
+      //   2. ★ 图片不会被拉宽 —— 源图只有 230~458 px，一拉宽就糊
+      builder: (context, child) {
+        return ColoredBox(
+          color: const Color(0xFFE6ECE2),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ),
+        );
+      },
     );
   }
 }
