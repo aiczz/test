@@ -9,7 +9,14 @@ import 'menu.dart';
 ///
 /// 结构：顶部品牌栏 → Hero 推荐 → 今日推荐食材 → 家常易做推荐 → AI 建议 → 快捷操作
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  final VoidCallback onOpenFoods;
+  final VoidCallback onOpenRecipes;
+
+  const HomePage({
+    super.key,
+    required this.onOpenFoods,
+    required this.onOpenRecipes,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +28,7 @@ class HomePage extends StatelessWidget {
           children: [
             const _TopBar(),
             const SizedBox(height: 14),
-            const _Hero(),
+            _Hero(onOpenRecipes: onOpenRecipes),
             const SizedBox(height: 26),
             const _SectionHeader(
               icon: Icons.eco,
@@ -38,13 +45,13 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             for (final r in mockRecipes.take(3)) ...[
-              _RecipeCard(recipe: r),
+              _RecipeCard(recipe: r, onOpenRecipes: onOpenRecipes),
               const SizedBox(height: 12),
             ],
             const SizedBox(height: 14),
             const _AiTipBar(),
             const SizedBox(height: 20),
-            const _QuickActions(),
+            _QuickActions(onOpenFoods: onOpenFoods),
           ],
         ),
       ),
@@ -116,7 +123,9 @@ class _Pill extends StatelessWidget {
 // =====================================================================
 
 class _Hero extends StatelessWidget {
-  const _Hero();
+  final VoidCallback onOpenRecipes;
+
+  const _Hero({required this.onOpenRecipes});
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +179,7 @@ class _Hero extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
-                  onPressed: () => _toast(context, '打开菜谱详情（下一步实现）'),
+                  onPressed: onOpenRecipes,
                   style: FilledButton.styleFrom(
                     backgroundColor: orange,
                     padding: const EdgeInsets.symmetric(
@@ -328,14 +337,18 @@ class _FoodCard extends StatelessWidget {
 
 class _RecipeCard extends StatelessWidget {
   final Recipe recipe;
+  final VoidCallback onOpenRecipes;
 
-  const _RecipeCard({required this.recipe});
+  const _RecipeCard({
+    required this.recipe,
+    required this.onOpenRecipes,
+  });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(rCard),
-      onTap: () => _toast(context, '打开「${recipe.name}」详情（下一步实现）'),
+      onTap: onOpenRecipes,
       child: Container(
         // 固定高度，保证图片和右侧文字对齐；内容比这个矮，不会溢出
         height: 132,
@@ -488,7 +501,9 @@ class _AiTipBar extends StatelessWidget {
 // =====================================================================
 
 class _QuickActions extends StatelessWidget {
-  const _QuickActions();
+  final VoidCallback onOpenFoods;
+
+  const _QuickActions({required this.onOpenFoods});
 
   @override
   Widget build(BuildContext context) {
@@ -518,7 +533,7 @@ class _QuickActions extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: FilledButton(
-            onPressed: () => _toast(context, '去选食材（下一步实现）'),
+            onPressed: onOpenFoods,
             style: FilledButton.styleFrom(
               backgroundColor: orange,
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -533,20 +548,4 @@ class _QuickActions extends StatelessWidget {
       ],
     );
   }
-}
-
-// =====================================================================
-// 临时提示（SnackBar）—— 等各页面实现后会被真正的跳转替换
-// =====================================================================
-
-void _toast(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(message),
-      duration: const Duration(milliseconds: 1400),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: const Color(0xFF163A26),
-      shape: const StadiumBorder(),
-    ),
-  );
 }
