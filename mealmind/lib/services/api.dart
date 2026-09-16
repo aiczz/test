@@ -10,6 +10,13 @@ import '../models/plan.dart';
 ///
 /// ★ 后端接口好了之后，把 useMock 改成 false 就行 —— 只改这一行。
 ///   前端所有页面都已经按真接口的格式在跑，不需要动别的代码。
+///
+/// ⚠️ 端点路径对齐队友 `front指南.txt` 第 25 节的约定：
+///       POST /api/menu/plan      多日菜单生成
+///       GET  /api/shopping-list  购物清单
+///    但响应体在原契约（docs/接口契约.md）基础上做了扩展，增加了
+///    nutrition / price_source / reason / meta 四块 ——
+///    这些是"约束优化 + 官方公示价格"的落点，需要在接口评审时跟后端确认。
 /// =====================================================================
 
 /// true = 读 assets/mock/plan.json 里的假数据
@@ -22,25 +29,50 @@ const bool useMock = true;
 ///    （电脑上跑 ipconfig 查 IPv4 地址；手机和电脑要连同一个 WiFi）
 const String apiBase = 'http://10.0.2.2:8000';
 
-/// 拉取一周方案
-Future<Plan> fetchPlan({String userId = 'u01', String? week}) async {
+/// 拉取一周（或 N 天）方案
+Future<Plan> fetchPlan({
+  String userId = 'u01',
+  String? week,
+  int days = 7,
+  int people = 3,
+  List<String> preferences = const <String>[],
+}) async {
   if (useMock) {
     final raw = await rootBundle.loadString('assets/mock/plan.json');
     // 模拟一点网络延迟，方便看加载状态（真实接口快的话可以删掉）
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
     return Plan.fromJson(jsonDecode(raw) as Map<String, dynamic>);
   }
 
-  final uri = Uri.parse('$apiBase/api/plan').replace(
-    queryParameters: <String, String>{
-      'user_id': userId,
-      if (week != null) 'week': week,
-    },
-  );
-
-  final res = await http.get(uri).timeout(const Duration(seconds: 30));
+  final res = await http
+      .post(
+        Uri.parse('$apiBase/api/menu/plan'),
+        headers: const <String, String>{
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: jsonEncode(<String, dynamic>{
+          'user_id': userId,
+          'week': week,
+          'days': days,
+          'people': people,
+          'preferences': preferences,
+        }),
+      )
+      .timeout(const Duration(seconds: 30));
 
   if (res.statusCode != 200) {
+    // 契约里的 INFEASIBLE（约束冲突）—— 求解器无解时要给用户不一样的提示
+    if (res.statusCode == 409) {
+      final body = _tryDecode(res);
+      final err = body == null
+          ? null
+          : body['error'] as Map<String, dynamic>?;
+      throw PlanApiException(
+        code: (err?['code'] as String?) ?? 'INFEASIBLE',
+        message: (err?['message'] as String?) ?? '当前约束下无解',
+        bindingConstraint: err?['binding_constraint'] as String?,
+      );
+    }
     throw PlanApiException(
       code: 'HTTP_${res.statusCode}',
       message: '接口返回 ${res.statusCode}',
@@ -53,12 +85,20 @@ Future<Plan> fetchPlan({String userId = 'u01', String? week}) async {
   );
 }
 
+Map<String, dynamic>? _tryDecode(http.Response res) {
+  try {
+    return jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// 统一的接口异常（对应契约里的 error 结构）
 class PlanApiException implements Exception {
   final String code;
   final String message;
 
-  /// 求解器无解时后端会给这个，前端可以提示用户放宽哪条约束
+  /// 求解器无解时后端会给这个，前端提示用户放宽哪条约束
   final String? bindingConstraint;
 
   const PlanApiException({

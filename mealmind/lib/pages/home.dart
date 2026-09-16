@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/mock.dart';
 import '../models/content.dart';
 import '../theme.dart';
+import 'menu.dart';
 
 /// 首页 —— 对应队友原型 `homePage()`
 ///
@@ -494,7 +495,10 @@ class _QuickActions extends StatelessWidget {
       children: [
         Expanded(
           child: OutlinedButton(
-            onPressed: () => _toast(context, '今日菜单（下一步实现）'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const MenuPage()),
+            ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Color(0xFFCFE3C8)),
               padding: const EdgeInsets.symmetric(vertical: 14),
