@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'pages/home.dart';
 import 'pages/placeholders.dart';
+import 'pages/recipes.dart';
 import 'theme.dart';
 
 void main() => runApp(const ShishiApp());

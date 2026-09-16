@@ -3,6 +3,12 @@
 // 字段对应队友 `front指南.txt` 第 25 节约定的接口：
 //   GET /api/foods        → List<Food>
 //   GET /api/recipes      → List<Recipe>
+//   GET /api/recipes/{id} → Recipe（含 ingredients / steps）
+
+List<String> _strList(dynamic value) =>
+    ((value as List?) ?? const <dynamic>[])
+        .map((e) => e.toString())
+        .toList();
 
 class Food {
   final String id;
@@ -27,9 +33,7 @@ class Food {
         image: j['image'] as String? ?? '',
         category: j['category'] as String? ?? '',
         qty: j['qty'] as String? ?? '',
-        tags: ((j['tags'] as List?) ?? const [])
-            .map((e) => e.toString())
-            .toList(),
+        tags: _strList(j['tags']),
       );
 }
 
@@ -42,6 +46,11 @@ class Recipe {
   final String people; // 如「2-3人」
   final List<String> tags;
 
+  // ---- 详情页字段（列表接口可能不返回，所以给了默认值）----
+  final List<String> ingredients; // 所需食材，含用量文案，如「莲藕 1节」
+  final List<String> steps; // 做法步骤
+  final String difficulty; // 简单 / 中等
+
   const Recipe({
     required this.id,
     required this.name,
@@ -50,6 +59,9 @@ class Recipe {
     required this.time,
     required this.people,
     required this.tags,
+    this.ingredients = const <String>[],
+    this.steps = const <String>[],
+    this.difficulty = '简单',
   });
 
   factory Recipe.fromJson(Map<String, dynamic> j) => Recipe(
@@ -59,9 +71,10 @@ class Recipe {
         desc: j['desc'] as String? ?? '',
         time: j['time'] as String? ?? '',
         people: j['people'] as String? ?? '',
-        tags: ((j['tags'] as List?) ?? const [])
-            .map((e) => e.toString())
-            .toList(),
+        tags: _strList(j['tags']),
+        ingredients: _strList(j['ingredients']),
+        steps: _strList(j['steps']),
+        difficulty: j['difficulty'] as String? ?? '简单',
       );
 }
 

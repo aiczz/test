@@ -138,25 +138,6 @@ class FoodsPage extends StatelessWidget {
   }
 }
 
-class RecipesPage extends StatelessWidget {
-  const RecipesPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const _Placeholder(
-      icon: Icons.menu_book,
-      title: '菜谱',
-      subtitle: '应季食材 · 简单好做',
-      plan: [
-        '菜谱分类（快手菜 / 汤品 / 低脂 / 家常 / 秋季推荐）',
-        '搜索菜名或食材',
-        '菜谱详情（食材用量 + 做法步骤）',
-        '收藏',
-      ],
-    );
-  }
-}
-
 class AiPage extends StatelessWidget {
   const AiPage({super.key});
 
