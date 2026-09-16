@@ -142,3 +142,66 @@ const heroBody = '秋天正是莲藕上市的好时节。来一碗莲藕排骨�
 /// 顶部两个 pill 的文案
 const currentCity = '杭州';
 const currentSeason = '秋季 · 9月';
+
+// =====================================================================
+// AI 助手 —— 多智能体协作轨迹（假数据）
+//
+// 真实的轨迹由后端返回（每个 Agent 一步）。
+// 这里先按设计好的流程写死，让"多智能体"在演示时看得见。
+// =====================================================================
+
+const mockAgentTrace = <AgentStep>[
+  AgentStep(
+    agent: 'Profile Agent',
+    summary: '读取家庭档案：3 人 · 周预算 300 元 · 妈妈限钠 · 孩子不吃辣',
+    ms: 12,
+  ),
+  AgentStep(
+    agent: 'Retrieval Agent',
+    summary: '候选召回 42 道 → 过滤过敏原与辣味后剩 31 道',
+    ms: 86,
+  ),
+  AgentStep(
+    agent: 'Inventory Agent',
+    summary: '库存与保质期检查：菠菜周四到期，需优先消耗',
+    status: 'info',
+    ms: 9,
+  ),
+  AgentStep(
+    agent: 'Nutrition Agent',
+    summary: '营养校验：钠 1720 / 2000 mg ✓ 蔬菜量达标 ✓',
+    ms: 24,
+  ),
+  AgentStep(
+    agent: 'Planner Agent',
+    summary: 'CP-SAT 求解完成，生成 3 个 Pareto 方案',
+    ms: 1840,
+  ),
+  AgentStep(
+    agent: 'Critic Agent',
+    summary: '否决方案 B（钠 2180 mg 超标），回灌 Planner 重解',
+    status: 'veto',
+    ms: 31,
+  ),
+  AgentStep(
+    agent: 'Explainer Agent',
+    summary: '生成推荐理由与约束松紧说明',
+    ms: 402,
+  ),
+];
+
+const mockAiGreeting = '你好，我是小食。现在是秋季，需要我帮你安排一顿简单又营养的晚餐吗？';
+
+const mockAiQuickPrompts = <String>[
+  '今天吃什么？',
+  '三人晚餐推荐',
+  '用家里的食材做菜',
+];
+
+/// 两种回复：问到「食材」走第一种，否则走第二种（与原型逻辑一致）
+const mockAiReplyByFood = '你家现有的番茄、鸡蛋和小白菜很适合做番茄炒蛋与清炒白菜，'
+    '再搭配莲藕排骨汤，就是一顿营养均衡的三人晚餐。';
+
+const mockAiReplyDefault = '结合杭州秋季时令，我推荐莲藕排骨汤、番茄炒蛋和清炒白菜。'
+    '荤素搭配，味道温和，适合 2–3 人。';
+

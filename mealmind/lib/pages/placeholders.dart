@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 
 /// =====================================================================
-/// 四个占位页 —— 对应队友原型的 食材 / 菜谱 / AI助手 / 我的
+/// 占位页 —— 还没实现的页面先放这里
 ///
-/// 第一阶段先把应用骨架和首页做出来，这四个页面下一阶段逐个实现：
-///   食材  → 分类筛选 + 我的食材 + "用这些食材做菜"
-///   菜谱  → 搜索 + 分类 + 详情 + 收藏
-///   AI助手 → 对话 + 结构化推荐卡片（多智能体在这里体现）
-///   我的  → 家庭设置（人数/预算/慢病/忌口）→ 驱动求解器
+/// 已完成（各自独立文件）：
+///   首页   pages/home.dart
+///   菜单 + 购物清单   pages/menu.dart
+///   菜谱 + 详情   pages/recipes.dart
+///   AI 助手 + 多智能体协作轨迹   pages/ai.dart
+///
+/// 剩下这两个下一阶段实现：
+///   食材   → 分类筛选 + 我的食材 + "用这些食材做菜"
+///   我的   → 家庭设置（人数/预算/慢病/忌口）→ 驱动求解器
 /// =====================================================================
 
 class _Placeholder extends StatelessWidget {
@@ -133,26 +137,6 @@ class FoodsPage extends StatelessWidget {
         '食材详情',
         '「我的现有食材」管理',
         '用现有食材做菜',
-      ],
-    );
-  }
-}
-
-class AiPage extends StatelessWidget {
-  const AiPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const _Placeholder(
-      icon: Icons.auto_awesome,
-      title: 'AI助手 · 小食',
-      subtitle: '结合时令、人数和家中食材给建议',
-      plan: [
-        '对话界面 + 快捷提问',
-        '结构化菜谱推荐卡片',
-        '今天吃什么 / 多人晚餐推荐',
-        '根据现有食材推荐',
-        '多日菜单（← 多智能体协作在这里体现）',
       ],
     );
   }

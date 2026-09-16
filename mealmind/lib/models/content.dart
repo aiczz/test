@@ -85,3 +85,29 @@ class AiTip {
 
   const AiTip({required this.title, required this.body});
 }
+
+/// =====================================================================
+/// 多智能体协作轨迹的一步
+///
+/// 这是本项目"多智能体"唯一能被【看见】的地方 ——
+/// 答辩时把这张轨迹展开，比说十句"我们用了多智能体"都有用。
+/// =====================================================================
+class AgentStep {
+  final String agent; // 角色名，如 Profile Agent
+  final String summary; // 这一步做了什么
+
+  /// ok   = 正常完成
+  /// veto = 否决（Critic 的一票否决，是整个架构的灵魂）
+  /// info = 只读信息
+  final String status;
+
+  final int ms; // 耗时（毫秒）
+
+  const AgentStep({
+    required this.agent,
+    required this.summary,
+    this.status = 'ok',
+    this.ms = 0,
+  });
+}
+

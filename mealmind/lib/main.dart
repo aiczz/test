@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'pages/ai.dart';
 import 'pages/home.dart';
 import 'pages/placeholders.dart';
 import 'pages/recipes.dart';
