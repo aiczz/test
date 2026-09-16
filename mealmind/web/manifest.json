@@ -1,11 +1,11 @@
 {
-    "name": "mealmind",
-    "short_name": "mealmind",
+    "name": "食时 · 顺应时令的智慧饮食助手",
+    "short_name": "食时",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F4F7F1",
+    "theme_color": "#17733D",
+    "description": "结合 AI 的时令饮食助手：从当季食材出发，推荐菜谱与菜单，管理家中现有食材，生成购物清单。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
