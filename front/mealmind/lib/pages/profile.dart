@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_store.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import 'admin.dart';
 import 'login.dart';
 
 /// 个人中心：家庭档案是求解器的输入，不只是展示信息。
@@ -320,6 +321,38 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ],
               ),
+            ),
+            // 只有管理员才看得到这个入口。
+            // ⚠️ 这只是界面上的开关 —— 真正的权限校验在后端：
+            //    普通用户即使摸进这个页面，所有请求也只会拿到 403。
+            ListenableBuilder(
+              listenable: AuthStore.instance,
+              builder: (context, _) {
+                if (!(AuthStore.instance.user?.isAdmin ?? false)) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 26),
+                    const _SectionTitle(
+                      icon: Icons.admin_panel_settings_outlined,
+                      title: '管理',
+                      subtitle: '仅管理员可见',
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      decoration: cardDeco(),
+                      child: _MenuRow(
+                        icon: Icons.dashboard_customize_outlined,
+                        title: '管理员控制台',
+                        subtitle: '用户统计 · 封禁账号 · 登录记录',
+                        onTap: () => AdminPage.open(context),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
