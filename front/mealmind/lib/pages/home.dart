@@ -2,22 +2,30 @@ import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/recommender.dart';
+import '../state/app_state.dart';
 import '../theme.dart';
 import 'menu.dart';
 
 /// 首页 —— 对应队友原型 `homePage()`
 ///
-/// 结构：顶部品牌栏 → Hero 推荐 → 今日推荐食材 → 家常易做推荐 → AI 建议 → 快捷操作
+/// 结构：顶部品牌栏 → Hero 推荐 → 家庭约束条 → 今日推荐食材 → 按条件能做的菜 → AI 建议 → 快捷操作
+///
+/// ★ 推荐内容不是写死的：`pickForHome()` 会拿家庭档案筛一遍
+///   （烹饪时间筛掉超时的菜、忌口筛掉命中的菜、低钠和口味偏好调序），
+///   所以在「我的」里改约束，切回首页是真的会变的。
 class HomePage extends StatelessWidget {
   final VoidCallback onOpenFoods;
   final VoidCallback onOpenRecipes;
   final VoidCallback onOpenAi;
+  final VoidCallback onOpenProfile;
 
   const HomePage({
     super.key,
     required this.onOpenFoods,
     required this.onOpenRecipes,
     required this.onOpenAi,
+    required this.onOpenProfile,
   });
 
   @override
@@ -25,39 +33,124 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 28),
+        // 监听家庭档案：改完约束切回来，这里会自动重算
+        child: ListenableBuilder(
+          listenable: AppState.instance,
+          builder: (context, _) {
+            final picks = pickForHome(AppState.instance.profile);
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 28),
+              children: [
+                const _TopBar(),
+                const SizedBox(height: 14),
+                _HomeCarousel(
+                  onOpenFoods: onOpenFoods,
+                  onOpenRecipes: onOpenRecipes,
+                  onOpenAi: onOpenAi,
+                ),
+                const SizedBox(height: 18),
+                _ConstraintBar(picks: picks, onOpenProfile: onOpenProfile),
+                const SizedBox(height: 24),
+                const _SectionHeader(
+                  icon: Icons.eco,
+                  title: '今日推荐食材',
+                  subtitle: '应季鲜美 · 营养加分',
+                ),
+                const SizedBox(height: 12),
+                _FoodRow(foods: picks.foods),
+                const SizedBox(height: 26),
+                _SectionHeader(
+                  icon: Icons.local_dining,
+                  title: '按你的条件能做',
+                  subtitle: picks.subtitle,
+                ),
+                const SizedBox(height: 12),
+                _RecipeRow(
+                  recipes: picks.recipes,
+                  onOpenRecipes: onOpenRecipes,
+                ),
+                const SizedBox(height: 14),
+                const _AiTipBar(),
+                const SizedBox(height: 20),
+                _QuickActions(onOpenFoods: onOpenFoods),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// 家庭约束条 —— 让「约束在生效」这件事在首页也看得见
+//
+// 首页以前是全项目唯一不读家庭档案的页面，个性化只存在于菜单页。
+// 现在这里既显示当前条件，也直接说明推荐已经按它筛过；
+// 点一下跳到「我的」，形成「首页看到 → 点进去改 → 回来看变化」的闭环。
+// =====================================================================
+
+class _ConstraintBar extends StatelessWidget {
+  final HomePicks picks;
+  final VoidCallback onOpenProfile;
+
+  const _ConstraintBar({required this.picks, required this.onOpenProfile});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppState.instance.profile;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(rCard),
+      onTap: onOpenProfile,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: cardDeco(),
+        child: Row(
           children: [
-            const _TopBar(),
-            const SizedBox(height: 14),
-            _HomeCarousel(
-              onOpenFoods: onOpenFoods,
-              onOpenRecipes: onOpenRecipes,
-              onOpenAi: onOpenAi,
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: green100,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: const Icon(Icons.tune, size: 18, color: green700),
             ),
-            const SizedBox(height: 26),
-            const _SectionHeader(
-              icon: Icons.eco,
-              title: '今日推荐食材',
-              subtitle: '应季鲜美 · 营养加分',
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${p.people} 人 · 预算 ¥${p.budget.toStringAsFixed(0)} · '
+                    '${p.cookMinutes.round()} 分钟',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    picks.dropped > 0
+                        ? '推荐已按这些条件筛选，其中 ${picks.dropped} 道菜超出条件被排除'
+                        : '推荐已按这些条件筛选',
+                    style: const TextStyle(fontSize: 10.5, color: muted),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            _FoodRow(foods: mockFoods.take(3).toList()),
-            const SizedBox(height: 26),
-            const _SectionHeader(
-              icon: Icons.local_dining,
-              title: '家常易做推荐',
-              subtitle: '应季食材 · 简单好做',
+            const SizedBox(width: 8),
+            const Text(
+              '去修改',
+              style: TextStyle(
+                fontSize: 11,
+                color: green700,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: 12),
-            _RecipeRow(
-              recipes: mockRecipes.take(3).toList(),
-              onOpenRecipes: onOpenRecipes,
-            ),
-            const SizedBox(height: 14),
-            const _AiTipBar(),
-            const SizedBox(height: 20),
-            _QuickActions(onOpenFoods: onOpenFoods),
+            const Icon(Icons.chevron_right, size: 16, color: green700),
           ],
         ),
       ),

@@ -138,47 +138,13 @@ const currentCity = '杭州';
 const currentSeason = '秋季 · 9月';
 
 // =====================================================================
-// AI 助手 —— 多智能体协作轨迹（假数据）
+// AI 助手
 //
-// 真实的轨迹由后端返回（每个 Agent 一步）。
-// 这里先按设计好的流程写死，让"多智能体"在演示时看得见。
+// 多智能体协作轨迹【不在】这里 —— 它由 lib/services/recommender.dart 的
+// agentTraceFor(profile) 按【真实家庭档案】生成，这样改了人数 / 预算 / 限钠，
+// 轨迹第一步读到的内容、以及 Critic 会不会行使否决，都会跟着变。
+// 轨迹的流程仍是本地按设计展开的，后端好了改由接口返回。
 // =====================================================================
-
-const mockAgentTrace = <AgentStep>[
-  AgentStep(
-    agent: 'Profile Agent',
-    summary: '读取家庭档案：3 人 · 周预算 300 元 · 妈妈限钠 · 孩子不吃辣',
-    ms: 12,
-  ),
-  AgentStep(
-    agent: 'Retrieval Agent',
-    summary: '候选召回 42 道 → 过滤过敏原与辣味后剩 31 道',
-    ms: 86,
-  ),
-  AgentStep(
-    agent: 'Inventory Agent',
-    summary: '库存与保质期检查：菠菜周四到期，需优先消耗',
-    status: 'info',
-    ms: 9,
-  ),
-  AgentStep(
-    agent: 'Nutrition Agent',
-    summary: '营养校验：钠 1720 / 2000 mg ✓ 蔬菜量达标 ✓',
-    ms: 24,
-  ),
-  AgentStep(
-    agent: 'Planner Agent',
-    summary: 'CP-SAT 求解完成，生成 3 个 Pareto 方案',
-    ms: 1840,
-  ),
-  AgentStep(
-    agent: 'Critic Agent',
-    summary: '否决方案 B（钠 2180 mg 超标），回灌 Planner 重解',
-    status: 'veto',
-    ms: 31,
-  ),
-  AgentStep(agent: 'Explainer Agent', summary: '生成推荐理由与约束松紧说明', ms: 402),
-];
 
 const mockAiGreeting = '你好，我是小食。现在是秋季，需要我帮你安排一顿简单又营养的晚餐吗？';
 
