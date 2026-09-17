@@ -22,7 +22,19 @@ class RecipesPage extends StatefulWidget {
 class _RecipesPageState extends State<RecipesPage> {
   String _category = '全部';
   String _query = '';
-  final Set<String> _favorites = <String>{'soup'};
+  final TextEditingController _search = TextEditingController();
+
+  /// 收藏。
+  /// ⚠️ 以前初始值是 {'soup'} —— 相当于「默认已经收藏了莲藕排骨汤」，
+  ///    一个假状态。现在初始为空；收藏接口后端已经有了，
+  ///    登录后可以接上（见 back/README.md 的 /api/favorites）。
+  final Set<String> _favorites = <String>{};
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   List<Recipe> get _visible {
     Iterable<Recipe> list = ContentStore.instance.recipes;
@@ -112,6 +124,7 @@ class _RecipesPageState extends State<RecipesPage> {
 
             // ---- 搜索框 ----
             TextField(
+              controller: _search,
               onChanged: (v) => setState(() => _query = v.trim()),
               decoration: InputDecoration(
                 hintText: '搜索菜名或食材',
@@ -197,15 +210,37 @@ class _RecipesPageState extends State<RecipesPage> {
             // ---- 菜谱列表 ----
             if (list.isEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 44),
+                padding: const EdgeInsets.symmetric(vertical: 38),
                 alignment: Alignment.center,
-                child: const Column(
+                child: Column(
                   children: [
-                    Icon(Icons.search_off, size: 36, color: muted),
-                    SizedBox(height: 12),
+                    const Icon(Icons.search_off, size: 36, color: muted),
+                    const SizedBox(height: 12),
                     Text(
-                      '没有找到匹配的菜谱',
-                      style: TextStyle(fontSize: 13, color: muted),
+                      _query.isEmpty
+                          ? '「$_category」下面还没有菜谱'
+                          : '没有找到和「$_query」匹配的菜谱',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13, color: muted),
+                    ),
+                    const SizedBox(height: 10),
+                    // 有筛选条件时给一个「一键回到全部」——
+                    // 比以前只说一句「没有找到」强，用户不用自己猜怎么退出去
+                    TextButton.icon(
+                      onPressed: () => setState(() {
+                        _category = '全部';
+                        _query = '';
+                        _search.clear();
+                      }),
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('清空筛选，看全部菜谱'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: green700,
+                        textStyle: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ),
