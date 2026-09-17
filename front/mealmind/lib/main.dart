@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'pages/ai.dart';
@@ -9,6 +7,7 @@ import 'pages/profile.dart';
 import 'pages/recipes.dart';
 import 'services/api_config.dart';
 import 'services/auth_store.dart';
+import 'services/content_store.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -18,10 +17,12 @@ Future<void> main() async {
   // 恢复上次的登录状态（token 存在本地）
   await AuthStore.instance.restore();
 
-  // 探测后端是否可用。
-  // ⚠️ 故意不 await —— 连不上是正常情况（线上 PWA 本来就没有后端），
-  //    界面不该因为探测卡在启动页。探测结果通过 BackendStatus 广播出去。
-  unawaited(BackendStatus.instance.probe());
+  // 探测后端；在线就把内容数据也拉下来。
+  // ⚠️ 这两个 await 是必要的：页面直接从 ContentStore 同步读取，
+  //    不 await 的话首帧会先渲染本地假数据、再跳成后端数据，明显闪一下。
+  //    后端不在线时探测有 2 秒超时，之后静默降级到本地假数据。
+  await BackendStatus.instance.probe();
+  await ContentStore.instance.load();
 
   runApp(const ShishiApp());
 }

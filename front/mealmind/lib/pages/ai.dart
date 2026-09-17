@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/content_store.dart';
 import '../services/recommender.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -359,7 +360,7 @@ class _MiniRecipeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Recipe? recipe;
-    for (final r in mockRecipes) {
+    for (final r in ContentStore.instance.recipes) {
       if (r.id == recipeId) recipe = r;
     }
     if (recipe == null) return const SizedBox.shrink();

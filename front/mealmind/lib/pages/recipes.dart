@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/content_store.dart';
 import '../theme.dart';
 
 /// =====================================================================
@@ -25,7 +25,7 @@ class _RecipesPageState extends State<RecipesPage> {
   final Set<String> _favorites = <String>{'soup'};
 
   List<Recipe> get _visible {
-    Iterable<Recipe> list = mockRecipes;
+    Iterable<Recipe> list = ContentStore.instance.recipes;
 
     if (_category != '全部') {
       // 「汤品」不是标签，用 id 兜一下（与原型逻辑一致）

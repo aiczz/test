@@ -46,9 +46,15 @@ class HomePicks {
 }
 
 /// 按家庭档案给首页挑推荐内容。[limit] 是每个区块最多几张卡片。
-HomePicks pickForHome(FamilyProfile profile, {int limit = 3}) {
-  final foods = _visibleFoods(profile);
-  final result = _visibleRecipes(profile);
+HomePicks pickForHome(
+  FamilyProfile profile, {
+  /// 内容数据源。不传就用本地假数据 —— 页面从 ContentStore 传真后端数据进来。
+  List<Food>? foodPool,
+  List<Recipe>? recipePool,
+  int limit = 3,
+}) {
+  final foods = _visibleFoods(profile, foodPool ?? mockFoods);
+  final result = _visibleRecipes(profile, recipePool ?? mockRecipes);
 
   final notes = <String>[
     '${profile.cookMinutes.round()} 分钟内',
@@ -70,9 +76,9 @@ HomePicks pickForHome(FamilyProfile profile, {int limit = 3}) {
 // 食材
 // ---------------------------------------------------------------------
 
-List<Food> _visibleFoods(FamilyProfile p) {
-  if (p.avoid.isEmpty) return mockFoods;
-  final kept = mockFoods
+List<Food> _visibleFoods(FamilyProfile p, List<Food> source) {
+  if (p.avoid.isEmpty) return source;
+  final kept = source
       .where(
         (f) =>
             !p.avoid.any((a) => f.name.contains(a) || f.tags.any((t) => t.contains(a))),
@@ -80,7 +86,7 @@ List<Food> _visibleFoods(FamilyProfile p) {
       .toList();
   // 全被筛光时退回原始列表：宁可推一道「可能不合忌口」的，
   // 也不能让首页出现空白区块 —— 空白比不完美更糟。
-  return kept.isEmpty ? mockFoods : kept;
+  return kept.isEmpty ? source : kept;
 }
 
 // ---------------------------------------------------------------------
@@ -89,9 +95,10 @@ List<Food> _visibleFoods(FamilyProfile p) {
 
 ({List<Recipe> recipes, List<Recipe> dropped}) _visibleRecipes(
   FamilyProfile p,
+  List<Recipe> source,
 ) {
   // 1. 忌口出局
-  final afterAvoid = mockRecipes.where((r) => !_hitsAvoid(r, p.avoid)).toList();
+  final afterAvoid = source.where((r) => !_hitsAvoid(r, p.avoid)).toList();
 
   // 2. 烹饪时间出局
   final afterTime = afterAvoid
@@ -101,14 +108,14 @@ List<Food> _visibleFoods(FamilyProfile p) {
   // 兜底：同上，全筛光就退回上一级
   final kept = afterTime.isNotEmpty
       ? afterTime
-      : (afterAvoid.isNotEmpty ? afterAvoid : mockRecipes);
+      : (afterAvoid.isNotEmpty ? afterAvoid : source);
 
   // 3. 排序：口味偏好命中优先；开低钠时清淡/低脂优先
   final sorted = <Recipe>[...kept]
     ..sort((a, b) => _score(b, p).compareTo(_score(a, p)));
 
   final keptIds = kept.map((r) => r.id).toSet();
-  final dropped = mockRecipes.where((r) => !keptIds.contains(r.id)).toList();
+  final dropped = source.where((r) => !keptIds.contains(r.id)).toList();
 
   return (recipes: sorted, dropped: dropped);
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/content_store.dart';
 import '../services/recommender.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -37,7 +38,12 @@ class HomePage extends StatelessWidget {
         child: ListenableBuilder(
           listenable: AppState.instance,
           builder: (context, _) {
-            final picks = pickForHome(AppState.instance.profile);
+            final picks = pickForHome(
+              AppState.instance.profile,
+              // 后端在线时用后端数据，否则 ContentStore 里是本地假数据
+              foodPool: ContentStore.instance.foods,
+              recipePool: ContentStore.instance.recipes,
+            );
             return ListView(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 28),
               children: [

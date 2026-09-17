@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/content_store.dart';
 import '../theme.dart';
 
 /// 食材页：时令浏览 + 家中库存 + 选中食材交给 AI。
@@ -31,7 +31,7 @@ class _FoodsPageState extends State<FoodsPage> {
   }
 
   List<Food> get _visibleFoods {
-    final source = _showPantry ? _pantry : mockFoods;
+    final source = _showPantry ? _pantry : ContentStore.instance.foods;
     final query = _search.text.trim().toLowerCase();
     return source.where((food) {
       final categoryOk = _category == '全部' || food.category == _category;
@@ -149,10 +149,12 @@ class _FoodsPageState extends State<FoodsPage> {
   }
 
   void _showFoodDetail(Food food) {
-    final matched = mockRecipes.where(
+    final matched = ContentStore.instance.recipes.where(
       (recipe) => recipe.ingredients.any((item) => item.contains(food.name)),
     );
-    final suggestions = matched.isEmpty ? mockRecipes.take(2) : matched;
+    final suggestions = matched.isEmpty
+        ? ContentStore.instance.recipes.take(2)
+        : matched;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
