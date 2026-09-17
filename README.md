@@ -205,3 +205,9 @@ GitHub Pages 项目站点发在 `/<仓库名>/` 这个**子路径**下，不是�
 | build 报仓库不可用 | 仓库还是 private |
 | 首次打开白屏较久 | Flutter Web 首次要下约 10MB（`main.dart.js` + `canvaskit.wasm`），之后走缓存 |
 | build 挂在 test 这一步 | `flutter test` 没过。测试是真的门禁，去 Actions 日志看是哪条断言失败 |
+
+---
+
+## 八、开源许可证
+
+本项目采用 [MIT 许可证](LICENSE)。
