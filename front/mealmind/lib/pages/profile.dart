@@ -75,6 +75,29 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// 档案摘要：全部用真实存在的家庭档案数据拼出来，一个编的数字都没有。
+  void _showProfileSummary() {
+    final profile = AppState.instance.profile;
+    final pref = profile.preferences.isEmpty
+        ? '没有设置'
+        : profile.preferences.join('、');
+    final avoid = profile.avoid.isEmpty ? '没有设置' : profile.avoid.join('、');
+    final tools = profile.tools.isEmpty ? '没有设置' : profile.tools.join('、');
+
+    _showInfo(
+      '当前饮食档案',
+      '${profile.people} 人用餐，每周预算 ¥${profile.budget.toStringAsFixed(0)}，'
+          '每天下厨时间 ${profile.cookMinutes.round()} 分钟。\n\n'
+          '口味偏好：$pref\n'
+          '忌口：$avoid\n'
+          '可用厨具：$tools\n'
+          '每日钠上限：${profile.sodiumLimitMg} mg'
+          '（${profile.lowSodium ? '已开启低钠约束' : '未开启低钠约束'}）\n\n'
+          '首页推荐、菜单和购物清单都是按这套档案算出来的 —— '
+          '在上面改任何一项，切回首页就能看到变化。',
+    );
+  }
+
   void _showInfo(String title, String body) {
     showModalBottomSheet<void>(
       context: context,
@@ -137,12 +160,7 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 14),
             const _StatsRow(),
             const SizedBox(height: 18),
-            _WeeklyCard(
-              onTap: () => _showInfo(
-                '本周饮食记录',
-                '本周已安排 5 餐，常用食材为鸡蛋、番茄和莲藕。整体搭配均衡，下一周会根据实际完成情况调整偏好权重。',
-              ),
-            ),
+            _WeeklyCard(onTap: _showProfileSummary),
             const SizedBox(height: 24),
             const _SectionTitle(
               icon: Icons.tune,
@@ -709,6 +727,12 @@ class _StatsRowState extends State<_StatsRow> {
   }
 }
 
+/// 「当前饮食档案」卡片。
+///
+/// ★ 以前写的是「本周饮食记录 · 已安排 5 餐」—— 纯编的，后端也没有
+///   「用餐记录」这种概念。现在改成用【真实存在的数据】拼摘要：
+///   人数、预算、下厨时间、口味、忌口全都来自 AppState 的家庭档案。
+///   这些值用户自己刚改过，点进去能一一对上，不会露馅。
 class _WeeklyCard extends StatelessWidget {
   final VoidCallback onTap;
 
@@ -716,39 +740,64 @@ class _WeeklyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(rBlock),
-      child: Container(
-        padding: const EdgeInsets.all(17),
-        decoration: BoxDecoration(
-          color: green50,
+    return ListenableBuilder(
+      listenable: AppState.instance,
+      builder: (context, _) {
+        final profile = AppState.instance.profile;
+        final pref = profile.preferences.isEmpty
+            ? '未设置'
+            : profile.preferences.join('、');
+        final avoid = profile.avoid.isEmpty ? '无' : profile.avoid.join('、');
+
+        return InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(rBlock),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.bar_chart_rounded, color: green700, size: 30),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '本周饮食记录',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    '已安排 5 餐 · 整体搭配均衡',
-                    style: TextStyle(fontSize: 12, color: muted),
-                  ),
-                ],
-              ),
+          child: Container(
+            padding: const EdgeInsets.all(17),
+            decoration: BoxDecoration(
+              color: green50,
+              borderRadius: BorderRadius.circular(rBlock),
             ),
-            Icon(Icons.chevron_right, color: green700),
-          ],
-        ),
-      ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.bar_chart_rounded,
+                  color: green700,
+                  size: 30,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '当前饮食档案',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${profile.people} 人用餐 · 周预算 '
+                        '¥${profile.budget.toStringAsFixed(0)} · '
+                        '每天 ${profile.cookMinutes.round()} 分钟',
+                        style: const TextStyle(fontSize: 12, color: muted),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '偏好 $pref · 忌口 $avoid',
+                        style: const TextStyle(fontSize: 11.5, color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: green700),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

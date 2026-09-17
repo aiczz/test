@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/city.dart';
 import '../services/content_store.dart';
 import '../services/recommender.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/city_picker.dart';
 import 'menu.dart';
 
 /// 首页 —— 对应队友原型 `homePage()`
@@ -209,7 +211,15 @@ class _TopBar extends StatelessWidget {
           ],
         ),
         const Spacer(),
-        _Pill(icon: Icons.location_on, text: currentCity),
+        // 位置 pill —— 以前是个写死的死标签，现在点了能换城市
+        ListenableBuilder(
+          listenable: CityStore.instance,
+          builder: (context, _) => _Pill(
+            icon: Icons.location_on,
+            text: CityStore.instance.city.name,
+            onTap: () => showCityPicker(context),
+          ),
+        ),
         const SizedBox(width: 8),
         _Pill(icon: Icons.eco, text: currentSeason),
       ],
@@ -221,11 +231,14 @@ class _Pill extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _Pill({required this.icon, required this.text});
+  /// 传了就是可点的（比如位置 pill），不传就是纯展示（比如季节 pill）
+  final VoidCallback? onTap;
+
+  const _Pill({required this.icon, required this.text, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -238,8 +251,20 @@ class _Pill extends StatelessWidget {
           Icon(icon, size: 13, color: green700),
           const SizedBox(width: 4),
           Text(text, style: const TextStyle(fontSize: 12, color: ink)),
+          // 可点的 pill 加个小箭头，暗示这里能操作
+          if (onTap != null) ...[
+            const SizedBox(width: 2),
+            const Icon(Icons.expand_more, size: 13, color: muted),
+          ],
         ],
       ),
+    );
+
+    if (onTap == null) return content;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: content,
     );
   }
 }
