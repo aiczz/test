@@ -157,6 +157,15 @@ class BackendApi {
     await _dio.delete<void>('/api/my-foods/$itemId', options: _auth);
   }
 
+  /// GET /api/favorites —— 需要登录，只取总数（「我的」页的统计数字用）
+  Future<int> fetchFavoriteCount() async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/favorites',
+      options: _auth,
+    );
+    return res.data?['total'] as int? ?? 0;
+  }
+
   // ---------------------------------------------------------------- AI
 
   /// POST /api/ai/chat（说明书 §20）。登录可选。

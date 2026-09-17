@@ -216,7 +216,7 @@ class _RecipesPageState extends State<RecipesPage> {
                   recipe: r,
                   favorite: _favorites.contains(r.id),
                   onFavorite: () => _toggleFavorite(r.id),
-                  onOpen: () => _openRecipeDetail(context, r),
+                  onOpen: () => openRecipeDetail(context, r),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -401,7 +401,11 @@ class _RecipeListCard extends StatelessWidget {
 // 菜谱详情弹层
 // =====================================================================
 
-void _openRecipeDetail(BuildContext context, Recipe recipe) {
+/// 打开菜谱详情弹层。
+///
+/// 公开函数 —— 菜单页的菜品格子也走这里，
+/// 保证「从菜谱页点」和「从菜单点」看到的是同一个详情。
+void openRecipeDetail(BuildContext context, Recipe recipe) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
