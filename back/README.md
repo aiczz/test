@@ -96,7 +96,8 @@ start ms-settings:developers
 
 ## 三、接口清单
 
-共 24 个接口。带 🔒 的需要登录（`Authorization: Bearer <token>`）。
+共 **28 个接口**（24 条路径，部分路径带多个方法）。带 🔒 的需要登录
+（`Authorization: Bearer <token>`）。
 
 ### 认证（说明书 §12）
 
