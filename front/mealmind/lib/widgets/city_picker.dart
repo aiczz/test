@@ -32,17 +32,26 @@ class _CityPickerSheet extends StatefulWidget {
 class _CityPickerSheetState extends State<_CityPickerSheet> {
   Future<void> _detect() async {
     final store = CityStore.instance;
+    if (store.detecting) return;
     store.setDetecting(true);
 
-    final coords = await currentCoordinates();
-    if (!mounted) return;
+    try {
+      final coords = await currentCoordinates();
+      if (!mounted) return;
 
-    if (coords == null) {
-      store.setDetectError(geolocationUnsupportedHint);
-      return;
+      if (coords == null) {
+        store.setDetectError(geolocationUnsupportedHint);
+        return;
+      }
+      store.selectByCoordinates(coords.$1, coords.$2);
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) store.setDetectError('定位失败：$error');
+    } finally {
+      // ★ 放在 finally 里：成功、失败、抛异常三条路径都要复位，
+      //   否则按钮会永远卡在「正在定位…」的禁用状态。
+      if (store.detecting) store.setDetecting(false);
     }
-    store.selectByCoordinates(coords.$1, coords.$2);
-    if (mounted) Navigator.of(context).pop();
   }
 
   @override

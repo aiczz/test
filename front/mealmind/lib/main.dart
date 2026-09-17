@@ -38,6 +38,15 @@ class _BootstrapState extends State<_Bootstrap> {
     await AuthStore.instance.restore();
     // 探测后端；在线就把内容数据也拉下来
     await BackendStatus.instance.probe();
+
+    // ★ 后端在线就顺手刷新一次用户信息。
+    //   本地缓存的用户 JSON 可能是旧版本写下的 —— 比如 is_admin 是后加的
+    //   字段，老缓存里没有它，管理员登着也看不到「管理」入口。
+    //   刷这一次就能自愈，不用让用户手动退出重登。
+    if (BackendStatus.instance.online) {
+      await AuthStore.instance.refreshUser();
+    }
+
     await ContentStore.instance.load();
   }
 

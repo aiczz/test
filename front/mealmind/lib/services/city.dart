@@ -88,6 +88,8 @@ class CityStore extends ChangeNotifier {
   void select(City city) {
     _autoDetected = false;
     _detectError = null;
+    // ★ 一定要复位：不复位的话「用当前位置」按钮会永远停在禁用状态
+    _detecting = false;
     if (_city.name == city.name) {
       notifyListeners();
       return;
@@ -101,6 +103,10 @@ class CityStore extends ChangeNotifier {
     final nearest = nearestCity(latitude, longitude);
     _autoDetected = true;
     _detectError = null;
+    // ★ 这里以前漏了复位，导致「定位只能成功一次」：
+    //   第一次成功后 _detecting 一直是 true，按钮保持禁用，
+    //   用户再点就没反应（看着像「定位半天没反应」）。
+    _detecting = false;
     _city = nearest;
     notifyListeners();
   }
