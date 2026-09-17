@@ -121,6 +121,7 @@ class _RootShellState extends State<RootShell> {
           HomePage(
             onOpenFoods: () => _selectTab(1),
             onOpenRecipes: () => _selectTab(2),
+            onOpenAi: () => _selectTab(3),
           ),
           FoodsPage(onAskAi: _askAiWithFoods),
           const RecipesPage(),

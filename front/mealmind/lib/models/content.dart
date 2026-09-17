@@ -6,16 +6,13 @@
 //   GET /api/recipes/{id} → Recipe（含 ingredients / steps）
 
 List<String> _strList(dynamic value) =>
-    ((value as List?) ?? const <dynamic>[])
-        .map((e) => e.toString())
-        .toList();
+    ((value as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
 
 class Food {
   final String id;
   final String name;
   final String image; // 资源路径，如 assets/images/lotus.jpg
   final String category; // 蔬菜 / 肉蛋 / 水产 / 豆制品
-  final String qty; // 数量，如「1节」
   final List<String> tags;
 
   const Food({
@@ -23,18 +20,16 @@ class Food {
     required this.name,
     required this.image,
     required this.category,
-    required this.qty,
     required this.tags,
   });
 
   factory Food.fromJson(Map<String, dynamic> j) => Food(
-        id: j['id'] as String? ?? '',
-        name: j['name'] as String? ?? '',
-        image: j['image'] as String? ?? '',
-        category: j['category'] as String? ?? '',
-        qty: j['qty'] as String? ?? '',
-        tags: _strList(j['tags']),
-      );
+    id: j['id'] as String? ?? '',
+    name: j['name'] as String? ?? '',
+    image: j['image'] as String? ?? '',
+    category: j['category'] as String? ?? '',
+    tags: _strList(j['tags']),
+  );
 }
 
 class Recipe {
@@ -65,17 +60,17 @@ class Recipe {
   });
 
   factory Recipe.fromJson(Map<String, dynamic> j) => Recipe(
-        id: j['id'] as String? ?? '',
-        name: j['name'] as String? ?? '',
-        image: j['image'] as String? ?? '',
-        desc: j['desc'] as String? ?? '',
-        time: j['time'] as String? ?? '',
-        people: j['people'] as String? ?? '',
-        tags: _strList(j['tags']),
-        ingredients: _strList(j['ingredients']),
-        steps: _strList(j['steps']),
-        difficulty: j['difficulty'] as String? ?? '简单',
-      );
+    id: j['id'] as String? ?? '',
+    name: j['name'] as String? ?? '',
+    image: j['image'] as String? ?? '',
+    desc: j['desc'] as String? ?? '',
+    time: j['time'] as String? ?? '',
+    people: j['people'] as String? ?? '',
+    tags: _strList(j['tags']),
+    ingredients: _strList(j['ingredients']),
+    steps: _strList(j['steps']),
+    difficulty: j['difficulty'] as String? ?? '简单',
+  );
 }
 
 /// 首页 AI 建议条
@@ -110,4 +105,3 @@ class AgentStep {
     this.ms = 0,
   });
 }
-

@@ -11,49 +11,43 @@ const mockFoods = <Food>[
   Food(
     id: 'lotus',
     name: '莲藕',
-    image: 'assets/images/lotus.jpg',
+    image: 'assets/images/lotus-clean.jpg',
     category: '蔬菜',
-    qty: '1节',
     tags: ['润燥养胃', '秋季适宜'],
   ),
   Food(
     id: 'pumpkin',
     name: '南瓜',
-    image: 'assets/images/pumpkin.jpg',
+    image: 'assets/images/pumpkin-clean.jpg',
     category: '蔬菜',
-    qty: '半个',
     tags: ['富含膳食纤维', '软糯香甜'],
   ),
   Food(
     id: 'tomato',
     name: '西红柿',
-    image: 'assets/images/tomato.jpg',
+    image: 'assets/images/tomato-clean.jpg',
     category: '蔬菜',
-    qty: '5个',
     tags: ['富含维生素C', '酸甜开胃'],
   ),
   Food(
     id: 'bokchoy',
     name: '小白菜',
-    image: 'assets/images/bokchoy.jpg',
+    image: 'assets/images/bokchoy-clean.jpg',
     category: '蔬菜',
-    qty: '1把',
     tags: ['清爽鲜嫩', '家常常备'],
   ),
   Food(
     id: 'carrot',
     name: '胡萝卜',
-    image: 'assets/images/carrot.jpg',
+    image: 'assets/images/carrot-clean.jpg',
     category: '蔬菜',
-    qty: '2根',
     tags: ['富含胡萝卜素', '增强免疫'],
   ),
   Food(
     id: 'egg',
     name: '鸡蛋',
-    image: 'assets/images/egg.jpg',
+    image: 'assets/images/egg-clean.jpg',
     category: '肉蛋',
-    qty: '3个',
     tags: ['优质蛋白', '营养全面'],
   ),
 ];
@@ -183,25 +177,18 @@ const mockAgentTrace = <AgentStep>[
     status: 'veto',
     ms: 31,
   ),
-  AgentStep(
-    agent: 'Explainer Agent',
-    summary: '生成推荐理由与约束松紧说明',
-    ms: 402,
-  ),
+  AgentStep(agent: 'Explainer Agent', summary: '生成推荐理由与约束松紧说明', ms: 402),
 ];
 
 const mockAiGreeting = '你好，我是小食。现在是秋季，需要我帮你安排一顿简单又营养的晚餐吗？';
 
-const mockAiQuickPrompts = <String>[
-  '今天吃什么？',
-  '三人晚餐推荐',
-  '用家里的食材做菜',
-];
+const mockAiQuickPrompts = <String>['今天吃什么？', '三人晚餐推荐', '用家里的食材做菜'];
 
 /// 两种回复：问到「食材」走第一种，否则走第二种（与原型逻辑一致）
-const mockAiReplyByFood = '你家现有的番茄、鸡蛋和小白菜很适合做番茄炒蛋与清炒白菜，'
+const mockAiReplyByFood =
+    '你家现有的番茄、鸡蛋和小白菜很适合做番茄炒蛋与清炒白菜，'
     '再搭配莲藕排骨汤，就是一顿营养均衡的三人晚餐。';
 
-const mockAiReplyDefault = '结合杭州秋季时令，我推荐莲藕排骨汤、番茄炒蛋和清炒白菜。'
+const mockAiReplyDefault =
+    '结合杭州秋季时令，我推荐莲藕排骨汤、番茄炒蛋和清炒白菜。'
     '荤素搭配，味道温和，适合 2–3 人。';
-

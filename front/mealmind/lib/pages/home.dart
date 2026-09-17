@@ -11,11 +11,13 @@ import 'menu.dart';
 class HomePage extends StatelessWidget {
   final VoidCallback onOpenFoods;
   final VoidCallback onOpenRecipes;
+  final VoidCallback onOpenAi;
 
   const HomePage({
     super.key,
     required this.onOpenFoods,
     required this.onOpenRecipes,
+    required this.onOpenAi,
   });
 
   @override
@@ -28,7 +30,11 @@ class HomePage extends StatelessWidget {
           children: [
             const _TopBar(),
             const SizedBox(height: 14),
-            _Hero(onOpenRecipes: onOpenRecipes),
+            _HomeCarousel(
+              onOpenFoods: onOpenFoods,
+              onOpenRecipes: onOpenRecipes,
+              onOpenAi: onOpenAi,
+            ),
             const SizedBox(height: 26),
             const _SectionHeader(
               icon: Icons.eco,
@@ -124,10 +130,7 @@ class _Pill extends StatelessWidget {
         children: [
           Icon(icon, size: 13, color: green700),
           const SizedBox(width: 4),
-          Text(
-            text,
-            style: const TextStyle(fontSize: 12, color: ink),
-          ),
+          Text(text, style: const TextStyle(fontSize: 12, color: ink)),
         ],
       ),
     );
@@ -137,6 +140,94 @@ class _Pill extends StatelessWidget {
 // =====================================================================
 // Hero 推荐区
 // =====================================================================
+
+class _HomeCarousel extends StatefulWidget {
+  final VoidCallback onOpenFoods;
+  final VoidCallback onOpenRecipes;
+  final VoidCallback onOpenAi;
+
+  const _HomeCarousel({
+    required this.onOpenFoods,
+    required this.onOpenRecipes,
+    required this.onOpenAi,
+  });
+
+  @override
+  State<_HomeCarousel> createState() => _HomeCarouselState();
+}
+
+class _HomeCarouselState extends State<_HomeCarousel> {
+  final PageController _controller = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = <Widget>[
+      _Hero(onOpenRecipes: widget.onOpenRecipes),
+      _FeatureHero(
+        image: 'assets/images/lotus-clean.jpg',
+        eyebrow: '应季食材库',
+        title: '看看家里\n有什么',
+        body: '收藏家中现有食材，管理数量，减少浪费。',
+        buttonText: '管理我的食材',
+        buttonIcon: Icons.inventory_2_rounded,
+        onTap: widget.onOpenFoods,
+      ),
+      _FeatureHero(
+        eyebrow: 'AI 饮食助手',
+        title: '不知道吃什么？\n问问 AI',
+        body: '根据家中食材和你的口味，生成一顿营养家常饭。',
+        buttonText: '打开 AI 助手',
+        buttonIcon: Icons.auto_awesome_rounded,
+        onTap: widget.onOpenAi,
+        backgroundColors: const [Color(0xFFE5F3DF), Color(0xFFFFE7C5)],
+      ),
+    ];
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 252,
+          child: PageView(
+            controller: _controller,
+            onPageChanged: (page) => setState(() => _currentPage = page),
+            children: pages,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(pages.length, (index) {
+            final active = index == _currentPage;
+            return GestureDetector(
+              onTap: () => _controller.animateToPage(
+                index,
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOutCubic,
+              ),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: active ? 22 : 7,
+                height: 7,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: active ? orange : const Color(0xFFD4DDD0),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+}
 
 class _Hero extends StatelessWidget {
   final VoidCallback onOpenRecipes;
@@ -226,13 +317,161 @@ class _Hero extends StatelessWidget {
                   onPressed: onOpenRecipes,
                   style: FilledButton.styleFrom(
                     backgroundColor: orange,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 11,
+                    ),
                     visualDensity: VisualDensity.compact,
                     shape: const StadiumBorder(),
                   ),
                   child: const Text(
                     '查看推荐菜谱  →',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeatureHero extends StatelessWidget {
+  final String? image;
+  final String eyebrow;
+  final String title;
+  final String body;
+  final String buttonText;
+  final IconData buttonIcon;
+  final VoidCallback onTap;
+  final List<Color> backgroundColors;
+
+  const _FeatureHero({
+    this.image,
+    required this.eyebrow,
+    required this.title,
+    required this.body,
+    required this.buttonText,
+    required this.buttonIcon,
+    required this.onTap,
+    this.backgroundColors = const [Color(0xFFFFF5DF), Color(0xFFF5E7C8)],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 252,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: backgroundColors,
+        ),
+        borderRadius: BorderRadius.circular(rHero),
+        boxShadow: cardShadow,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (image != null)
+            Image.asset(
+              image!,
+              fit: BoxFit.cover,
+              alignment: Alignment.centerRight,
+              filterQuality: FilterQuality.high,
+            )
+          else
+            Positioned(
+              right: -18,
+              bottom: -20,
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                size: 170,
+                color: green700.withValues(alpha: 0.10),
+              ),
+            ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: image == null
+                    ? const [Color(0x00FFFFFF), Color(0x00FFFFFF)]
+                    : const [
+                        Color(0xFFFFF8E9),
+                        Color(0xF8FFF8E9),
+                        Color(0xC8FFF8E9),
+                        Color(0x22FFF8E9),
+                      ],
+                stops: image == null ? null : const [0, .38, .62, 1],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 20, 18, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(buttonIcon, size: 16, color: green700),
+                    const SizedBox(width: 6),
+                    Text(
+                      eyebrow,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: green700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: green900,
+                    height: 1.08,
+                    letterSpacing: -1.1,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: 220,
+                  child: Text(
+                    body,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: ink,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: onTap,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: orange,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    shape: const StadiumBorder(),
+                  ),
+                  icon: Icon(buttonIcon, size: 16),
+                  label: Text(
+                    buttonText,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
@@ -285,10 +524,7 @@ class _SectionHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: const TextStyle(fontSize: 12, color: muted),
-            ),
+            Text(subtitle, style: const TextStyle(fontSize: 12, color: muted)),
           ],
         ),
       ],
@@ -360,8 +596,10 @@ class _FoodCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 if (food.tags.isNotEmpty)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
                     decoration: tagDeco(),
                     child: Text(
                       food.tags.first,
@@ -416,10 +654,7 @@ class _RecipeCard extends StatelessWidget {
   final Recipe recipe;
   final VoidCallback onOpenRecipes;
 
-  const _RecipeCard({
-    required this.recipe,
-    required this.onOpenRecipes,
-  });
+  const _RecipeCard({required this.recipe, required this.onOpenRecipes});
 
   @override
   Widget build(BuildContext context) {
@@ -485,8 +720,8 @@ class _RecipeCard extends StatelessWidget {
                     ],
                   ),
                 ],
-                ),
               ),
+            ),
           ],
         ),
       ),
@@ -523,7 +758,11 @@ class _AiTipBar extends StatelessWidget {
               color: green700,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+            child: const Icon(
+              Icons.auto_awesome,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -542,7 +781,10 @@ class _AiTipBar extends StatelessWidget {
                 Text(
                   mockAiTip.body,
                   style: const TextStyle(
-                      fontSize: 13, color: muted, height: 1.6),
+                    fontSize: 13,
+                    color: muted,
+                    height: 1.6,
+                  ),
                 ),
               ],
             ),
