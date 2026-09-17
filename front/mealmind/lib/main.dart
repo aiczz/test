@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'models/content.dart';
 import 'pages/ai.dart';
 import 'pages/foods.dart';
 import 'pages/home.dart';
@@ -119,6 +120,9 @@ class _RootShellState extends State<RootShell> {
   int _aiRequestToken = 0;
   String? _pendingAiPrompt;
 
+  /// 食材页的 State —— 首页的食材卡片靠它打开同一个详情弹层
+  final GlobalKey<FoodsPageState> _foodsKey = GlobalKey<FoodsPageState>();
+
   void _selectTab(int index) => setState(() => _index = index);
 
   void _askAiWithFoods(List<String> foodNames) {
@@ -126,6 +130,15 @@ class _RootShellState extends State<RootShell> {
       _pendingAiPrompt = '请用我选中的${foodNames.join('、')}推荐一顿家常饭';
       _aiRequestToken++;
       _index = 3;
+    });
+  }
+
+  /// 首页点到食材卡片：先切到食材页，再打开它的详情弹层。
+  void _openFoodDetail(Food food) {
+    setState(() => _index = 1);
+    // 等这一帧切完再弹 —— 否则弹层会挂在还没显示出来的页面上
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _foodsKey.currentState?.openFoodDetail(food);
     });
   }
 
@@ -141,8 +154,9 @@ class _RootShellState extends State<RootShell> {
             onOpenRecipes: () => _selectTab(2),
             onOpenAi: () => _selectTab(3),
             onOpenProfile: () => _selectTab(4),
+            onOpenFoodDetail: _openFoodDetail,
           ),
-          FoodsPage(onAskAi: _askAiWithFoods),
+          FoodsPage(key: _foodsKey, onAskAi: _askAiWithFoods),
           const RecipesPage(),
           AiPage(
             initialPrompt: _pendingAiPrompt,

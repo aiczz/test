@@ -21,12 +21,16 @@ class HomePage extends StatelessWidget {
   final VoidCallback onOpenAi;
   final VoidCallback onOpenProfile;
 
+  /// 点食材卡片时打开食材详情（走食材页的同一个弹层）
+  final ValueChanged<Food> onOpenFoodDetail;
+
   const HomePage({
     super.key,
     required this.onOpenFoods,
     required this.onOpenRecipes,
     required this.onOpenAi,
     required this.onOpenProfile,
+    required this.onOpenFoodDetail,
   });
 
   @override
@@ -63,7 +67,10 @@ class HomePage extends StatelessWidget {
                   subtitle: '应季鲜美 · 营养加分',
                 ),
                 const SizedBox(height: 12),
-                _FoodRow(foods: picks.foods),
+                _FoodRow(
+                  foods: picks.foods,
+                  onOpenDetail: onOpenFoodDetail,
+                ),
                 const SizedBox(height: 26),
                 _SectionHeader(
                   icon: Icons.local_dining,
@@ -76,7 +83,7 @@ class HomePage extends StatelessWidget {
                   onOpenRecipes: onOpenRecipes,
                 ),
                 const SizedBox(height: 14),
-                const _AiTipBar(),
+                _AiTipBar(onTap: onOpenAi),
                 const SizedBox(height: 20),
                 _QuickActions(onOpenFoods: onOpenFoods),
               ],
@@ -638,8 +645,9 @@ class _SectionHeader extends StatelessWidget {
 
 class _FoodRow extends StatelessWidget {
   final List<Food> foods;
+  final ValueChanged<Food> onOpenDetail;
 
-  const _FoodRow({required this.foods});
+  const _FoodRow({required this.foods, required this.onOpenDetail});
 
   @override
   Widget build(BuildContext context) {
@@ -648,7 +656,12 @@ class _FoodRow extends StatelessWidget {
       children: [
         for (var i = 0; i < foods.length; i++) ...[
           if (i > 0) const SizedBox(width: 10),
-          Expanded(child: _FoodCard(food: foods[i])),
+          Expanded(
+            child: _FoodCard(
+              food: foods[i],
+              onTap: () => onOpenDetail(foods[i]),
+            ),
+          ),
         ],
       ],
     );
@@ -657,65 +670,71 @@ class _FoodRow extends StatelessWidget {
 
 class _FoodCard extends StatelessWidget {
   final Food food;
+  final VoidCallback onTap;
 
-  const _FoodCard({required this.food});
+  const _FoodCard({required this.food, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: cardDeco(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 1.8,
-            child: ColoredBox(
-              color: const Color(0xFFFFF8EC),
-              child: Image.asset(
-                food.image,
-                fit: BoxFit.contain,
-                alignment: Alignment.center,
-                filterQuality: FilterQuality.high,
+    // 这张卡片以前点了没反应 —— 现在点开食材详情
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(rCard),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: cardDeco(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 1.8,
+              child: ColoredBox(
+                color: const Color(0xFFFFF8EC),
+                child: Image.asset(
+                  food.image,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.center,
+                  filterQuality: FilterQuality.high,
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  food.name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: ink,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                if (food.tags.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 4,
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    food.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: ink,
                     ),
-                    decoration: tagDeco(),
-                    child: Text(
-                      food.tags.first,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: green700,
-                        fontWeight: FontWeight.w600,
+                  ),
+                  const SizedBox(height: 6),
+                  if (food.tags.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
+                      decoration: tagDeco(),
+                      child: Text(
+                        food.tags.first,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: green700,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -834,62 +853,71 @@ class _RecipeCard extends StatelessWidget {
 // =====================================================================
 
 class _AiTipBar extends StatelessWidget {
-  const _AiTipBar();
+  final VoidCallback onTap;
+
+  const _AiTipBar({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFE6F4DF), Color(0xFFFBF7E9)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    // 这条建议以前点了没反应 —— 现在点进 AI 助手
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFE6F4DF), Color(0xFFFBF7E9)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(22),
         ),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: green700,
-              borderRadius: BorderRadius.circular(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: green700,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
-            child: const Icon(
-              Icons.auto_awesome,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  mockAiTip.title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    mockAiTip.title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  mockAiTip.body,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: muted,
-                    height: 1.6,
+                  const SizedBox(height: 5),
+                  Text(
+                    mockAiTip.body,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: muted,
+                      height: 1.6,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            // 右侧箭头暗示这里可以点
+            const Icon(Icons.chevron_right, size: 18, color: green700),
+          ],
+        ),
       ),
     );
   }

@@ -15,10 +15,13 @@ class FoodsPage extends StatefulWidget {
   const FoodsPage({super.key, required this.onAskAi});
 
   @override
-  State<FoodsPage> createState() => _FoodsPageState();
+  State<FoodsPage> createState() => FoodsPageState();
 }
 
-class _FoodsPageState extends State<FoodsPage> {
+/// 状态类做成公开的 —— 首页的食材卡片要能直接打开这里的详情弹层。
+/// main.dart 用 GlobalKey 拿到它并调 [openFoodDetail]，
+/// 这样两个地方点出来的详情长得完全一样，不用维护两份。
+class FoodsPageState extends State<FoodsPage> {
   final TextEditingController _search = TextEditingController();
   final List<Food> _pantry = <Food>[];
   final Set<String> _selected = <String>{};
@@ -229,7 +232,10 @@ class _FoodsPageState extends State<FoodsPage> {
     _toast('已添加${result.name}');
   }
 
-  void _showFoodDetail(Food food) {
+  /// 打开食材详情弹层（时令、能做的菜、加入我的食材）。
+  ///
+  /// 公开方法 —— 首页的食材卡片也走这里，保证两处详情一致。
+  void openFoodDetail(Food food) {
     final matched = ContentStore.instance.recipes.where(
       (recipe) => recipe.ingredients.any((item) => item.contains(food.name)),
     );
@@ -528,7 +534,7 @@ class _FoodsPageState extends State<FoodsPage> {
                               ),
                               selected: _selected.contains(food.id),
                               amount: _amounts[food.id] ?? 1,
-                              onTap: () => _showFoodDetail(food),
+                              onTap: () => openFoodDetail(food),
                               onToggle: () => _toggleSelected(food),
                               onAdd: () => _addToPantry(food),
                               onMinus: () => _changeAmount(food, -1),
