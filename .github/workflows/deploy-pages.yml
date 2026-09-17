@@ -22,7 +22,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'mealmind/**'
+      - 'front/mealmind/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -56,22 +56,22 @@ jobs:
         run: flutter --version
 
       - name: Install dependencies
-        working-directory: mealmind
+        working-directory: front/mealmind
         run: flutter pub get
 
       - name: Analyze
-        working-directory: mealmind
+        working-directory: front/mealmind
         # info 级只是风格建议，不该拦住发布；warning / error 仍然会让构建失败
         run: flutter analyze --no-fatal-infos
 
       - name: Build web
-        working-directory: mealmind
+        working-directory: front/mealmind
         run: flutter build web --release --base-href "/test/"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: mealmind/build/web
+          path: front/mealmind/build/web
 
   deploy:
     needs: build
