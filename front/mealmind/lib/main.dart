@@ -14,18 +14,107 @@ import 'theme.dart';
 Future<void> main() async {
   // shared_preferences 需要先初始化绑定
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(const _Bootstrap());
+}
 
-  // 恢复上次的登录状态（token 存在本地）
-  await AuthStore.instance.restore();
+/// 启动流程：先显示品牌屏，同时在后台把登录状态、后端探测、内容数据准备好，
+/// 准备好了再切到真正的 App。
+///
+/// 为什么改成这样：以前是在 runApp 之前 await 这三件事，用户会盯着**纯白屏**
+/// 最多 2 秒（后端探测的超时）。现在至少看到的是品牌屏 —— 白屏改成品牌屏，
+/// 观感差别很大，尤其是答辩投影的时候。
+class _Bootstrap extends StatefulWidget {
+  const _Bootstrap();
 
-  // 探测后端；在线就把内容数据也拉下来。
-  // ⚠️ 这两个 await 是必要的：页面直接从 ContentStore 同步读取，
-  //    不 await 的话首帧会先渲染本地假数据、再跳成后端数据，明显闪一下。
-  //    后端不在线时探测有 2 秒超时，之后静默降级到本地假数据。
-  await BackendStatus.instance.probe();
-  await ContentStore.instance.load();
+  @override
+  State<_Bootstrap> createState() => _BootstrapState();
+}
 
-  runApp(const ShishiApp());
+class _BootstrapState extends State<_Bootstrap> {
+  late final Future<void> _ready = _prepare();
+
+  Future<void> _prepare() async {
+    // 恢复上次的登录状态（token 存在本地）
+    await AuthStore.instance.restore();
+    // 探测后端；在线就把内容数据也拉下来
+    await BackendStatus.instance.probe();
+    await ContentStore.instance.load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _ready,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          return const ShishiApp();
+        }
+        return const _SplashScreen();
+      },
+    );
+  }
+}
+
+/// 启动屏。只用到 theme.dart 里已有的 token，视觉和 App 内保持一致。
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: page,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 74,
+                height: 74,
+                decoration: BoxDecoration(
+                  color: green700,
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: cardShadow,
+                ),
+                child: const Icon(Icons.rice_bowl, size: 38, color: cream),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                '食时',
+                style: TextStyle(
+                  fontSize: 27,
+                  fontWeight: FontWeight.w900,
+                  color: green900,
+                  letterSpacing: -1.2,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '顺应时令 · 智慧饮食',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: green700,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 26),
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: green700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 食时 · 顺应时令的智慧饮食助手
