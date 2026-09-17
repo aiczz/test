@@ -6,6 +6,7 @@ category 用说明书约定的英文枚举：
 
 from datetime import datetime
 
+from sqlalchemy import JSON
 from sqlmodel import Field, SQLModel
 
 from app.utils.time import utcnow
@@ -22,6 +23,9 @@ class Food(SQLModel, table=True):
     nutrition_summary: str | None = None
     texture: str | None = Field(default=None, max_length=64)
     common_methods: str | None = None
+    # ⚠️ 对说明书 §7.3 的扩展：§10 的响应里有 tags，但表定义没有承载字段。
+    #    前端食材卡片就靠这个展示"润燥养胃"这类标签，所以补一个 JSON 列。
+    tags: list[str] = Field(default_factory=list, sa_type=JSON)
     is_active: bool = Field(default=True, index=True)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(
