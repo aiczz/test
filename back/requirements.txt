@@ -1,0 +1,32 @@
+# 食时后端依赖（说明书 §39「最小依赖建议」）
+#
+# 版本按实际安装锁死，保证换台机器/pip 装出来是同一套。
+# 安装：python -m pip install -r requirements.txt
+# 国内网络慢的话加镜像：
+#   -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+sqlmodel==0.0.42
+pydantic==2.13.5
+pydantic-settings==2.15.0
+
+# 认证：JWT + 密码哈希
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+# ⚠️ bcrypt 必须钉在 4.0.1：4.1+ 删掉了 passlib 依赖的 __about__ 属性，
+#    会导致每次哈希都刷一堆报错日志（功能仍可用，但日志很难看）。
+bcrypt==4.0.1
+python-multipart==0.0.32
+
+# 测试
+httpx==0.28.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
+
+# ---------------------------------------------------------------------
+# 切换 PostgreSQL 时再装（说明书 §25）。SQLite 阶段用不到，
+# 所以默认注释掉，避免白白多装两个包。
+# ---------------------------------------------------------------------
+# psycopg[binary]
+# alembic
