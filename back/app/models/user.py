@@ -20,6 +20,12 @@ class User(SQLModel, table=True):
     avatar_url: str | None = Field(default=None, max_length=255)
     # 用于默认菜单人数
     family_size: int = Field(default=3)
+    # ---- 管理员相关 ----
+    # 管理员可以封禁其他账号、看用户统计和登录记录
+    is_admin: bool = Field(default=False, index=True)
+    # 被封禁后不能登录；已经登录的拿着旧 token 也会被拒
+    is_banned: bool = Field(default=False, index=True)
+    last_login_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(
         default_factory=utcnow, sa_column_kwargs={"onupdate": utcnow}

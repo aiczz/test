@@ -6,6 +6,7 @@
 
 from app.models.favorite import Favorite
 from app.models.food import Food, FoodSeason
+from app.models.login_log import LoginLog
 from app.models.menu import MenuPlan, MenuPlanItem
 from app.models.my_food import MyFood
 from app.models.recipe import Recipe, RecipeIngredient, RecipeStep
@@ -16,6 +17,7 @@ __all__ = [
     "Favorite",
     "Food",
     "FoodSeason",
+    "LoginLog",
     "MenuPlan",
     "MenuPlanItem",
     "MyFood",
