@@ -9,6 +9,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    admin,
     ai,
     auth,
     favorites,
@@ -33,3 +34,4 @@ api_router.include_router(menus.router)
 api_router.include_router(shopping.router)
 api_router.include_router(ai.router)
 api_router.include_router(profile.router)
+api_router.include_router(admin.router)

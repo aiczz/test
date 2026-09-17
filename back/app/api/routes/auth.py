@@ -5,7 +5,7 @@ POST /api/auth/login
 GET  /api/auth/me
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlmodel import Session
 
 from app.core.database import get_session
@@ -38,9 +38,14 @@ def register(
 @router.post("/login", response_model=TokenResponse, summary="登录")
 def login(
     payload: LoginRequest,
+    request: Request,
     session: Session = Depends(get_session),
 ) -> TokenResponse:
-    return TokenResponse(access_token=auth_service.login(session, payload))
+    # 传 Request 下去是为了记登录日志（IP / User-Agent）——
+    # 管理员页面靠它「监听」谁在什么时候登录了
+    return TokenResponse(
+        access_token=auth_service.login(session, payload, request)
+    )
 
 
 @router.get("/me", response_model=UserPublic, summary="当前登录用户")

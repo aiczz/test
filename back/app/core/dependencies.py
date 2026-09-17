@@ -23,7 +23,13 @@ def get_current_user_optional(
     subject = decode_access_token(credentials.credentials)
     if subject is None or not subject.isdigit():
         return None
-    return session.get(User, int(subject))
+
+    user = session.get(User, int(subject))
+    # ★ 被封禁的账号即使拿着没过期的 token 也不能再用 ——
+    #   否则「封禁」只挡得住新登录，挡不住已经在线的会话。
+    if user is not None and user.is_banned:
+        return None
+    return user
 
 
 def get_current_user(
@@ -39,5 +45,19 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="未登录或登录已过期",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+def get_current_admin(user: User = Depends(get_current_user)) -> User:
+    """管理员接口用这个依赖。
+
+    ⚠️ 普通用户拿到的是 403 而不是 404 —— 管理员接口的存在不是秘密，
+       但权限必须挡住。
+    """
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
         )
     return user

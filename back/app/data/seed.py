@@ -26,6 +26,12 @@ DEMO_PASSWORD = "shishi2026"
 DEMO_NICKNAME = "演示用户"
 DEMO_FAMILY_SIZE = 3
 
+# 管理员账号：能封禁其他账号、看用户统计和登录记录。
+# ⚠️ 这是【演示用】密码，已写进 back/README.md。真实部署前必须改掉，
+#    或者用 .env 覆盖（见 README 第七节）。
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "admin123456"
+
 # =====================================================================
 # 食材
 #
@@ -220,18 +226,27 @@ _RECIPES: list[dict] = [
 # =====================================================================
 
 
-def _seed_demo_user(session: Session) -> User:
-    user = session.exec(select(User).where(User.username == DEMO_USERNAME)).first()
+def _seed_user(
+    session: Session,
+    *,
+    username: str,
+    password: str,
+    nickname: str,
+    family_size: int,
+    is_admin: bool = False,
+) -> User:
+    user = session.exec(select(User).where(User.username == username)).first()
     if user is not None:
         return user
 
     user = User(
-        username=DEMO_USERNAME,
-        email="demo@shishi.local",
+        username=username,
+        email=f"{username}@shishi.local",
         # 同样只存哈希 —— 种子数据也不破例
-        password_hash=hash_password(DEMO_PASSWORD),
-        nickname=DEMO_NICKNAME,
-        family_size=DEMO_FAMILY_SIZE,
+        password_hash=hash_password(password),
+        nickname=nickname,
+        family_size=family_size,
+        is_admin=is_admin,
     )
     session.add(user)
     session.commit()
@@ -248,6 +263,25 @@ def _seed_demo_user(session: Session) -> User:
     )
     session.commit()
     return user
+
+
+def _seed_users(session: Session) -> None:
+    """两个开箱可用的账号：演示用户 + 管理员。"""
+    _seed_user(
+        session,
+        username=DEMO_USERNAME,
+        password=DEMO_PASSWORD,
+        nickname=DEMO_NICKNAME,
+        family_size=DEMO_FAMILY_SIZE,
+    )
+    _seed_user(
+        session,
+        username=ADMIN_USERNAME,
+        password=ADMIN_PASSWORD,
+        nickname="管理员",
+        family_size=3,
+        is_admin=True,
+    )
 
 
 def _seed_foods(session: Session) -> None:
@@ -334,7 +368,7 @@ def _seed_recipes(session: Session) -> None:
 
 def seed_all(session: Session) -> None:
     """灌全部种子数据。幂等 —— 重复调用不会重复插入。"""
-    _seed_demo_user(session)
+    _seed_users(session)
     _seed_foods(session)
     _seed_recipes(session)
 
