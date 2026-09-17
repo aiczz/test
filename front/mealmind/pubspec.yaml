@@ -41,6 +41,11 @@ dependencies:
   # 登录 token 的本地持久化 —— 重启 App 不用重新登录
   shared_preferences: ^2.3.0
 
+  # 浏览器定位（仅 Web）。Flutter SDK 里已经带了，但显式声明成直接依赖
+  # 才不会有 depend_on_referenced_packages 警告。
+  # 只在 geolocation_web.dart 里用，通过条件导入隔离 —— 原生平台不编译它。
+  web: ^1.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
