@@ -64,6 +64,13 @@ jobs:
         # info 级只是风格建议，不该拦住发布；warning / error 仍然会让构建失败
         run: flutter analyze --no-fatal-infos
 
+      # 真的跑 test/widget_test.dart。
+      # 之前这个 workflow 只 analyze 不 test —— 测试写了也永远不会执行，
+      # CI 绿灯反而制造「测试通过」的错觉，所以必须补上这一步。
+      - name: Run tests
+        working-directory: front/mealmind
+        run: flutter test
+
       - name: Build web
         working-directory: front/mealmind
         run: flutter build web --release --base-href "/test/"
