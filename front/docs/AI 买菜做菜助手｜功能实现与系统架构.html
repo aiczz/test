@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<!-- saved from url=(0119)file:///C:/Users/94812/Documents/modao/workspaces/2026-09-15/3d6b76cb-dc79-4d1a-bcd2-c8a1e78da1de/ai-buy-cook-plan.html -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 买菜做菜助手｜功能实现与系统架构</title>
+<link href="./AI 买菜做菜助手｜功能实现与系统架构_files/css2" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --paper:#f5f5f5;--paper2:#ececec;--ink:#2d3142;--muted:#4f5d75;--soft:#7a8399;
+    --rule:rgba(45,49,66,.12);--accent:#eb6c36;--accentTint:rgba(235,108,54,.08);--link:#2e5aa8;
+    --sans:'Geist','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
+    --serif:'Instrument Serif','Noto Serif SC','STSong',serif;
+    --mono:'Geist Mono','Cascadia Mono','Microsoft YaHei',monospace;
+  }
+  body{font-family:var(--sans);background:var(--paper);color:var(--ink);padding:48px 32px 40px;line-height:1.5}
+  .container{max-width:1200px;margin:0 auto}
+  .eyebrow,.section-label{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+  header{margin-bottom:40px;border-bottom:1px solid var(--rule);padding-bottom:28px}
+  h1{font-family:var(--serif);font-size:48px;font-weight:400;line-height:1.08;letter-spacing:-.02em;margin:12px 0 12px}
+  .subtitle{max-width:820px;color:var(--muted);font-size:16px;line-height:1.7}
+  .section{margin-top:40px}
+  .section-head{display:flex;align-items:baseline;gap:16px;margin-bottom:16px}
+  h2{font-family:var(--serif);font-size:30px;font-weight:400;line-height:1.1}
+  .diagram-container{overflow-x:auto;padding:0;background:transparent}
+  svg{display:block;width:100%;min-width:980px}
+  .cards{display:grid;grid-template-columns:1.1fr 1fr .9fr;gap:16px;margin-top:20px}
+  .card{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:20px}
+  .card-header{display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(45,49,66,.08);padding-bottom:12px;margin-bottom:14px}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}.dot.coral{background:var(--accent)}.dot.ink{background:var(--ink)}.dot.muted{background:var(--muted)}
+  h3{font-size:15px;font-weight:600}
+  .card ul{list-style:none;color:var(--muted);font-size:13px;line-height:1.7}
+  .card li{padding-left:15px;position:relative;margin-bottom:6px}.card li::before{content:'—';position:absolute;left:0;color:rgba(45,49,66,.3)}
+  .logic{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:20px}
+  .rule-box{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:20px}
+  .rule-box h3{margin-bottom:12px}.rule-box p,.rule-box li{font-size:13px;color:var(--muted);line-height:1.75}
+  .rule-box ol{padding-left:20px}.rule-box li{margin-bottom:5px}
+  .tag{display:inline-block;border:1px solid rgba(45,49,66,.2);border-radius:3px;padding:3px 7px;margin:3px 5px 3px 0;color:var(--muted);font-family:var(--mono);font-size:11px}
+  .tag.important{border-color:rgba(235,108,54,.55);color:var(--accent)}
+  .footer{border-top:1px solid var(--rule);margin-top:40px;padding-top:16px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;color:var(--soft);font:11px var(--mono);letter-spacing:.04em}
+  @media(max-width:720px){body{padding:28px 16px}h1{font-size:38px}.cards,.logic{grid-template-columns:1fr}.section{margin-top:32px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <p class="eyebrow">PRODUCT BLUEPRINT · AI FOOD PLANNING</p>
+    <h1>AI 买菜做菜助手</h1>
+    <p class="subtitle">以“用户手头食材 + 明确想吃的食材”为每日基础，通过规则约束、时令与市场信息、菜品组合推荐和历史去重，帮助用户完成从买菜决策到做菜执行的一站式闭环。</p>
+  </header>
+
+  <section class="section">
+    <div class="section-head"><p class="section-label">01 / FUNCTIONAL MODEL</p><h2>软件功能实现</h2></div>
+    <div class="cards">
+      <article class="card">
+        <div class="card-header"><span class="dot coral"></span><h3>账户与长期规则</h3></div>
+        <ul>
+          <li>轻量登录：用户名/手机号 + 简单口令，服务端为账号建立唯一 user_id。</li>
+          <li>长期规则：过敏原、明确不吃、宗教或家庭禁用食材。</li>
+          <li>长期规则保存为“硬约束”，推荐链路任何阶段都不能绕过。</li>
+          <li>支持用户随时新增、删除和调整规则。</li>
+        </ul>
+      </article>
+      <article class="card">
+        <div class="card-header"><span class="dot ink"></span><h3>每日计划与食材池</h3></div>
+        <ul>
+          <li>每日询问库存食材、明确想吃食材、用餐人数和特殊人群。</li>
+          <li>调用时令、供货量、地方特色与市场均价接口形成候选食材。</li>
+          <li>候选食材展示价格参考、推荐理由和优先级，用户可一键加入基础食材。</li>
+          <li>每日上下文独立保存，避免修改今天的计划影响长期偏好。</li>
+        </ul>
+      </article>
+      <article class="card">
+        <div class="card-header"><span class="dot muted"></span><h3>菜品、做法与反馈</h3></div>
+        <ul>
+          <li>AI 根据基础食材、候选优先级、人数和营养约束排列组合菜肴。</li>
+          <li>用户选择菜肴后生成今日菜单，并按菜逐个展示用量、步骤和火候。</li>
+          <li>近几日已吃菜品进入历史窗口：重复菜直接过滤或降低推荐分。</li>
+          <li>可记录“喜欢/不喜欢/实际做了”，用于后续排序优化。</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><p class="section-label">02 / DAILY WORKFLOW</p><h2>每日买菜做菜工作流</h2></div>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1080 940" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="daily-flow-title daily-flow-desc">
+        <title id="daily-flow-title">AI 买菜做菜助手每日工作流</title>
+        <desc id="daily-flow-desc">展示用户输入每日情况、系统查询市场信息、AI 生成菜品、用户确认菜单并获得做法的闭环流程。</desc>
+        <defs>
+          <marker id="flow-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#4f5d75"></polygon></marker>
+          <marker id="flow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#eb6c36"></polygon></marker>
+        </defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+        <!-- arrows first -->
+        <path d="M540 80 V112" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#flow-arrow)"></path>
+        <path d="M540 176 V216" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#flow-arrow)"></path>
+        <path d="M540 288 V336" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#flow-arrow)"></path>
+        <path d="M424 252 H360 Q352 252 352 260 V372 Q352 380 344 380 H324" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#flow-arrow)"></path>
+        <path d="M324 372 H424" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#flow-arrow)"></path>
+        <path d="M540 408 V448" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#flow-arrow)"></path>
+        <path d="M540 520 V560" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#flow-arrow)"></path>
+        <path d="M540 632 V652" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#flow-accent)"></path>
+        <path d="M540 748 V808" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#flow-accent)"></path>
+        <!-- no branch loops around right side -->
+        <path d="M660 700 H820 Q828 700 828 692 V492 Q828 484 820 484 H656" fill="none" stroke="#7a8399" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#flow-arrow)"></path>
+        <!-- labels with masks and visible gaps -->
+        <rect x="486" y="300" width="108" height="12" rx="2" fill="#f5f5f5"></rect><text x="540" y="309" fill="#4f5d75" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">读取规则与历史</text>
+        <rect x="364" y="240" width="96" height="12" rx="2" fill="#f5f5f5"></rect><text x="412" y="249" fill="#2e5aa8" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">查询外部数据</text>
+        <rect x="678" y="456" width="56" height="12" rx="2" fill="#f5f5f5"></rect><text x="706" y="465" fill="#7a8399" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">用户调整</text>
+        <rect x="676" y="676" width="32" height="12" rx="2" fill="#f5f5f5"></rect><text x="692" y="685" fill="#7a8399" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">否</text>
+        <rect x="556" y="760" width="32" height="12" rx="2" fill="#f5f5f5"></rect><text x="572" y="769" fill="#eb6c36" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">是</text>
+        <!-- nodes -->
+        <ellipse cx="540" cy="52" rx="80" ry="28" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.2"></ellipse>
+        <text x="540" y="56" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">开启今日计划</text>
+
+        <rect x="424" y="112" width="232" height="64" rx="6" fill="#fff" stroke="#2d3142" stroke-width="1"></rect>
+        <rect x="436" y="120" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.3)"></rect><text x="460" y="129" fill="#4f5d75" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">LOAD</text>
+        <text x="540" y="151" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">读取长期规则与近期菜史</text>
+        <text x="540" y="167" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">hard constraints + history</text>
+
+        <rect x="424" y="216" width="232" height="72" rx="6" fill="#fff" stroke="#2d3142" stroke-width="1"></rect>
+        <rect x="436" y="224" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.3)"></rect><text x="460" y="233" fill="#4f5d75" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">INPUT</text>
+        <text x="540" y="254" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">采集今日上下文</text>
+        <text x="540" y="272" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">库存 / 想吃 / 人数 / 特殊人群</text>
+
+        <rect x="92" y="336" width="232" height="72" rx="6" fill="rgba(45,49,66,.03)" stroke="rgba(45,49,66,.3)"></rect>
+        <rect x="104" y="344" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.22)"></rect><text x="128" y="353" fill="#7a8399" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">EXT</text>
+        <text x="208" y="374" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">时令与市场数据</text>
+        <text x="208" y="392" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">季节 / 供货 / 均价 / 地方特色</text>
+
+        <rect x="424" y="336" width="232" height="72" rx="6" fill="#fff" stroke="#2d3142" stroke-width="1"></rect>
+        <rect x="436" y="344" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.3)"></rect><text x="460" y="353" fill="#4f5d75" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">FILTER</text>
+        <text x="540" y="374" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">合并并过滤候选食材</text>
+        <text x="540" y="392" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">过敏 / 禁食先过滤，再计算优先级</text>
+
+        <rect x="424" y="448" width="232" height="72" rx="6" fill="#fff" stroke="#2d3142" stroke-width="1"></rect>
+        <rect x="436" y="456" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.3)"></rect><text x="460" y="465" fill="#4f5d75" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">SELECT</text>
+        <text x="540" y="486" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">用户选择基础食材</text>
+        <text x="540" y="504" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">库存 + 明确想吃 + 候选加入</text>
+
+        <rect x="424" y="560" width="232" height="72" rx="6" fill="rgba(235,108,54,.08)" stroke="#eb6c36" stroke-width="1.2"></rect>
+        <rect x="436" y="568" width="48" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,.5)"></rect><text x="460" y="577" fill="#eb6c36" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">AI</text>
+        <text x="540" y="598" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">组合菜肴并排序推荐</text>
+        <text x="540" y="616" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">营养约束 + 候选优先级 + 历史降权</text>
+
+        <polygon points="540,652 660,700 540,748 420,700" fill="#fff" stroke="#2d3142" stroke-width="1.2"></polygon>
+        <text x="540" y="696" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">确认今日菜单？</text>
+        <text x="540" y="714" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">用户可增删菜品</text>
+
+        <ellipse cx="540" cy="840" rx="116" ry="32" fill="rgba(235,108,54,.08)" stroke="#eb6c36" stroke-width="1.2"></ellipse>
+        <text x="540" y="836" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">生成做法并写入历史</text>
+        <text x="540" y="852" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">步骤 / 用量 / 火候 / 今日菜单</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><p class="section-label">03 / SYSTEM ARCHITECTURE</p><h2>对应系统架构</h2></div>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1200 780" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc">
+        <title id="arch-title">AI 买菜做菜助手系统架构</title>
+        <desc id="arch-desc">展示移动端、核心业务服务、数据存储以及外部市场数据接口之间的调用关系。</desc>
+        <defs>
+          <marker id="arch-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#4f5d75"></polygon></marker>
+          <marker id="arch-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#2e5aa8"></polygon></marker>
+          <marker id="arch-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#eb6c36"></polygon></marker>
+        </defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+        <!-- zones -->
+        <rect x="28" y="224" width="196" height="304" rx="8" fill="rgba(79,93,117,.04)" stroke="rgba(45,49,66,.16)"></rect>
+        <rect x="260" y="76" width="568" height="452" rx="8" fill="rgba(45,49,66,.02)" stroke="rgba(45,49,66,.16)"></rect>
+        <rect x="260" y="548" width="568" height="144" rx="8" fill="rgba(45,49,66,.02)" stroke="rgba(45,49,66,.16)"></rect>
+        <rect x="848" y="76" width="320" height="452" rx="8" fill="rgba(45,49,66,.02)" stroke="rgba(45,49,66,.16)"></rect>
+        <rect x="40" y="228" width="96" height="12" rx="2" fill="#f5f5f5"></rect><text x="88" y="237" fill="#4f5d75" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle" letter-spacing=".12em">CLIENT</text>
+        <rect x="272" y="80" width="124" height="12" rx="2" fill="#f5f5f5"></rect><text x="334" y="89" fill="#4f5d75" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle" letter-spacing=".12em">CORE SERVICES</text>
+        <rect x="272" y="552" width="104" height="12" rx="2" fill="#f5f5f5"></rect><text x="324" y="561" fill="#4f5d75" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle" letter-spacing=".12em">DATA STORES</text>
+        <rect x="860" y="80" width="104" height="12" rx="2" fill="#f5f5f5"></rect><text x="912" y="89" fill="#4f5d75" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle" letter-spacing=".12em">EXTERNAL</text>
+        <!-- arrows first -->
+        <path d="M204 356 H288" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arch-accent)"></path>
+        <path d="M126 320 V276 Q126 268 134 268 H244 Q252 268 252 260 V180 Q252 172 260 172 H288" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arch-arrow)"></path>
+        <path d="M488 356 H548" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arch-accent)"></path>
+        <path d="M388 392 V576" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arch-arrow)"></path>
+        <path d="M648 392 V576" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arch-arrow)"></path>
+        <path d="M748 356 H876" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arch-link)"></path>
+        <path d="M984 320 V216" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arch-link)"></path>
+        <path d="M288 356 H252 Q244 356 244 364 V540 Q244 548 252 548 H324 Q332 548 332 556 V576" fill="none" stroke="#7a8399" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arch-arrow)"></path>
+        <path d="M388 320 V276 Q388 268 380 268 H236 Q228 268 228 276 V308 Q228 316 220 316 H126" fill="none" stroke="#7a8399" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arch-arrow)"></path>
+        <!-- labels -->
+        <rect x="216" y="340" width="64" height="12" rx="2" fill="#f5f5f5"></rect><text x="248" y="349" fill="#eb6c36" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">登录 / 请求</text>
+        <rect x="480" y="340" width="72" height="12" rx="2" fill="#f5f5f5"></rect><text x="516" y="349" fill="#eb6c36" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">规划上下文</text>
+        <rect x="768" y="340" width="72" height="12" rx="2" fill="#f5f5f5"></rect><text x="804" y="349" fill="#2e5aa8" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">市场查询</text>
+        <rect x="1000" y="260" width="72" height="12" rx="2" fill="#f5f5f5"></rect><text x="1036" y="269" fill="#2e5aa8" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">HTTPS API</text>
+        <rect x="252" y="496" width="72" height="12" rx="2" fill="#f5f5f5"></rect><text x="288" y="505" fill="#7a8399" font-size="8" font-family="'Geist Mono',monospace" text-anchor="middle">返回结果</text>
+        <!-- nodes -->
+        <rect x="48" y="320" width="156" height="72" rx="6" fill="rgba(235,108,54,.08)" stroke="#eb6c36" stroke-width="1.2"></rect>
+        <rect x="60" y="328" width="40" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,.5)"></rect><text x="80" y="337" fill="#eb6c36" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">UI</text>
+        <text x="126" y="362" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">移动端 App</text>
+        <text x="126" y="380" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">输入 / 选择 / 做法</text>
+
+        <rect x="288" y="144" width="200" height="72" rx="6" fill="#fff" stroke="#2d3142"></rect>
+        <rect x="300" y="152" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.3)"></rect><text x="324" y="161" fill="#4f5d75" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">AUTH</text>
+        <text x="388" y="184" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">账户与规则服务</text>
+        <text x="388" y="202" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">user_id / allergies / dislikes</text>
+
+        <rect x="288" y="320" width="200" height="72" rx="6" fill="#fff" stroke="#2d3142"></rect>
+        <rect x="300" y="328" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.3)"></rect><text x="324" y="337" fill="#4f5d75" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">API</text>
+        <text x="388" y="360" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">每日计划服务</text>
+        <text x="388" y="378" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">context / candidate / menu</text>
+
+        <rect x="548" y="320" width="200" height="72" rx="6" fill="rgba(235,108,54,.08)" stroke="#eb6c36" stroke-width="1.2"></rect>
+        <rect x="560" y="328" width="48" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,.5)"></rect><text x="584" y="337" fill="#eb6c36" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">AI</text>
+        <text x="648" y="360" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">推荐与约束引擎</text>
+        <text x="648" y="378" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">hard filter → scoring → generation</text>
+
+        <rect x="288" y="576" width="200" height="72" rx="6" fill="rgba(45,49,66,.05)" stroke="#4f5d75"></rect>
+        <rect x="300" y="584" width="48" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,.5)"></rect><text x="324" y="593" fill="#4f5d75" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">DB</text>
+        <text x="388" y="616" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">偏好与历史库</text>
+        <text x="388" y="634" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">rules / daily_history / feedback</text>
+
+        <rect x="548" y="576" width="200" height="72" rx="6" fill="rgba(45,49,66,.05)" stroke="#4f5d75"></rect>
+        <rect x="560" y="584" width="48" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,.5)"></rect><text x="584" y="593" fill="#4f5d75" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">DB</text>
+        <text x="648" y="616" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">食材与菜谱库</text>
+        <text x="648" y="634" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">ingredients / dishes / steps</text>
+
+        <rect x="876" y="320" width="220" height="72" rx="6" fill="rgba(45,49,66,.03)" stroke="rgba(45,49,66,.3)"></rect>
+        <rect x="888" y="328" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.22)"></rect><text x="912" y="337" fill="#7a8399" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">ADAPTER</text>
+        <text x="986" y="360" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">市场数据适配器</text>
+        <text x="986" y="378" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">normalize / cache / fallback</text>
+
+        <rect x="876" y="144" width="220" height="72" rx="6" fill="rgba(45,49,66,.03)" stroke="rgba(45,49,66,.3)"></rect>
+        <rect x="888" y="152" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,.22)"></rect><text x="912" y="161" fill="#7a8399" font-size="7" font-family="'Geist Mono',monospace" text-anchor="middle">EXT API</text>
+        <text x="986" y="184" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">时令 / 均价 / 供货接口</text>
+        <text x="986" y="202" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">season / price / local produce</text>
+        <!-- legend -->
+        <line x1="28" y1="724" x2="1168" y2="724" stroke="rgba(45,49,66,.12)"></line>
+        <text x="28" y="748" fill="#4f5d75" font-size="8" font-family="'Geist Mono',monospace" letter-spacing=".14em">LEGEND</text>
+        <rect x="100" y="738" width="16" height="12" rx="2" fill="rgba(235,108,54,.08)" stroke="#eb6c36"></rect><text x="124" y="748" fill="#4f5d75" font-size="9" font-family="'Geist',sans-serif">主流程 / AI</text>
+        <rect x="224" y="738" width="16" height="12" rx="2" fill="#fff" stroke="#2d3142"></rect><text x="248" y="748" fill="#4f5d75" font-size="9" font-family="'Geist',sans-serif">业务服务</text>
+        <rect x="344" y="738" width="16" height="12" rx="2" fill="rgba(45,49,66,.05)" stroke="#4f5d75"></rect><text x="368" y="748" fill="#4f5d75" font-size="9" font-family="'Geist',sans-serif">数据存储</text>
+        <line x1="468" y1="744" x2="492" y2="744" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arch-link)"></line><text x="500" y="748" fill="#4f5d75" font-size="9" font-family="'Geist',sans-serif">外部 API</text>
+        <line x1="592" y1="744" x2="616" y2="744" stroke="#7a8399" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arch-arrow)"></line><text x="624" y="748" fill="#4f5d75" font-size="9" font-family="'Geist',sans-serif">返回 / 异步</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><p class="section-label">04 / IMPLEMENTATION NOTES</p><h2>关键实现规则</h2></div>
+    <div class="logic">
+      <div class="rule-box">
+        <h3>推荐算法：先过滤，再排序，最后生成</h3>
+        <ol>
+          <li><strong>硬过滤：</strong>过敏、明确禁食、宗教禁忌、用户明确排除的食材，不进入候选集；AI 生成后再做一次安全校验。</li>
+          <li><strong>基础食材优先：</strong>用户手头已有和明确想吃的食材权重最高；用户主动加入的候选食材标记为“必须使用”。</li>
+          <li><strong>软排序：</strong>时令性、市场均价、供货量、地方特色、营养匹配度、制作难度共同计算推荐分。</li>
+          <li><strong>历史去重：</strong>近 3～7 天菜品或主食材重复则降权；连续重复、用户点过“不想吃”的菜直接过滤。</li>
+          <li><strong>结果校验：</strong>检查菜品数量、人数份量、营养/特殊人群约束、食材可获得性和禁忌冲突。</li>
+        </ol>
+      </div>
+      <div class="rule-box">
+        <h3>建议的数据对象</h3>
+        <p>以 user_id 作为所有数据的归属键，确保“一个账号一套数据”。</p>
+        <div style="margin-top:10px">
+          <span class="tag important">User</span><span class="tag important">FoodRule</span><span class="tag">DailyContext</span><span class="tag">IngredientCandidate</span><span class="tag">DishRecommendation</span><span class="tag">DailyMenu</span><span class="tag">CookingHistory</span><span class="tag">Feedback</span>
+        </div>
+        <p style="margin-top:12px">外部接口失败时使用最近一次缓存的市场信息，并在界面标注“参考数据”；没有市场数据也不阻塞基于库存的菜谱推荐。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><p class="section-label">05 / MVP DELIVERY</p><h2>建议的最小可行版本</h2></div>
+    <div class="cards">
+      <article class="card"><div class="card-header"><span class="dot coral"></span><h3>第一阶段：可用闭环</h3></div><ul><li>轻量登录与用户规则维护</li><li>每日食材/人数/忌口输入</li><li>基于本地菜谱库的推荐与做法</li><li>今日菜单保存和近 7 日历史</li></ul></article>
+      <article class="card"><div class="card-header"><span class="dot ink"></span><h3>第二阶段：增强推荐</h3></div><ul><li>接入时令、均价、供货和地方特色接口</li><li>候选食材可选加入基础食材</li><li>特殊人群营养偏好与份量计算</li><li>推荐解释：为什么推荐这道菜</li></ul></article>
+      <article class="card"><div class="card-header"><span class="dot muted"></span><h3>第三阶段：持续优化</h3></div><ul><li>喜欢/不喜欢/实际完成等反馈</li><li>家庭成员偏好与多人菜单协同</li><li>库存消耗与临期提醒</li><li>按预算、时间和厨具进一步筛选</li></ul></article>
+    </div>
+  </section>
+
+  <footer class="footer"><span>AI 买菜做菜助手 · 功能、工作流与架构方案</span><span>Default editorial diagram style · 2026</span></footer>
+</div>
+
+
+</body></html>
