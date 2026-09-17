@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/content.dart';
+import '../services/auth_store.dart';
+import '../services/backend_api.dart';
 import '../services/content_store.dart';
 import '../theme.dart';
 
@@ -22,12 +26,87 @@ class _FoodsPageState extends State<FoodsPage> {
   String _category = '全部';
   bool _showPantry = false;
 
+  /// Food.id → 后端那条库存记录的 id。
+  /// 删除要调 /api/my-foods/{item_id}，用的是记录 id 而不是 food_id。
+  final Map<String, int> _serverItemIds = <String, int>{};
+
   static const _categories = <String>['全部', '蔬菜', '肉蛋', '水产', '豆制品'];
+
+  /// 能不能和后端同步「我的食材」。三个条件缺一不可：
+  ///   1. 后端连着 —— 否则同步到哪去
+  ///   2. 登录了 —— /api/my-foods 需要 token
+  ///   3. 用的是后端内容 —— 接口要数字 food_id，而本地假数据的 id
+  ///      是 'lotus' 这种字符串，传不过去
+  bool get _canSync =>
+      ContentStore.instance.fromBackend && AuthStore.instance.isLoggedIn;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadPantryFromServer());
+  }
 
   @override
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  /// 登录状态下从后端拉「我的食材」；拿不到就保持本页的临时列表。
+  Future<void> _loadPantryFromServer() async {
+    if (!_canSync) return;
+    try {
+      final items = await BackendApi.instance.fetchMyFoods();
+      if (!mounted) return;
+      setState(() {
+        _pantry.clear();
+        _serverItemIds.clear();
+        for (final item in items) {
+          final food = _matchLocalFood(item);
+          if (food == null) continue;
+          _pantry.add(food);
+          _serverItemIds[food.id] = item.id;
+          _amounts[food.id] = item.amount.round();
+        }
+      });
+    } catch (error) {
+      debugPrint('[FoodsPage] 我的食材加载失败，保持本地列表：$error');
+    }
+  }
+
+  /// 后端条目 → 本地 Food。内容库里找不到就返回 null（避免渲染空图）。
+  Food? _matchLocalFood(MyFoodEntry entry) {
+    if (entry.foodId == null) return null;
+    final id = '${entry.foodId}';
+    for (final food in ContentStore.instance.foods) {
+      if (food.id == id) return food;
+    }
+    return null;
+  }
+
+  Future<void> _syncAdd(Food food) async {
+    if (!_canSync) return;
+    final foodId = int.tryParse(food.id);
+    if (foodId == null) return;
+    try {
+      await BackendApi.instance.addMyFood(
+        foodId: foodId,
+        amount: (_amounts[food.id] ?? 1).toDouble(),
+      );
+    } catch (error) {
+      debugPrint('[FoodsPage] 加入我的食材同步失败：$error');
+    }
+  }
+
+  Future<void> _syncRemove(Food food) async {
+    if (!_canSync) return;
+    final itemId = _serverItemIds.remove(food.id);
+    if (itemId == null) return;
+    try {
+      await BackendApi.instance.removeMyFood(itemId);
+    } catch (error) {
+      debugPrint('[FoodsPage] 移出我的食材同步失败：$error');
+    }
   }
 
   List<Food> get _visibleFoods {
@@ -62,6 +141,7 @@ class _FoodsPageState extends State<FoodsPage> {
       _amounts.remove(food.id);
     });
     _toast('已从现有食材中移除${food.name}');
+    unawaited(_syncRemove(food));
   }
 
   void _addToPantry(Food food) {
@@ -74,6 +154,7 @@ class _FoodsPageState extends State<FoodsPage> {
       _amounts[food.id] = 1;
     });
     _toast('已将${food.name}添加到我的食材');
+    unawaited(_syncAdd(food));
   }
 
   Future<void> _addFood() async {
