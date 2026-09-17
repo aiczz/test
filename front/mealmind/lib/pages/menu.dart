@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../models/plan.dart';
 import '../services/api.dart';
+import '../services/content_store.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import 'recipes.dart';
 
 /// =====================================================================
 /// 今日 / 本周菜单 + 购物清单
@@ -626,74 +628,99 @@ class _DishTile extends StatelessWidget {
 
   const _DishTile({required this.dish});
 
+  /// 按菜名去内容库里找对应的菜谱，找到就打开详情弹层。
+  ///
+  /// 菜单是「求解结果」，内容库是「菜谱库」，两者靠菜名对齐。
+  /// 对不上就如实说明，不装作能打开。
+  void _openDetail(BuildContext context) {
+    for (final recipe in ContentStore.instance.recipes) {
+      if (recipe.name == dish.name) {
+        openRecipeDetail(context, recipe);
+        return;
+      }
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('菜谱库里暂时没有「${dish.name}」的做法'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF163A26),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  dish.name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: ink,
-                  ),
-                ),
-              ),
-              Text(
-                '${dish.servings} 份',
-                style: const TextStyle(fontSize: 11, color: muted),
-              ),
-            ],
-          ),
-          if (dish.reason.isNotEmpty) ...[
-            const SizedBox(height: 5),
-            Container(
-              padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
-              decoration: BoxDecoration(
-                color: green50,
-                borderRadius: BorderRadius.circular(10),
-                border: const Border(
-                  left: BorderSide(color: green600, width: 2.5),
-                ),
-              ),
-              child: Text(
-                dish.reason,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: muted,
-                  height: 1.55,
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 5,
-            runSpacing: 5,
-            children: [
-              for (final t in dish.tags)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: tagDeco(),
+    // 这块以前点了没反应 —— 现在能看做法
+    return InkWell(
+      onTap: () => _openDetail(context),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
                   child: Text(
-                    t,
+                    dish.name,
                     style: const TextStyle(
-                      fontSize: 10,
-                      color: green700,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: ink,
                     ),
                   ),
                 ),
+                Text(
+                  '${dish.servings} 份',
+                  style: const TextStyle(fontSize: 11, color: muted),
+                ),
+              ],
+            ),
+            if (dish.reason.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Container(
+                padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
+                decoration: BoxDecoration(
+                  color: green50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: const Border(
+                    left: BorderSide(color: green600, width: 2.5),
+                  ),
+                ),
+                child: Text(
+                  dish.reason,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: muted,
+                    height: 1.55,
+                  ),
+                ),
+              ),
             ],
-          ),
-        ],
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 5,
+              runSpacing: 5,
+              children: [
+                for (final t in dish.tags)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: tagDeco(),
+                    child: Text(
+                      t,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: green700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

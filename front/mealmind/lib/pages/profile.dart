@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../services/api_config.dart';
 import '../services/auth_store.dart';
+import '../services/backend_api.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import 'admin.dart';
@@ -280,17 +282,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   _MenuRow(
                     icon: Icons.favorite_outline,
                     title: '我的收藏',
-                    subtitle: '12 道菜谱',
-                    onTap: () =>
-                        _showInfo('我的收藏', '已收藏莲藕排骨汤、番茄炒蛋、清炒白菜等 12 道菜谱。'),
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  _MenuRow(
-                    icon: Icons.history,
-                    title: '浏览历史',
-                    subtitle: '最近 28 条',
-                    onTap: () =>
-                        _showInfo('浏览历史', '浏览记录只用于本机推荐排序，不会替代“实际做过”的用餐反馈。'),
+                    subtitle: '登录后同步到云端',
+                    onTap: () => _showInfo(
+                      '我的收藏',
+                      '收藏的菜谱会同步到你的账号，换台设备登录也还在。',
+                    ),
                   ),
                   const Divider(height: 1, indent: 56),
                   SwitchListTile.adaptive(
@@ -600,16 +596,85 @@ class _LocalOnlyBadge extends StatelessWidget {
   }
 }
 
-class _StatsRow extends StatelessWidget {
+/// 四个统计数字。
+///
+/// ★ 以前这里是写死的「收藏 12 / 历史 28 / 食材 6 / 偏好 4」—— 全是假数字。
+///   现在：登录且后端在线时显示真实数量，否则显示「—」。
+///   宁可显示「—」也不显示一个编出来的数字 —— 演示时被问「12 是哪来的」很难看。
+class _StatsRow extends StatefulWidget {
   const _StatsRow();
 
   @override
+  State<_StatsRow> createState() => _StatsRowState();
+}
+
+class _StatsRowState extends State<_StatsRow> {
+  int? _favorites;
+  int? _pantry;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    // 登录 / 退出后要重新拉 —— 否则退出登录还显示着上一个人的数字
+    AuthStore.instance.addListener(_onAuthChanged);
+    AppState.instance.addListener(_onProfileChanged);
+  }
+
+  @override
+  void dispose() {
+    AuthStore.instance.removeListener(_onAuthChanged);
+    AppState.instance.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (mounted) setState(() {});
+    _load();
+  }
+
+  void _onProfileChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _load() async {
+    final canAskBackend =
+        BackendStatus.instance.online && AuthStore.instance.isLoggedIn;
+    if (!canAskBackend) {
+      if (mounted) {
+        setState(() {
+          _favorites = null;
+          _pantry = null;
+        });
+      }
+      return;
+    }
+    if (_loading) return;
+    _loading = true;
+    try {
+      final favorites = await BackendApi.instance.fetchFavoriteCount();
+      final pantry = await BackendApi.instance.fetchMyFoods();
+      if (!mounted) return;
+      setState(() {
+        _favorites = favorites;
+        _pantry = pantry.length;
+      });
+    } catch (error) {
+      debugPrint('[ProfilePage] 统计数字加载失败：$error');
+    } finally {
+      _loading = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const stats = <(IconData, String, String)>[
-      (Icons.favorite, '12', '收藏'),
-      (Icons.history, '28', '历史'),
-      (Icons.kitchen, '6', '食材'),
-      (Icons.tune, '4', '偏好'),
+    final profile = AppState.instance.profile;
+    final stats = <(IconData, String, String)>[
+      (Icons.favorite, _favorites?.toString() ?? '—', '收藏'),
+      (Icons.kitchen, _pantry?.toString() ?? '—', '我的食材'),
+      (Icons.tune, '${profile.preferences.length}', '口味偏好'),
+      (Icons.block, '${profile.avoid.length}', '忌口'),
     ];
     return Row(
       children: [
