@@ -43,6 +43,7 @@ _FOODS: list[dict] = [
         "nutrition_summary": "润燥养胃、秋季适宜",
         "texture": "脆嫩",
         "common_methods": "炖汤 / 清炒 / 凉拌",
+        "tags": ["润燥养胃", "秋季适宜"],
         "season": ("秋季", 9, 11, 95),
     },
     {
@@ -53,6 +54,7 @@ _FOODS: list[dict] = [
         "nutrition_summary": "富含膳食纤维、软糯香甜",
         "texture": "软糯",
         "common_methods": "蒸 / 煮粥 / 烤",
+        "tags": ["富含膳食纤维", "软糯香甜"],
         "season": ("秋季", 8, 11, 90),
     },
     {
@@ -63,6 +65,7 @@ _FOODS: list[dict] = [
         "nutrition_summary": "富含维生素C、酸甜开胃",
         "texture": "多汁",
         "common_methods": "炒蛋 / 煮汤 / 凉拌",
+        "tags": ["富含维生素C", "酸甜开胃"],
         "season": ("夏季", 6, 9, 85),
     },
     {
@@ -73,6 +76,7 @@ _FOODS: list[dict] = [
         "nutrition_summary": "清爽鲜嫩、家常常备",
         "texture": "鲜嫩",
         "common_methods": "清炒 / 煮汤",
+        "tags": ["清爽鲜嫩", "家常常备"],
         "season": ("全年", 1, 12, 70),
     },
     {
@@ -83,6 +87,7 @@ _FOODS: list[dict] = [
         "nutrition_summary": "富含胡萝卜素、增强免疫",
         "texture": "脆硬",
         "common_methods": "炖 / 炒 / 凉拌",
+        "tags": ["富含胡萝卜素", "增强免疫"],
         "season": ("秋冬季", 9, 12, 80),
     },
     {
@@ -93,6 +98,7 @@ _FOODS: list[dict] = [
         "nutrition_summary": "优质蛋白、营养全面",
         "texture": "嫩滑",
         "common_methods": "炒 / 蒸 / 煮",
+        "tags": ["优质蛋白", "营养全面"],
         "season": ("全年", 1, 12, 70),
     },
 ]
@@ -116,6 +122,7 @@ _RECIPES: list[dict] = [
         "category": "汤羹",
         "season_recommendation": "秋季",
         "tips": "小火慢炖 40 分钟，出锅前再放盐，肉更嫩。",
+        "tags": ["秋日暖汤", "家常", "营养"],
         "ingredients": [
             ("莲藕", 1, "节", "蔬菜"),
             ("排骨", 500, "克", "肉蛋"),
@@ -141,6 +148,7 @@ _RECIPES: list[dict] = [
         "category": "家常菜",
         "season_recommendation": "夏季",
         "tips": "蛋液刚凝固就盛出，回锅再炒才不会老。",
+        "tags": ["快手菜", "下饭"],
         "ingredients": [
             ("西红柿", 3, "个", "蔬菜"),
             ("鸡蛋", 4, "个", "肉蛋"),
@@ -165,6 +173,7 @@ _RECIPES: list[dict] = [
         "category": "家常菜",
         "season_recommendation": "全年",
         "tips": "大火快炒，断生立刻出锅，久炒会出水变软。",
+        "tags": ["低脂", "清淡"],
         "ingredients": [
             ("小白菜", 1, "把", "蔬菜"),
             ("蒜", 3, "瓣", "调味"),
@@ -188,6 +197,7 @@ _RECIPES: list[dict] = [
         "category": "炖菜",
         "season_recommendation": "秋季",
         "tips": "泡香菇的水别倒，加进去一起炖更香。",
+        "tags": ["秋季推荐", "家常"],
         "ingredients": [
             ("鸡腿肉", 500, "克", "肉蛋"),
             ("干香菇", 8, "朵", "蔬菜"),
@@ -254,6 +264,7 @@ def _seed_foods(session: Session) -> None:
             nutrition_summary=item["nutrition_summary"],
             texture=item["texture"],
             common_methods=item["common_methods"],
+            tags=item["tags"],
         )
         session.add(food)
         session.commit()
@@ -291,6 +302,7 @@ def _seed_recipes(session: Session) -> None:
             category=item["category"],
             season_recommendation=item["season_recommendation"],
             tips=item["tips"],
+            tags=item["tags"],
         )
         session.add(recipe)
         session.commit()

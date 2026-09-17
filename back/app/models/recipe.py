@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from sqlalchemy import JSON
 from sqlmodel import Field, SQLModel
 
 from app.utils.time import utcnow
@@ -21,6 +22,9 @@ class Recipe(SQLModel, table=True):
     category: str | None = Field(default=None, max_length=32)
     season_recommendation: str | None = None
     tips: str | None = None
+    # ⚠️ 同 foods.tags：说明书 §11 的响应里有 tags，
+    #    但 §7.5 的表定义没有承载字段，这里扩展一个 JSON 列。
+    tags: list[str] = Field(default_factory=list, sa_type=JSON)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(
         default_factory=utcnow, sa_column_kwargs={"onupdate": utcnow}
