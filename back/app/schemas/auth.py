@@ -40,4 +40,6 @@ class UserPublic(BaseModel):
     nickname: str | None = None
     avatar_url: str | None = None
     family_size: int
+    # 前端靠这个决定要不要显示「管理员控制台」入口
+    is_admin: bool = False
     created_at: datetime

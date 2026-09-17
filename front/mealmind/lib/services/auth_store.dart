@@ -19,11 +19,17 @@ class AuthUser {
   final String? nickname;
   final int familySize;
 
+  /// 是不是管理员 —— 决定「我的」页要不要显示控制台入口。
+  /// ⚠️ 这只是【界面】上的开关，真正的权限校验在后端：
+  ///    管理员接口对普通用户返回 403，前端改这个值也没用。
+  final bool isAdmin;
+
   const AuthUser({
     required this.id,
     required this.username,
     this.nickname,
     this.familySize = 3,
+    this.isAdmin = false,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
@@ -31,6 +37,7 @@ class AuthUser {
     username: json['username'] as String? ?? '',
     nickname: json['nickname'] as String?,
     familySize: json['family_size'] as int? ?? 3,
+    isAdmin: json['is_admin'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -38,6 +45,7 @@ class AuthUser {
     'username': username,
     'nickname': nickname,
     'family_size': familySize,
+    'is_admin': isAdmin,
   };
 
   String get displayName =>

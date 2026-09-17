@@ -181,6 +181,67 @@ class BackendApi {
     );
   }
 
+  // ---------------------------------------------------------------- 管理员
+  //
+  // ⚠️ 这些接口后端会校验 is_admin，普通用户拿到 403。
+  //    前端隐藏入口只是界面上的事，不是权限控制。
+
+  /// GET /api/admin/stats
+  Future<AdminStats> fetchAdminStats() async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/admin/stats',
+      options: _auth,
+    );
+    return AdminStats.fromJson(res.data ?? const <String, dynamic>{});
+  }
+
+  /// GET /api/admin/users
+  Future<AdminUserPage> fetchAdminUsers({
+    String? keyword,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/admin/users',
+      queryParameters: <String, dynamic>{
+        'keyword': ?keyword,
+        'page': page,
+        'page_size': pageSize,
+      },
+      options: _auth,
+    );
+    return AdminUserPage.fromJson(res.data ?? const <String, dynamic>{});
+  }
+
+  /// POST /api/admin/users/{id}/ban 或 /unban
+  Future<AdminUser> setUserBanned(int userId, {required bool banned}) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/admin/users/$userId/${banned ? 'ban' : 'unban'}',
+      options: _auth,
+    );
+    return AdminUser.fromJson(res.data ?? const <String, dynamic>{});
+  }
+
+  /// GET /api/admin/logins
+  Future<LoginLogPage> fetchLoginLogs({
+    bool onlyFailed = false,
+    String? username,
+    int page = 1,
+    int pageSize = 30,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/admin/logins',
+      queryParameters: <String, dynamic>{
+        'only_failed': onlyFailed,
+        'username': ?username,
+        'page': page,
+        'page_size': pageSize,
+      },
+      options: _auth,
+    );
+    return LoginLogPage.fromJson(res.data ?? const <String, dynamic>{});
+  }
+
   // ---------------------------------------------------------------- 映射
 
   static Food _foodFromJson(Map<String, dynamic> json) => Food(
@@ -259,4 +320,149 @@ class AiChatResult {
     this.toolsUsed = const <String>[],
     this.recipes = const <Recipe>[],
   });
+}
+
+// =====================================================================
+// 管理员
+// =====================================================================
+
+DateTime? _parseTime(Object? raw) =>
+    raw is String ? DateTime.tryParse(raw)?.toLocal() : null;
+
+/// 用户统计
+class AdminStats {
+  final int totalUsers;
+  final int adminUsers;
+  final int bannedUsers;
+  final int newUsersToday;
+  final int totalLogins;
+  final int loginsToday;
+  final int failedLoginsToday;
+  final int activeUsersToday;
+
+  const AdminStats({
+    required this.totalUsers,
+    required this.adminUsers,
+    required this.bannedUsers,
+    required this.newUsersToday,
+    required this.totalLogins,
+    required this.loginsToday,
+    required this.failedLoginsToday,
+    required this.activeUsersToday,
+  });
+
+  factory AdminStats.fromJson(Map<String, dynamic> json) => AdminStats(
+    totalUsers: json['total_users'] as int? ?? 0,
+    adminUsers: json['admin_users'] as int? ?? 0,
+    bannedUsers: json['banned_users'] as int? ?? 0,
+    newUsersToday: json['new_users_today'] as int? ?? 0,
+    totalLogins: json['total_logins'] as int? ?? 0,
+    loginsToday: json['logins_today'] as int? ?? 0,
+    failedLoginsToday: json['failed_logins_today'] as int? ?? 0,
+    activeUsersToday: json['active_users_today'] as int? ?? 0,
+  );
+}
+
+/// 用户列表里的一行
+class AdminUser {
+  final int id;
+  final String username;
+  final String? nickname;
+  final String? email;
+  final int familySize;
+  final bool isAdmin;
+  final bool isBanned;
+  final DateTime? createdAt;
+  final DateTime? lastLoginAt;
+  final int loginCount;
+
+  const AdminUser({
+    required this.id,
+    required this.username,
+    this.nickname,
+    this.email,
+    this.familySize = 3,
+    this.isAdmin = false,
+    this.isBanned = false,
+    this.createdAt,
+    this.lastLoginAt,
+    this.loginCount = 0,
+  });
+
+  factory AdminUser.fromJson(Map<String, dynamic> json) => AdminUser(
+    id: json['id'] as int? ?? 0,
+    username: json['username'] as String? ?? '',
+    nickname: json['nickname'] as String?,
+    email: json['email'] as String?,
+    familySize: json['family_size'] as int? ?? 3,
+    isAdmin: json['is_admin'] as bool? ?? false,
+    isBanned: json['is_banned'] as bool? ?? false,
+    createdAt: _parseTime(json['created_at']),
+    lastLoginAt: _parseTime(json['last_login_at']),
+    loginCount: json['login_count'] as int? ?? 0,
+  );
+
+  String get display =>
+      (nickname == null || nickname!.isEmpty) ? username : nickname!;
+}
+
+class AdminUserPage {
+  final List<AdminUser> items;
+  final int total;
+
+  const AdminUserPage({required this.items, required this.total});
+
+  factory AdminUserPage.fromJson(Map<String, dynamic> json) => AdminUserPage(
+    items: ((json['items'] as List?) ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .map(AdminUser.fromJson)
+        .toList(),
+    total: json['total'] as int? ?? 0,
+  );
+}
+
+/// 一条登录记录
+class LoginLogEntry {
+  final int id;
+  final String username;
+  final bool success;
+  final String? ip;
+  final String? userAgent;
+  final String? detail;
+  final DateTime? createdAt;
+
+  const LoginLogEntry({
+    required this.id,
+    required this.username,
+    required this.success,
+    this.ip,
+    this.userAgent,
+    this.detail,
+    this.createdAt,
+  });
+
+  factory LoginLogEntry.fromJson(Map<String, dynamic> json) => LoginLogEntry(
+    id: json['id'] as int? ?? 0,
+    username: json['username'] as String? ?? '',
+    success: json['success'] as bool? ?? false,
+    ip: json['ip'] as String?,
+    userAgent: json['user_agent'] as String?,
+    detail: json['detail'] as String?,
+    createdAt: _parseTime(json['created_at']),
+  );
+}
+
+class LoginLogPage {
+  final List<LoginLogEntry> items;
+  final int total;
+
+  const LoginLogPage({required this.items, required this.total});
+
+  factory LoginLogPage.fromJson(Map<String, dynamic> json) => LoginLogPage(
+    items: ((json['items'] as List?) ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .map(LoginLogEntry.fromJson)
+        .toList(),
+    total: json['total'] as int? ?? 0,
+  );
 }
