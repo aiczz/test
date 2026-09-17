@@ -572,6 +572,26 @@ class _AccountCard extends StatelessWidget {
                   ],
                 ),
               ),
+              // 管理员入口就放在登录信息旁边 ——
+              // 之前只放在页面最底部（意见反馈下面），得一路滚下去才看得到，
+              // 用户根本找不到。
+              if (user.isAdmin)
+                TextButton(
+                  onPressed: () => AdminPage.open(context),
+                  style: TextButton.styleFrom(
+                    foregroundColor: green700,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: const Size(0, 34),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text(
+                    '管理',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
               TextButton(
                 onPressed: () async {
                   await store.logout();
