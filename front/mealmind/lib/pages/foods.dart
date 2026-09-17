@@ -16,11 +16,9 @@ class FoodsPage extends StatefulWidget {
 
 class _FoodsPageState extends State<FoodsPage> {
   final TextEditingController _search = TextEditingController();
-  final List<Food> _pantry = List<Food>.from(mockFoods);
-  final Set<String> _selected = <String>{'tomato', 'egg'};
-  final Map<String, int> _amounts = <String, int>{
-    for (final food in mockFoods) food.id: 1,
-  };
+  final List<Food> _pantry = <Food>[];
+  final Set<String> _selected = <String>{};
+  final Map<String, int> _amounts = <String, int>{};
   String _category = '全部';
   bool _showPantry = false;
 
@@ -64,6 +62,18 @@ class _FoodsPageState extends State<FoodsPage> {
       _amounts.remove(food.id);
     });
     _toast('已从现有食材中移除${food.name}');
+  }
+
+  void _addToPantry(Food food) {
+    if (_pantry.any((item) => item.id == food.id)) {
+      _toast('${food.name}已经在我的食材里了');
+      return;
+    }
+    setState(() {
+      _pantry.add(food);
+      _amounts[food.id] = 1;
+    });
+    _toast('已将${food.name}添加到我的食材');
   }
 
   Future<void> _addFood() async {
@@ -116,9 +126,8 @@ class _FoodsPageState extends State<FoodsPage> {
                   Food(
                     id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
                     name: value,
-                    image: 'assets/images/bokchoy.jpg',
+                    image: 'assets/images/bokchoy-clean.jpg',
                     category: category,
-                    qty: '1份',
                     tags: const ['手动添加'],
                   ),
                 );
@@ -201,7 +210,7 @@ class _FoodsPageState extends State<FoodsPage> {
                       ),
                     ),
                   ),
-                  const _SeasonBadge(),
+                  const _DetailSeasonBadge(),
                 ],
               ),
               const SizedBox(height: 10),
@@ -341,35 +350,47 @@ class _FoodsPageState extends State<FoodsPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final category in _categories) ...[
-                          ChoiceChip(
-                            label: Text(category),
-                            selected: _category == category,
-                            selectedColor: green100,
-                            labelStyle: TextStyle(
-                              color: _category == category ? green700 : muted,
-                              fontWeight: _category == category
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                            ),
-                            onSelected: (_) =>
-                                setState(() => _category = category),
-                          ),
-                          const SizedBox(width: 7),
-                        ],
-                      ],
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final category in _categories)
+                        _CategoryChip(
+                          category: category,
+                          selected: _category == category,
+                          onSelected: () =>
+                              setState(() => _category = category),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 22),
                   Row(
                     children: [
-                      Icon(
-                        _showPantry ? Icons.kitchen : Icons.eco,
-                        color: green700,
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4DA85D), green700],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(13),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x252E8B43),
+                              blurRadius: 10,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          _showPantry
+                              ? Icons.inventory_2_rounded
+                              : Icons.eco_rounded,
+                          color: Colors.white,
+                          size: 21,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -388,30 +409,50 @@ class _FoodsPageState extends State<FoodsPage> {
                   ),
                   const SizedBox(height: 12),
                   if (foods.isEmpty)
-                    const _EmptyFoods()
+                    _EmptyFoods(
+                      pantryIsEmpty: _showPantry && _pantry.isEmpty,
+                      onBrowse: () => setState(() {
+                        _showPantry = false;
+                        _category = '全部';
+                        _search.clear();
+                      }),
+                    )
                   else
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: foods.length,
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: _showPantry ? 0.78 : 0.88,
-                      ),
-                      itemBuilder: (context, index) {
-                        final food = foods[index];
-                        return _FoodInventoryCard(
-                          food: food,
-                          pantryMode: _showPantry,
-                          selected: _selected.contains(food.id),
-                          amount: _amounts[food.id] ?? 1,
-                          onTap: () => _showFoodDetail(food),
-                          onToggle: () => _toggleSelected(food),
-                          onMinus: () => _changeAmount(food, -1),
-                          onPlus: () => _changeAmount(food, 1),
-                          onDelete: () => _removeFood(food),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        const spacing = 12.0;
+                        final cardWidth = (constraints.maxWidth - spacing) / 2;
+                        final imageHeight = cardWidth / 1.8;
+                        final contentHeight = _showPantry ? 154.0 : 132.0;
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: foods.length,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: spacing,
+                                mainAxisSpacing: spacing,
+                                mainAxisExtent: imageHeight + contentHeight,
+                              ),
+                          itemBuilder: (context, index) {
+                            final food = foods[index];
+                            return _FoodInventoryCard(
+                              food: food,
+                              pantryMode: _showPantry,
+                              inPantry: _pantry.any(
+                                (item) => item.id == food.id,
+                              ),
+                              selected: _selected.contains(food.id),
+                              amount: _amounts[food.id] ?? 1,
+                              onTap: () => _showFoodDetail(food),
+                              onToggle: () => _toggleSelected(food),
+                              onAdd: () => _addToPantry(food),
+                              onMinus: () => _changeAmount(food, -1),
+                              onPlus: () => _changeAmount(food, 1),
+                              onDelete: () => _removeFood(food),
+                            );
+                          },
                         );
                       },
                     ),
@@ -518,12 +559,12 @@ class _FoodsHeader extends StatelessWidget {
                   segments: [
                     const ButtonSegment(
                       value: false,
-                      icon: Icon(Icons.eco_outlined),
+                      icon: Icon(Icons.spa_rounded),
                       label: Text('推荐'),
                     ),
                     ButtonSegment(
                       value: true,
-                      icon: const Icon(Icons.kitchen_outlined),
+                      icon: const Icon(Icons.inventory_2_rounded),
                       label: Text('我的 $pantryCount'),
                     ),
                   ],
@@ -536,7 +577,11 @@ class _FoodsHeader extends StatelessWidget {
                 IconButton.filled(
                   onPressed: onAdd,
                   tooltip: '手动添加食材',
-                  icon: const Icon(Icons.add),
+                  style: IconButton.styleFrom(
+                    backgroundColor: orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.add_rounded),
                 ),
               ],
             ],
@@ -550,10 +595,12 @@ class _FoodsHeader extends StatelessWidget {
 class _FoodInventoryCard extends StatelessWidget {
   final Food food;
   final bool pantryMode;
+  final bool inPantry;
   final bool selected;
   final int amount;
   final VoidCallback onTap;
   final VoidCallback onToggle;
+  final VoidCallback onAdd;
   final VoidCallback onMinus;
   final VoidCallback onPlus;
   final VoidCallback onDelete;
@@ -561,10 +608,12 @@ class _FoodInventoryCard extends StatelessWidget {
   const _FoodInventoryCard({
     required this.food,
     required this.pantryMode,
+    required this.inPantry,
     required this.selected,
     required this.amount,
     required this.onTap,
     required this.onToggle,
+    required this.onAdd,
     required this.onMinus,
     required this.onPlus,
     required this.onDelete,
@@ -583,43 +632,17 @@ class _FoodInventoryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Stack(
-                children: [
-                  AspectRatio(
-                    aspectRatio: 1.8,
-                    child: ColoredBox(
-                      color: const Color(0xFFFFF8EC),
-                      child: Image.asset(
-                        food.image,
-                        fit: BoxFit.contain,
-                        alignment: Alignment.center,
-                        filterQuality: FilterQuality.high,
-                      ),
-                    ),
+              AspectRatio(
+                aspectRatio: 1.8,
+                child: ColoredBox(
+                  color: const Color(0xFFFFF8EC),
+                  child: Image.asset(
+                    food.image,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.center,
+                    filterQuality: FilterQuality.high,
                   ),
-                  Positioned(
-                    right: 7,
-                    top: 7,
-                    child: pantryMode
-                        ? IconButton.filledTonal(
-                            onPressed: onToggle,
-                            tooltip: selected ? '取消选择' : '选中用于做菜',
-                            constraints: const BoxConstraints.tightFor(
-                              width: 34,
-                              height: 34,
-                            ),
-                            padding: EdgeInsets.zero,
-                            icon: Icon(
-                              selected
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                              size: 20,
-                              color: selected ? green700 : muted,
-                            ),
-                          )
-                        : const _SeasonBadge(),
-                  ),
-                ],
+                ),
               ),
               Expanded(
                 child: Padding(
@@ -638,19 +661,54 @@ class _FoodInventoryCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (pantryMode)
-                            InkWell(
-                              onTap: onDelete,
-                              child: const Icon(
-                                Icons.delete_outline,
+                          if (pantryMode) ...[
+                            IconButton.filledTonal(
+                              onPressed: onToggle,
+                              tooltip: selected ? '取消选择' : '选中用于做菜',
+                              constraints: const BoxConstraints.tightFor(
+                                width: 32,
+                                height: 32,
+                              ),
+                              padding: EdgeInsets.zero,
+                              icon: Icon(
+                                selected
+                                    ? Icons.check_circle_rounded
+                                    : Icons.radio_button_unchecked_rounded,
                                 size: 19,
-                                color: muted,
+                                color: selected ? green700 : muted,
                               ),
                             ),
+                            const SizedBox(width: 5),
+                            IconButton(
+                              onPressed: onDelete,
+                              tooltip: '删除${food.name}',
+                              constraints: const BoxConstraints.tightFor(
+                                width: 32,
+                                height: 32,
+                              ),
+                              padding: EdgeInsets.zero,
+                              style: IconButton.styleFrom(
+                                backgroundColor: orange100,
+                                foregroundColor: orange,
+                              ),
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 18,
+                              ),
+                            ),
+                          ] else
+                            _AddFoodButton(added: inPantry, onTap: onAdd),
                         ],
                       ),
                       const SizedBox(height: 7),
-                      if (food.tags.isNotEmpty) _Tag(text: food.tags.first),
+                      if (food.tags.isNotEmpty)
+                        Wrap(
+                          spacing: 5,
+                          runSpacing: 5,
+                          children: [
+                            for (final tag in food.tags) _Tag(text: tag),
+                          ],
+                        ),
                       const Spacer(),
                       if (pantryMode)
                         Row(
@@ -658,7 +716,7 @@ class _FoodInventoryCard extends StatelessWidget {
                             _AmountButton(icon: Icons.remove, onTap: onMinus),
                             Expanded(
                               child: Text(
-                                '$amount ${food.qty}',
+                                '$amount',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   fontSize: 12,
@@ -712,6 +770,107 @@ class _FoodInventoryCard extends StatelessWidget {
   }
 }
 
+class _AddFoodButton extends StatelessWidget {
+  final bool added;
+  final VoidCallback onTap;
+
+  const _AddFoodButton({required this.added, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: added ? '已在我的食材中' : '添加到我的食材',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: added ? green700 : Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: added ? green700 : const Color(0xFFD8E5D5),
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x220B532F),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 160),
+              child: Icon(
+                added ? Icons.check_rounded : Icons.add_rounded,
+                key: ValueKey(added),
+                size: 20,
+                color: added ? Colors.white : green700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  final String category;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  const _CategoryChip({
+    required this.category,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  IconData get _icon => switch (category) {
+    '蔬菜' => Icons.grass_rounded,
+    '肉蛋' => Icons.egg_alt_rounded,
+    '水产' => Icons.set_meal_rounded,
+    '豆制品' => Icons.breakfast_dining_rounded,
+    _ => Icons.apps_rounded,
+  };
+
+  Color get _iconColor => switch (category) {
+    '肉蛋' => const Color(0xFFE76543),
+    '水产' => const Color(0xFF3587A4),
+    '豆制品' => const Color(0xFFC88A2D),
+    _ => green700,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      avatar: Icon(
+        selected ? Icons.check_circle_rounded : _icon,
+        size: 17,
+        color: selected ? green700 : _iconColor,
+      ),
+      label: Text(category),
+      selected: selected,
+      showCheckmark: false,
+      selectedColor: green100,
+      backgroundColor: Colors.white,
+      side: BorderSide(color: selected ? const Color(0xFFB9DDB3) : line),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+      labelStyle: TextStyle(
+        color: selected ? green700 : ink,
+        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+        fontSize: 12,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+      onSelected: (_) => onSelected(),
+    );
+  }
+}
+
 class _AmountButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -736,23 +895,23 @@ class _AmountButton extends StatelessWidget {
   }
 }
 
-class _SeasonBadge extends StatelessWidget {
-  const _SeasonBadge();
+class _DetailSeasonBadge extends StatelessWidget {
+  const _DetailSeasonBadge();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: orange,
+        color: orange100,
         borderRadius: BorderRadius.circular(99),
       ),
       child: const Text(
-        '当季',
+        '当季推荐',
         style: TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
+          color: orange,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );
@@ -771,8 +930,7 @@ class _Tag extends StatelessWidget {
       decoration: tagDeco(),
       child: Text(
         text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+        softWrap: true,
         style: const TextStyle(
           fontSize: 10,
           color: green700,
@@ -784,18 +942,51 @@ class _Tag extends StatelessWidget {
 }
 
 class _EmptyFoods extends StatelessWidget {
-  const _EmptyFoods();
+  final bool pantryIsEmpty;
+  final VoidCallback onBrowse;
+
+  const _EmptyFoods({required this.pantryIsEmpty, required this.onBrowse});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 42),
       decoration: cardDeco(),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.search_off, size: 42, color: muted),
-          SizedBox(height: 10),
-          Text('没有找到匹配的食材', style: TextStyle(color: muted)),
+          Container(
+            width: 58,
+            height: 58,
+            decoration: const BoxDecoration(
+              color: green100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              pantryIsEmpty
+                  ? Icons.add_shopping_cart_rounded
+                  : Icons.search_off_rounded,
+              size: 29,
+              color: green700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            pantryIsEmpty ? '我的食材还是空的' : '没有找到匹配的食材',
+            style: const TextStyle(color: ink, fontWeight: FontWeight.w800),
+          ),
+          if (pantryIsEmpty) ...[
+            const SizedBox(height: 6),
+            const Text(
+              '去推荐食材点击右上角 + 添加',
+              style: TextStyle(fontSize: 12, color: muted),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onBrowse,
+              icon: const Icon(Icons.spa_rounded, size: 18),
+              label: const Text('去看推荐食材'),
+            ),
+          ],
         ],
       ),
     );
