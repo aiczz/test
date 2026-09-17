@@ -28,11 +28,17 @@ class HomePicks {
   /// 被约束筛掉的菜谱数（0 = 一道都没筛掉，说明当前条件下全都做得了）
   final int dropped;
 
+  /// 被筛掉的菜名 —— 用来解释「为什么下方推荐里没有它」。
+  /// 首页顶部的 Hero 是固定的时令推荐，下方是「按你的条件能做」，
+  /// 不点名说明的话，两者看起来会自相矛盾。
+  final List<String> droppedNames;
+
   const HomePicks({
     required this.foods,
     required this.recipes,
     required this.notes,
     required this.dropped,
+    required this.droppedNames,
   });
 
   /// 菜谱区块的副标题
@@ -48,14 +54,15 @@ HomePicks pickForHome(FamilyProfile profile, {int limit = 3}) {
     '${profile.cookMinutes.round()} 分钟内',
     if (profile.avoid.isNotEmpty) '忌${profile.avoid.join('、')}',
     if (profile.lowSodium) '低钠优先',
-    if (result.dropped > 0) '已筛掉 ${result.dropped} 道',
+    if (result.dropped.isNotEmpty) '已筛掉 ${result.dropped.length} 道',
   ];
 
   return HomePicks(
     foods: foods.take(limit).toList(),
     recipes: result.recipes.take(limit).toList(),
     notes: notes,
-    dropped: result.dropped,
+    dropped: result.dropped.length,
+    droppedNames: result.dropped.map((r) => r.name).toList(),
   );
 }
 
@@ -80,7 +87,9 @@ List<Food> _visibleFoods(FamilyProfile p) {
 // 菜谱
 // ---------------------------------------------------------------------
 
-({List<Recipe> recipes, int dropped}) _visibleRecipes(FamilyProfile p) {
+({List<Recipe> recipes, List<Recipe> dropped}) _visibleRecipes(
+  FamilyProfile p,
+) {
   // 1. 忌口出局
   final afterAvoid = mockRecipes.where((r) => !_hitsAvoid(r, p.avoid)).toList();
 
@@ -98,7 +107,10 @@ List<Food> _visibleFoods(FamilyProfile p) {
   final sorted = <Recipe>[...kept]
     ..sort((a, b) => _score(b, p).compareTo(_score(a, p)));
 
-  return (recipes: sorted, dropped: mockRecipes.length - kept.length);
+  final keptIds = kept.map((r) => r.id).toSet();
+  final dropped = mockRecipes.where((r) => !keptIds.contains(r.id)).toList();
+
+  return (recipes: sorted, dropped: dropped);
 }
 
 /// 命中忌口：名称、描述、标签、食材里出现忌口词就算命中

@@ -133,9 +133,10 @@ class _ConstraintBar extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    picks.dropped > 0
-                        ? '推荐已按这些条件筛选，其中 ${picks.dropped} 道菜超出条件被排除'
-                        : '推荐已按这些条件筛选',
+                    picks.droppedNames.isEmpty
+                        ? '下方推荐已按这些条件筛选'
+                        : '「${picks.droppedNames.first}」等 ${picks.dropped} 道'
+                              '超出条件，已从下方推荐排除',
                     style: const TextStyle(fontSize: 10.5, color: muted),
                   ),
                 ],
