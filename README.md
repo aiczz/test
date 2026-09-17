@@ -141,9 +141,16 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
       关掉低钠约束，Critic 就不再否决方案 B）
 - [x] 品牌应用图标（自适应图标，非 Flutter 默认蓝色图标）+ PWA 清单
 - [x] 交互测试接入 CI（`flutter test` 是真实门禁，不是摆设）
+- [x] ★ **后端**：FastAPI + SQLModel，13 张表、24 个接口、54 个测试
+      （SQLite 开箱即跑，改一行 `DATABASE_URL` 即可切 PostgreSQL）
+- [x] ★ **登录闭环**：注册 / 登录 / 演示账号一键登录 / token 持久化；
+      按需登录 —— 首页、食材、菜谱不登录也能看
+- [x] ★ **前端业务数据接入后端，并保留静默降级**
+      （后端不在线就用本地演示数据，界面照常能用、不弹错误；
+      「我的食材」登录后同步到 `/api/my-foods`）
 - [ ] 真 CP-SAT 求解器（当前由 `lib/services/local_estimator.dart` 本地派生顶上）
-- [ ] 后端接口接入（`lib/services/api.dart` 的 `useMock` 改成 `false`）
-- [ ] 「我的食材」提升为跨页共享状态（目前是食材页内的局部状态）
+- [ ] AI 助手接 `/api/ai/chat`（协作轨迹目前仍是本地按设计展开的）
+- [ ] 菜单 / 购物清单接 `/api/menu/*`（当前走 `services/api.dart` 的本地分支）
 
 ### 关于「联动」是怎么实现的
 
