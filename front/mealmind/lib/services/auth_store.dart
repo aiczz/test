@@ -116,6 +116,24 @@ class AuthStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 用后端刷新当前用户信息。
+  ///
+  /// ★ 为什么必须有这一步：本地缓存的用户 JSON 可能是【旧版本】写下的。
+  ///   `is_admin` 就是后加的字段 —— 老缓存里没它，读出来是 false，
+  ///   结果管理员明明登录着却看不到「管理」入口。
+  ///   启动时刷一次，旧缓存就能自愈，不用让用户手动退出重登。
+  Future<void> refreshUser() async {
+    final token = _token;
+    if (token == null) return;
+    try {
+      final fresh = await _fetchMe(token);
+      await _persist(token, fresh);
+    } catch (_) {
+      // 后端不在线、token 过期都先不管 ——
+      // 真正调接口时后端会返回 401，那时再处理
+    }
+  }
+
   Future<void> _persist(String token, AuthUser user) async {
     _token = token;
     _user = user;
