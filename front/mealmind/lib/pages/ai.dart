@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/recommender.dart';
+import '../state/app_state.dart';
 import '../theme.dart';
 
 /// =====================================================================
@@ -114,7 +116,9 @@ class _AiPageState extends State<AiPage> {
     final growing = <AgentStep>[];
     setState(() => _items.add(_Item.trace(growing, true)));
 
-    for (final step in mockAgentTrace) {
+    // ★ 轨迹用【真实家庭档案】生成：改了人数/预算/限钠，
+    //   第一步读到的东西、以及 Critic 会不会否决，都会跟着变。
+    for (final step in agentTraceFor(AppState.instance.profile)) {
       await Future<void>.delayed(const Duration(milliseconds: 380));
       if (!mounted) return;
       setState(() {
