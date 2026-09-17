@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_store.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import 'login.dart';
 
 /// 个人中心：家庭档案是求解器的输入，不只是展示信息。
 class ProfilePage extends StatefulWidget {
@@ -127,6 +129,8 @@ class _ProfilePageState extends State<ProfilePage> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
             const _ProfileHero(),
+            const SizedBox(height: 14),
+            const _AccountCard(),
             const SizedBox(height: 14),
             const _StatsRow(),
             const SizedBox(height: 18),
@@ -356,27 +360,193 @@ class _ProfileHero extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '小食同学',
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w900,
-                    color: green900,
-                  ),
-                ),
-                SizedBox(height: 5),
-                Text('顺应时令，认真吃饭', style: TextStyle(fontSize: 13, color: muted)),
-                SizedBox(height: 8),
-                _LocalOnlyBadge(),
-              ],
+          Expanded(
+            child: ListenableBuilder(
+              listenable: AuthStore.instance,
+              builder: (context, _) {
+                final user = AuthStore.instance.user;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user?.displayName ?? '未登录',
+                      style: const TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                        color: green900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      user == null ? '登录后同步你的家庭档案与收藏' : '@${user.username}',
+                      style: const TextStyle(fontSize: 13, color: muted),
+                    ),
+                    const SizedBox(height: 8),
+                    const _LocalOnlyBadge(),
+                  ],
+                );
+              },
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+// =====================================================================
+// 账号卡片：登录 / 退出
+//
+// 按需登录：首页、食材、菜谱不需要登录就能看（说明书 §12），
+// 只有「我的」这里提供入口，不做强制拦截 —— 评委点开就能看内容。
+// =====================================================================
+
+class _AccountCard extends StatelessWidget {
+  const _AccountCard();
+
+  Future<void> _openLogin(BuildContext context) async {
+    final ok = await LoginPage.open(context);
+    if (ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('登录成功 —— 家庭档案与收藏已同步'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Color(0xFF163A26),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: AuthStore.instance,
+      builder: (context, _) {
+        final store = AuthStore.instance;
+        final user = store.user;
+
+        if (user == null) {
+          return Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+            decoration: cardDeco(),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: green100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.login_rounded,
+                    size: 18,
+                    color: green700,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '登录 / 注册',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          color: ink,
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        '支持演示账号一键登录，不用注册',
+                        style: TextStyle(fontSize: 10.5, color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton(
+                  onPressed: () => _openLogin(context),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: green700,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 9,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    shape: const StadiumBorder(),
+                  ),
+                  child: const Text(
+                    '去登录',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+          decoration: cardDeco(),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: green100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.verified_user_outlined,
+                  size: 18,
+                  color: green700,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '已登录 · ${user.username}',
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: ink,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '家庭人数 ${user.familySize} 人',
+                      style: const TextStyle(fontSize: 10.5, color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await store.logout();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('已退出登录'),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: Color(0xFF163A26),
+                      ),
+                    );
+                  }
+                },
+                child: const Text(
+                  '退出',
+                  style: TextStyle(fontSize: 12, color: muted),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

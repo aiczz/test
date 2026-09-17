@@ -38,6 +38,9 @@ dependencies:
   # 网络请求（对齐队友 front指南.txt 第 27 节的技术选型：Dio）
   dio: ^5.7.0
 
+  # 登录 token 的本地持久化 —— 重启 App 不用重新登录
+  shared_preferences: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

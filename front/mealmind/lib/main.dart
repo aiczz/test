@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'pages/ai.dart';
@@ -5,9 +7,24 @@ import 'pages/foods.dart';
 import 'pages/home.dart';
 import 'pages/profile.dart';
 import 'pages/recipes.dart';
+import 'services/api_config.dart';
+import 'services/auth_store.dart';
 import 'theme.dart';
 
-void main() => runApp(const ShishiApp());
+Future<void> main() async {
+  // shared_preferences 需要先初始化绑定
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 恢复上次的登录状态（token 存在本地）
+  await AuthStore.instance.restore();
+
+  // 探测后端是否可用。
+  // ⚠️ 故意不 await —— 连不上是正常情况（线上 PWA 本来就没有后端），
+  //    界面不该因为探测卡在启动页。探测结果通过 BackendStatus 广播出去。
+  unawaited(BackendStatus.instance.probe());
+
+  runApp(const ShishiApp());
+}
 
 /// 食时 · 顺应时令的智慧饮食助手
 class ShishiApp extends StatelessWidget {

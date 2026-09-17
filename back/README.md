@@ -41,6 +41,48 @@ python -m pytest -q
 
 ---
 
+## 一、五、和前端联调（有几个坑，先看这里）
+
+### 后端地址是自动选的
+
+`front/mealmind/lib/services/api_config.dart` 按运行平台自动决定：
+
+| 跑在哪 | 用的地址 |
+|---|---|
+| `flutter run -d chrome` / 桌面 | `http://127.0.0.1:8000` |
+| Android 模拟器 | `http://10.0.2.2:8000`（模拟器里的 127.0.0.1 指模拟器自己） |
+| Android 真机 | 要改成电脑的局域网 IP，如 `http://192.168.1.5:8000` |
+
+App 启动时会探测一次 `/api/health`：**通了就用真后端，不通就静默走本地演示数据**，
+界面不会弹错误。所以"没起后端"和"起了后端"两种状态都能正常演示。
+
+### ⚠️ 线上 PWA 连不上你本机的后端（浏览器限制，不是 bug）
+
+线上是 `https://aiczz.github.io/...`（HTTPS），本地后端是 `http://`。
+浏览器会直接拦掉 HTTPS 页面发出的 http 请求（mixed content）。
+**要演示前后端打通，请用 `flutter run -d chrome`，或者打包成 APK。**
+
+### ⚠️ Windows 上 `flutter test` 和 `build apk` 需要开发者模式
+
+`shared_preferences` 带原生插件，Windows 构建插件时要创建符号链接。
+没开开发者模式会直接失败：
+
+```
+Building with plugins requires symlink support.
+Please enable Developer Mode in your system settings.
+```
+
+开一次就好（设置 → 隐私和安全性 → 开发者选项 → 开发人员模式），或者：
+
+```powershell
+start ms-settings:developers
+```
+
+> `flutter build web` **不受影响** —— Web 目标不用原生插件，
+> 所以 CI 和线上发布一直是正常的。
+
+---
+
 ## 二、演示账号
 
 | 用户名 | 密码 |
