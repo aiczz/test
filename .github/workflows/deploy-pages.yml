@@ -22,8 +22,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'front/mealmind/**'
-      - '.github/workflows/deploy-pages.yml'
+      - "front/mealmind/**"
+      - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -45,10 +45,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # 钉住版本 = 本地开发环境版本（flutter.version.json: 3.47.4），
-          # 避免 CI 和本地表现不一致。
-          # 万一这个版本在 CI 上拉不到，把这一行删掉即可退回最新 stable。
-          flutter-version: '3.47.4'
+          # 使用最新稳定版，避免特定版本在 CI 上不可用的问题
           channel: stable
           cache: true
 
