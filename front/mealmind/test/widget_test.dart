@@ -124,7 +124,7 @@ void main() {
     expect(find.text('让 AI 帮我搭配'), findsOneWidget);
   });
 
-  testWidgets('手机号验证码登录可以完成入口门禁', (tester) async {
+  testWidgets('手机号必须先注册再登录才能通过入口门禁', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await AuthStore.instance.logout();
     var authenticated = false;
@@ -138,7 +138,7 @@ void main() {
       ),
     );
 
-    expect(find.text('欢迎回来'), findsOneWidget);
+    expect(find.text('创建你的账号'), findsOneWidget);
     expect(find.text('手机验证码'), findsOneWidget);
     expect(find.text('账号密码'), findsOneWidget);
 
@@ -147,6 +147,16 @@ void main() {
     await tester.pump();
     expect(find.text('演示验证码已发送：123456'), findsOneWidget);
 
+    await tester.enterText(find.byType(TextFormField).at(1), '123456');
+    await tester.tap(find.text('完成注册'));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('注册成功，请登录'), findsOneWidget);
+    expect(find.text('欢迎回来'), findsOneWidget);
+    expect(AuthStore.instance.isLoggedIn, isFalse);
+
+    await tester.tap(find.text('获取验证码'));
+    await tester.pump();
     await tester.enterText(find.byType(TextFormField).at(1), '123456');
     await tester.tap(find.text('验证码登录'));
     await tester.pump(const Duration(milliseconds: 500));

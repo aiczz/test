@@ -38,7 +38,7 @@ class _LoginPageState extends State<LoginPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   bool _phoneMode = true;
-  bool _registerMode = false;
+  bool _registerMode = true;
   bool _busy = false;
   bool _obscure = true;
   bool _codeSent = false;
@@ -77,6 +77,15 @@ class _LoginPageState extends State<LoginPage> {
       if (demo) {
         await AuthStore.instance.loginAsDemo();
       } else if (_phoneMode) {
+        if (_registerMode) {
+          await AuthStore.instance.registerPhone(
+            _phone.text.trim(),
+            _code.text.trim(),
+          );
+          if (!mounted) return;
+          _completeRegistration();
+          return;
+        }
         await AuthStore.instance.loginWithPhone(
           _phone.text.trim(),
           _code.text.trim(),
@@ -86,6 +95,9 @@ class _LoginPageState extends State<LoginPage> {
         final password = _password.text;
         if (_registerMode) {
           await AuthStore.instance.register(name, password);
+          if (!mounted) return;
+          _completeRegistration();
+          return;
         } else {
           await AuthStore.instance.login(name, password);
         }
@@ -101,11 +113,32 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _completeRegistration() {
+    _timer?.cancel();
+    _code.clear();
+    _password.clear();
+    setState(() {
+      _registerMode = false;
+      _busy = false;
+      _codeSent = false;
+      _countdown = 0;
+      _error = null;
+    });
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('注册成功，请登录'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: green900,
+        ),
+      );
+  }
+
   void _switchLoginMode(bool phoneMode) {
     if (_busy || _phoneMode == phoneMode) return;
     setState(() {
       _phoneMode = phoneMode;
-      _registerMode = false;
       _error = null;
     });
   }
@@ -143,8 +176,12 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _switchMode() {
+    _timer?.cancel();
+    _code.clear();
     setState(() {
       _registerMode = !_registerMode;
+      _codeSent = false;
+      _countdown = 0;
       _error = null;
     });
   }
@@ -208,7 +245,7 @@ class _LoginPageState extends State<LoginPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              _phoneMode ? '欢迎回来' : (_registerMode ? '注册新账号' : '账号登录'),
+              _registerMode ? '创建你的账号' : '欢迎回来',
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
@@ -218,8 +255,12 @@ class _LoginPageState extends State<LoginPage> {
             const SizedBox(height: 4),
             Text(
               _phoneMode
-                  ? '使用手机号快速进入，保存你的食材与偏好'
-                  : (_registerMode ? '注册后直接登录，不用再输一遍' : '登录后可以同步家庭档案、收藏和购物清单'),
+                  ? (_registerMode
+                        ? '先验证手机号完成注册，再登录进入应用'
+                        : '使用已注册手机号登录，继续你的饮食计划')
+                  : (_registerMode
+                        ? '设置用户名和密码，注册成功后再登录'
+                        : '登录后可以同步家庭档案、收藏和购物清单'),
               style: const TextStyle(fontSize: 11.5, color: muted),
             ),
             const SizedBox(height: 16),
@@ -290,7 +331,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     )
                   : Text(
-                      _phoneMode ? '验证码登录' : (_registerMode ? '注册并登录' : '登录'),
+                      _registerMode ? '完成注册' : (_phoneMode ? '验证码登录' : '登录'),
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 14,
@@ -298,56 +339,56 @@ class _LoginPageState extends State<LoginPage> {
                     ),
             ),
 
-            if (!_phoneMode) ...[
-              const SizedBox(height: 6),
-              TextButton(
-                onPressed: _busy ? null : _switchMode,
-                child: Text(
-                  _registerMode ? '已有账号？去登录' : '还没有账号？去注册',
-                  style: const TextStyle(fontSize: 12, color: green700),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: _busy ? null : _switchMode,
+              child: Text(
+                _registerMode ? '已有账号？去登录' : '还没有账号？先注册',
+                style: const TextStyle(fontSize: 12, color: green700),
+              ),
+            ),
+
+            if (!_registerMode) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(child: Divider(color: line)),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        '或者',
+                        style: TextStyle(fontSize: 11, color: muted),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: line)),
+                  ],
                 ),
+              ),
+
+              OutlinedButton.icon(
+                onPressed: _busy ? null : () => _submit(demo: true),
+                icon: const Icon(Icons.bolt, size: 18, color: orange),
+                label: const Text(
+                  '使用演示账号一键登录',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: ink,
+                  side: const BorderSide(color: orange),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '演示账号：demo / shishi2026',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 10.5, color: muted),
               ),
             ],
-
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(child: Divider(color: line)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Text(
-                      '或者',
-                      style: TextStyle(fontSize: 11, color: muted),
-                    ),
-                  ),
-                  Expanded(child: Divider(color: line)),
-                ],
-              ),
-            ),
-
-            OutlinedButton.icon(
-              onPressed: _busy ? null : () => _submit(demo: true),
-              icon: const Icon(Icons.bolt, size: 18, color: orange),
-              label: const Text(
-                '使用演示账号一键登录',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: ink,
-                side: const BorderSide(color: orange),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '演示账号：demo / shishi2026',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 10.5, color: muted),
-            ),
           ],
         ),
       ),

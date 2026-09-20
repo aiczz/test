@@ -73,6 +73,7 @@ class AuthStore extends ChangeNotifier {
 
   static const String _kToken = 'auth_token';
   static const String _kUser = 'auth_user';
+  static const String _kRegisteredPhones = 'registered_phones';
 
   String? _token;
   AuthUser? _user;
@@ -155,18 +156,44 @@ class AuthStore extends ChangeNotifier {
     );
   }
 
+  String _normalizePhone(String phone) => phone.replaceAll(RegExp(r'\s+'), '');
+
+  void _validatePhoneCode(String phone, String code) {
+    if (!RegExp(r'^1\d{10}$').hasMatch(phone)) {
+      throw const AuthException('请输入正确的 11 位手机号');
+    }
+    if (code != '123456') {
+      throw const AuthException('验证码不正确，请输入 123456');
+    }
+  }
+
+  /// 手机验证码注册。注册成功只保存账号，不自动登录。
+  Future<void> registerPhone(String phone, String code) async {
+    final normalized = _normalizePhone(phone);
+    _validatePhoneCode(normalized, code);
+    final prefs = await SharedPreferences.getInstance();
+    final phones = prefs.getStringList(_kRegisteredPhones) ?? <String>[];
+    if (phones.contains(normalized)) {
+      throw const AuthException('该手机号已经注册，请直接登录');
+    }
+    await prefs.setStringList(_kRegisteredPhones, <String>[
+      ...phones,
+      normalized,
+    ]);
+  }
+
   /// 手机验证码登录的本地演示闭环。
   ///
   /// 当前仓库没有短信供应商配置，公网静态站也没有可用的认证后端，
   /// 因此先用固定演示码完成可操作流程。接入真实短信服务后，只需把这里
   /// 替换为 `/api/auth/sms/login` 请求，登录页本身无需改动。
   Future<void> loginWithPhone(String phone, String code) async {
-    final normalized = phone.replaceAll(RegExp(r'\s+'), '');
-    if (!RegExp(r'^1\d{10}$').hasMatch(normalized)) {
-      throw const AuthException('请输入正确的 11 位手机号');
-    }
-    if (code != '123456') {
-      throw const AuthException('验证码不正确，请输入 123456');
+    final normalized = _normalizePhone(phone);
+    _validatePhoneCode(normalized, code);
+    final prefs = await SharedPreferences.getInstance();
+    final phones = prefs.getStringList(_kRegisteredPhones) ?? <String>[];
+    if (!phones.contains(normalized)) {
+      throw const AuthException('该手机号还没有注册，请先完成注册');
     }
 
     final suffix = normalized.substring(normalized.length - 4);
@@ -197,7 +224,7 @@ class AuthStore extends ChangeNotifier {
     }
   }
 
-  /// 注册。成功后直接登录，不让用户再输一遍。
+  /// 注册账号。注册成功后仍需回到登录页完成登录。
   Future<void> register(
     String username,
     String password, {
@@ -215,7 +242,6 @@ class AuthStore extends ChangeNotifier {
     } on DioException catch (e) {
       throw _toAuthException(e);
     }
-    await login(username, password);
   }
 
   Future<AuthUser> _fetchMe(String token) async {
