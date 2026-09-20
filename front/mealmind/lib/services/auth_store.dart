@@ -143,8 +143,42 @@ class AuthStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 用演示账号登录 —— 「一键」就是这个。
-  Future<void> loginAsDemo() => login(demoUsername, demoPassword);
+  /// 用演示账号登录 —— 公网静态演示没有后端时也必须能进入应用。
+  Future<void> loginAsDemo() async {
+    if (BackendStatus.instance.online) {
+      await login(demoUsername, demoPassword);
+      return;
+    }
+    await _persist(
+      'local-demo-token',
+      const AuthUser(id: 0, username: demoUsername, nickname: '演示用户'),
+    );
+  }
+
+  /// 手机验证码登录的本地演示闭环。
+  ///
+  /// 当前仓库没有短信供应商配置，公网静态站也没有可用的认证后端，
+  /// 因此先用固定演示码完成可操作流程。接入真实短信服务后，只需把这里
+  /// 替换为 `/api/auth/sms/login` 请求，登录页本身无需改动。
+  Future<void> loginWithPhone(String phone, String code) async {
+    final normalized = phone.replaceAll(RegExp(r'\s+'), '');
+    if (!RegExp(r'^1\d{10}$').hasMatch(normalized)) {
+      throw const AuthException('请输入正确的 11 位手机号');
+    }
+    if (code != '123456') {
+      throw const AuthException('验证码不正确，请输入 123456');
+    }
+
+    final suffix = normalized.substring(normalized.length - 4);
+    await _persist(
+      'demo-phone-$normalized',
+      AuthUser(
+        id: normalized.hashCode & 0x7fffffff,
+        username: 'phone_$suffix',
+        nickname: '用户$suffix',
+      ),
+    );
+  }
 
   /// 登录。失败抛 [AuthException]。
   Future<void> login(String username, String password) async {
@@ -187,7 +221,9 @@ class AuthStore extends ChangeNotifier {
   Future<AuthUser> _fetchMe(String token) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/auth/me',
-      options: Options(headers: <String, String>{'Authorization': 'Bearer $token'}),
+      options: Options(
+        headers: <String, String>{'Authorization': 'Bearer $token'},
+      ),
     );
     final data = res.data;
     if (data == null) throw const AuthException('取用户信息失败');
@@ -205,8 +241,9 @@ class AuthStore extends ChangeNotifier {
   }
 
   /// 带 token 的请求头。别的接口层要用。
-  Map<String, String> get authHeaders =>
-      _token == null ? const <String, String>{} : <String, String>{'Authorization': 'Bearer $_token'};
+  Map<String, String> get authHeaders => _token == null
+      ? const <String, String>{}
+      : <String, String>{'Authorization': 'Bearer $_token'};
 
   /// 把 DioException 翻译成用户看得懂的中文。
   AuthException _toAuthException(DioException e) {

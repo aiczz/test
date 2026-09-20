@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mealmind/main.dart';
+import 'package:mealmind/pages/login.dart';
+import 'package:mealmind/services/auth_store.dart';
 
 void main() {
   testWidgets('五个主入口可用，食材可添加到我的库存', (tester) async {
@@ -119,5 +122,37 @@ void main() {
     expect(find.text('换一个'), findsOneWidget);
     expect(find.text('查看做法'), findsOneWidget);
     expect(find.text('让 AI 帮我搭配'), findsOneWidget);
+  });
+
+  testWidgets('手机号验证码登录可以完成入口门禁', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await AuthStore.instance.logout();
+    var authenticated = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoginPage(
+          gateMode: true,
+          onAuthenticated: () => authenticated = true,
+        ),
+      ),
+    );
+
+    expect(find.text('欢迎回来'), findsOneWidget);
+    expect(find.text('手机验证码'), findsOneWidget);
+    expect(find.text('账号密码'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(0), '13800138000');
+    await tester.tap(find.text('获取验证码'));
+    await tester.pump();
+    expect(find.text('演示验证码已发送：123456'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(1), '123456');
+    await tester.tap(find.text('验证码登录'));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(authenticated, isTrue);
+    expect(AuthStore.instance.isLoggedIn, isTrue);
+    await AuthStore.instance.logout();
   });
 }

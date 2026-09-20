@@ -4,6 +4,7 @@ import 'models/content.dart';
 import 'pages/ai.dart';
 import 'pages/foods.dart';
 import 'pages/home.dart';
+import 'pages/login.dart';
 import 'pages/profile.dart';
 import 'pages/recipes.dart';
 import 'services/api_config.dart';
@@ -56,9 +57,30 @@ class _BootstrapState extends State<_Bootstrap> {
       future: _ready,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
-          return const ShishiApp();
+          return const _AuthGate();
         }
         return const _SplashScreen();
+      },
+    );
+  }
+}
+
+/// 应用入口门禁：未登录先展示登录页，登录成功才进入主界面。
+/// 退出登录时 [AuthStore] 会通知这里，页面会自动回到登录页。
+class _AuthGate extends StatelessWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: AuthStore.instance,
+      builder: (context, _) {
+        if (AuthStore.instance.isLoggedIn) return const ShishiApp();
+        return const MaterialApp(
+          title: '食时 · 登录',
+          debugShowCheckedModeBanner: false,
+          home: LoginPage(gateMode: true),
+        );
       },
     );
   }
