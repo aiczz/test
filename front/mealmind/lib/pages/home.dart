@@ -8,7 +8,7 @@ import '../services/recommender.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/city_picker.dart';
-import 'menu.dart';
+import 'recipes.dart';
 
 /// 首页 —— 对应队友原型 `homePage()`
 ///
@@ -69,10 +69,7 @@ class HomePage extends StatelessWidget {
                   subtitle: '应季鲜美 · 营养加分',
                 ),
                 const SizedBox(height: 12),
-                _FoodRow(
-                  foods: picks.foods,
-                  onOpenDetail: onOpenFoodDetail,
-                ),
+                _FoodRow(foods: picks.foods, onOpenDetail: onOpenFoodDetail),
                 const SizedBox(height: 26),
                 _SectionHeader(
                   icon: Icons.local_dining,
@@ -87,7 +84,12 @@ class HomePage extends StatelessWidget {
                 const SizedBox(height: 14),
                 _AiTipBar(onTap: onOpenAi),
                 const SizedBox(height: 20),
-                _QuickActions(onOpenFoods: onOpenFoods),
+                _QuickActions(
+                  picks: picks,
+                  onOpenFoods: onOpenFoods,
+                  onOpenRecipes: onOpenRecipes,
+                  onOpenAi: onOpenAi,
+                ),
               ],
             );
           },
@@ -953,9 +955,34 @@ class _AiTipBar extends StatelessWidget {
 // =====================================================================
 
 class _QuickActions extends StatelessWidget {
+  final HomePicks picks;
   final VoidCallback onOpenFoods;
+  final VoidCallback onOpenRecipes;
+  final VoidCallback onOpenAi;
 
-  const _QuickActions({required this.onOpenFoods});
+  const _QuickActions({
+    required this.picks,
+    required this.onOpenFoods,
+    required this.onOpenRecipes,
+    required this.onOpenAi,
+  });
+
+  void _openQuickMealPicker(BuildContext context) {
+    final recipes = picks.recipes.isNotEmpty
+        ? picks.recipes
+        : ContentStore.instance.recipes;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _QuickMealSheet(
+        recipes: recipes,
+        onOpenRecipe: (recipe) => openRecipeDetail(context, recipe),
+        onOpenRecipes: onOpenRecipes,
+        onOpenAi: onOpenAi,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -963,22 +990,26 @@ class _QuickActions extends StatelessWidget {
       children: [
         Expanded(
           child: OutlinedButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute<void>(builder: (_) => const MenuPage()),
-            ),
+            onPressed: () => _openQuickMealPicker(context),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Color(0xFFCFE3C8)),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: const StadiumBorder(),
             ),
-            child: const Text(
-              '查看今日菜单',
-              style: TextStyle(
-                color: green700,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.casino_outlined, size: 17, color: green700),
+                SizedBox(width: 6),
+                Text(
+                  '快速选一餐',
+                  style: TextStyle(
+                    color: green700,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -998,6 +1029,287 @@ class _QuickActions extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _QuickMealSheet extends StatefulWidget {
+  final List<Recipe> recipes;
+  final ValueChanged<Recipe> onOpenRecipe;
+  final VoidCallback onOpenRecipes;
+  final VoidCallback onOpenAi;
+
+  const _QuickMealSheet({
+    required this.recipes,
+    required this.onOpenRecipe,
+    required this.onOpenRecipes,
+    required this.onOpenAi,
+  });
+
+  @override
+  State<_QuickMealSheet> createState() => _QuickMealSheetState();
+}
+
+class _QuickMealSheetState extends State<_QuickMealSheet> {
+  int _index = 0;
+
+  void _next() {
+    if (widget.recipes.length < 2) return;
+    setState(() => _index = (_index + 1) % widget.recipes.length);
+  }
+
+  void _closeThen(VoidCallback action) {
+    Navigator.pop(context);
+    WidgetsBinding.instance.addPostFrameCallback((_) => action());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewPaddingOf(context).bottom;
+    if (widget.recipes.isEmpty) {
+      return Container(
+        padding: EdgeInsets.fromLTRB(22, 12, 22, 24 + bottom),
+        decoration: const BoxDecoration(
+          color: page,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const _SheetHandle(),
+            const SizedBox(height: 24),
+            const Icon(Icons.no_meals_outlined, size: 42, color: muted),
+            const SizedBox(height: 12),
+            const Text(
+              '暂时没有合适的菜谱',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => _closeThen(widget.onOpenRecipes),
+              child: const Text('查看全部菜谱'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final recipe = widget.recipes[_index];
+    return Container(
+      padding: EdgeInsets.fromLTRB(18, 12, 18, 20 + bottom),
+      decoration: const BoxDecoration(
+        color: page,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SheetHandle(),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: green100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 19,
+                  color: green700,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '今日一餐灵感',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '已按家庭人数、口味和忌口筛选',
+                      style: TextStyle(fontSize: 11.5, color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: _next,
+                tooltip: '换一个推荐',
+                icon: const Icon(Icons.refresh_rounded, color: green700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: Container(
+              key: ValueKey(recipe.id),
+              clipBehavior: Clip.antiAlias,
+              decoration: cardDeco(radius: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 2.15,
+                    child: Image.asset(
+                      recipe.image,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          recipe.name,
+                          style: const TextStyle(
+                            fontSize: 21,
+                            fontWeight: FontWeight.w900,
+                            color: ink,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          recipe.desc,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: muted,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 7,
+                          runSpacing: 7,
+                          children: [
+                            _MealMeta(
+                              icon: Icons.schedule_rounded,
+                              text: recipe.time,
+                            ),
+                            _MealMeta(
+                              icon: Icons.people_outline_rounded,
+                              text: recipe.people,
+                            ),
+                            _MealMeta(
+                              icon: Icons.local_dining_outlined,
+                              text: recipe.difficulty,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _next,
+                  icon: const Icon(Icons.casino_outlined, size: 17),
+                  label: const Text('换一个'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    foregroundColor: green700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () =>
+                      _closeThen(() => widget.onOpenRecipe(recipe)),
+                  icon: const Icon(Icons.menu_book_rounded, size: 17),
+                  label: const Text('查看做法'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    backgroundColor: orange,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                onPressed: () => _closeThen(widget.onOpenAi),
+                icon: const Icon(Icons.auto_awesome, size: 15),
+                label: const Text('让 AI 帮我搭配'),
+              ),
+              TextButton(
+                onPressed: () => _closeThen(widget.onOpenRecipes),
+                child: const Text('查看全部菜谱'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 42,
+        height: 4,
+        decoration: BoxDecoration(
+          color: line,
+          borderRadius: BorderRadius.circular(99),
+        ),
+      ),
+    );
+  }
+}
+
+class _MealMeta extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _MealMeta({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: tagDeco(),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: green700),
+          const SizedBox(width: 4),
+          Text(
+            text.isEmpty ? '待补充' : text,
+            style: const TextStyle(
+              fontSize: 11,
+              color: green700,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

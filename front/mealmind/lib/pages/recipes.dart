@@ -43,8 +43,7 @@ class _RecipesPageState extends State<RecipesPage> {
       // 「汤品」不是标签，用 id 兜一下（与原型逻辑一致）
       list = list.where(
         (r) =>
-            r.tags.contains(_category) ||
-            (_category == '汤品' && r.id == 'soup'),
+            r.tags.contains(_category) || (_category == '汤品' && r.id == 'soup'),
       );
     }
 
@@ -80,7 +79,7 @@ class _RecipesPageState extends State<RecipesPage> {
           children: [
             // ---- 标题区 ----
             Container(
-              padding: const EdgeInsets.all(20),
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFFEDF7E8), Color(0xFFFFF3DF)],
@@ -88,34 +87,147 @@ class _RecipesPageState extends State<RecipesPage> {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(rBlock),
+                boxShadow: cardShadow,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Stack(
                 children: [
-                  const Text(
-                    '时令菜谱',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: green700,
-                      letterSpacing: 0.5,
+                  Positioned(
+                    left: -35,
+                    bottom: -55,
+                    child: Container(
+                      width: 130,
+                      height: 130,
+                      decoration: const BoxDecoration(
+                        color: Color(0x26FFFFFF),
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '家常菜谱',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
-                      color: green900,
-                      height: 1.05,
-                      letterSpacing: -1,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 18),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.local_dining_rounded,
+                                    size: 15,
+                                    color: green700,
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    '时令菜谱',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: green700,
+                                      letterSpacing: .4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 9),
+                              Text(
+                                '家常菜谱',
+                                style: TextStyle(
+                                  fontSize: 29,
+                                  fontWeight: FontWeight.w900,
+                                  color: green900,
+                                  height: 1.05,
+                                  letterSpacing: -1,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                '应季食材，简单好做\n把每一餐吃得温暖。',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: muted,
+                                  height: 1.55,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  _RecipeHeaderTag(
+                                    icon: Icons.eco_outlined,
+                                    text: '当季',
+                                  ),
+                                  _RecipeHeaderTag(
+                                    icon: Icons.schedule_outlined,
+                                    text: '好做',
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          width: 126,
+                          height: 150,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: .9),
+                              width: 3,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x2A6A5A36),
+                                blurRadius: 16,
+                                offset: Offset(0, 7),
+                              ),
+                            ],
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.asset(
+                                'assets/images/tomato-egg.jpg',
+                                fit: BoxFit.cover,
+                                filterQuality: FilterQuality.high,
+                              ),
+                              const DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.transparent,
+                                      Color(0xB8122F20),
+                                    ],
+                                    stops: [.5, 1],
+                                  ),
+                                ),
+                              ),
+                              const Positioned(
+                                left: 10,
+                                right: 10,
+                                bottom: 10,
+                                child: Text(
+                                  '今天也要\n好好吃饭',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.5,
+                                    height: 1.25,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '应季食材，简单好做，把每一餐吃得温暖。',
-                    style: TextStyle(fontSize: 13, color: muted, height: 1.6),
                   ),
                 ],
               ),
@@ -262,6 +374,40 @@ class _RecipesPageState extends State<RecipesPage> {
   }
 }
 
+class _RecipeHeaderTag extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _RecipeHeaderTag({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .72),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: Colors.white.withValues(alpha: .9)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: green700),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 10.5,
+              color: green700,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // =====================================================================
 // 分类 chip
 // =====================================================================
@@ -332,7 +478,11 @@ class _RecipeListCard extends StatelessWidget {
           children: [
             SizedBox(
               width: 116,
-              child: Image.asset(recipe.image, fit: BoxFit.cover, filterQuality: FilterQuality.high),
+              child: Image.asset(
+                recipe.image,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
+              ),
             ),
             Expanded(
               child: Padding(
@@ -365,9 +515,7 @@ class _RecipeListCard extends StatelessWidget {
                             minHeight: 32,
                           ),
                           icon: Icon(
-                            favorite
-                                ? Icons.favorite
-                                : Icons.favorite_border,
+                            favorite ? Icons.favorite : Icons.favorite_border,
                             color: favorite ? orange : muted,
                           ),
                         ),
@@ -387,7 +535,9 @@ class _RecipeListCard extends StatelessWidget {
                         for (var i = 0; i < recipe.tags.length && i < 2; i++)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 3),
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
                             decoration: tagDeco(
                               bg: i == 0 ? orange100 : green100,
                             ),
@@ -412,8 +562,11 @@ class _RecipeListCard extends StatelessWidget {
                           style: const TextStyle(fontSize: 11, color: muted),
                         ),
                         const SizedBox(width: 10),
-                        const Icon(Icons.people_outline,
-                            size: 12, color: muted),
+                        const Icon(
+                          Icons.people_outline,
+                          size: 12,
+                          color: muted,
+                        ),
                         const SizedBox(width: 3),
                         Text(
                           recipe.people,
@@ -475,7 +628,11 @@ class _RecipeDetailSheet extends StatelessWidget {
                 SizedBox(
                   height: 200,
                   width: double.infinity,
-                  child: Image.asset(recipe.image, fit: BoxFit.cover, filterQuality: FilterQuality.high),
+                  child: Image.asset(
+                    recipe.image,
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.high,
+                  ),
                 ),
                 Positioned(
                   top: 12,
@@ -541,7 +698,9 @@ class _RecipeDetailSheet extends StatelessWidget {
                       for (var i = 0; i < recipe.tags.length; i++)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 9, vertical: 5),
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
                           decoration: tagDeco(
                             bg: i == 0 ? orange100 : green100,
                           ),
@@ -565,8 +724,10 @@ class _RecipeDetailSheet extends StatelessWidget {
                       const SizedBox(width: 8),
                       _Fact(icon: Icons.people_outline, label: recipe.people),
                       const SizedBox(width: 8),
-                      _Fact(icon: Icons.local_fire_department,
-                          label: recipe.difficulty),
+                      _Fact(
+                        icon: Icons.local_fire_department,
+                        label: recipe.difficulty,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -582,7 +743,9 @@ class _RecipeDetailSheet extends StatelessWidget {
                         for (final ing in recipe.ingredients)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 11, vertical: 8),
+                              horizontal: 11,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFF4F6F3),
                               borderRadius: BorderRadius.circular(10),
@@ -590,7 +753,9 @@ class _RecipeDetailSheet extends StatelessWidget {
                             child: Text(
                               ing,
                               style: const TextStyle(
-                                  fontSize: 12.5, color: ink),
+                                fontSize: 12.5,
+                                color: ink,
+                              ),
                             ),
                           ),
                       ],

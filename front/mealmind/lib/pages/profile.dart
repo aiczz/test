@@ -10,7 +10,14 @@ import 'login.dart';
 
 /// 个人中心：家庭档案是求解器的输入，不只是展示信息。
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  final VoidCallback onOpenRecipes;
+  final VoidCallback onOpenPantry;
+
+  const ProfilePage({
+    super.key,
+    required this.onOpenRecipes,
+    required this.onOpenPantry,
+  });
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -146,6 +153,101 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _editChoices({
+    required String title,
+    required String subtitle,
+    required List<String> options,
+    required Set<String> selected,
+    bool warning = false,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            24 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: page,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: line,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 13, color: muted),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final option in options)
+                    FilterChip(
+                      label: Text(option),
+                      selected: selected.contains(option),
+                      selectedColor: warning ? orange100 : green100,
+                      checkmarkColor: warning ? orange : green700,
+                      onSelected: (_) {
+                        setState(() {
+                          selected.contains(option)
+                              ? selected.remove(option)
+                              : selected.add(option);
+                        });
+                        setSheetState(() {});
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    _saveProfile();
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: warning ? orange : green700,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('保存设置'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,7 +260,25 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 14),
             const _AccountCard(),
             const SizedBox(height: 14),
-            const _StatsRow(),
+            _StatsRow(
+              preferenceCount: _preferences.length,
+              avoidCount: _avoid.length,
+              onFavoritesTap: widget.onOpenRecipes,
+              onPantryTap: widget.onOpenPantry,
+              onPreferencesTap: () => _editChoices(
+                title: '编辑口味偏好',
+                subtitle: '用于调整推荐顺序，不会覆盖健康约束',
+                options: const ['家常', '清淡', '少油', '高蛋白', '素食'],
+                selected: _preferences,
+              ),
+              onAvoidTap: () => _editChoices(
+                title: '编辑忌口与过敏',
+                subtitle: '选中的食材会从菜单推荐中排除',
+                options: const ['辛辣', '花生', '海鲜', '乳制品', '香菜'],
+                selected: _avoid,
+                warning: true,
+              ),
+            ),
             const SizedBox(height: 18),
             _WeeklyCard(onTap: _showProfileSummary),
             const SizedBox(height: 24),
@@ -301,10 +421,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     icon: Icons.favorite_outline,
                     title: '我的收藏',
                     subtitle: '登录后同步到云端',
-                    onTap: () => _showInfo(
-                      '我的收藏',
-                      '收藏的菜谱会同步到你的账号，换台设备登录也还在。',
-                    ),
+                    onTap: () => _showInfo('我的收藏', '收藏的菜谱会同步到你的账号，换台设备登录也还在。'),
                   ),
                   const Divider(height: 1, indent: 56),
                   SwitchListTile.adaptive(
@@ -586,10 +703,7 @@ class _AccountCard extends StatelessWidget {
                   ),
                   child: const Text(
                     '管理',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                   ),
                 ),
               TextButton(
@@ -640,7 +754,21 @@ class _LocalOnlyBadge extends StatelessWidget {
 ///   现在：登录且后端在线时显示真实数量，否则显示「—」。
 ///   宁可显示「—」也不显示一个编出来的数字 —— 演示时被问「12 是哪来的」很难看。
 class _StatsRow extends StatefulWidget {
-  const _StatsRow();
+  final int preferenceCount;
+  final int avoidCount;
+  final VoidCallback onFavoritesTap;
+  final VoidCallback onPantryTap;
+  final VoidCallback onPreferencesTap;
+  final VoidCallback onAvoidTap;
+
+  const _StatsRow({
+    required this.preferenceCount,
+    required this.avoidCount,
+    required this.onFavoritesTap,
+    required this.onPantryTap,
+    required this.onPreferencesTap,
+    required this.onAvoidTap,
+  });
 
   @override
   State<_StatsRow> createState() => _StatsRowState();
@@ -707,37 +835,59 @@ class _StatsRowState extends State<_StatsRow> {
 
   @override
   Widget build(BuildContext context) {
-    final profile = AppState.instance.profile;
-    final stats = <(IconData, String, String)>[
-      (Icons.favorite, _favorites?.toString() ?? '—', '收藏'),
-      (Icons.kitchen, _pantry?.toString() ?? '—', '我的食材'),
-      (Icons.tune, '${profile.preferences.length}', '口味偏好'),
-      (Icons.block, '${profile.avoid.length}', '忌口'),
+    final stats = <(IconData, String, String, VoidCallback)>[
+      (
+        Icons.favorite,
+        _favorites?.toString() ?? '—',
+        '收藏',
+        widget.onFavoritesTap,
+      ),
+      (Icons.kitchen, _pantry?.toString() ?? '—', '我的食材', widget.onPantryTap),
+      (
+        Icons.tune,
+        '${widget.preferenceCount}',
+        '口味偏好',
+        widget.onPreferencesTap,
+      ),
+      (Icons.block, '${widget.avoidCount}', '忌口', widget.onAvoidTap),
     ];
     return Row(
       children: [
         for (var i = 0; i < stats.length; i++) ...[
           if (i > 0) const SizedBox(width: 8),
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              decoration: cardDeco(radius: 16),
-              child: Column(
-                children: [
-                  Icon(stats[i].$1, size: 18, color: green700),
-                  const SizedBox(height: 4),
-                  Text(
-                    stats[i].$2,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
+            child: Semantics(
+              button: true,
+              label: '打开${stats[i].$3}',
+              child: Material(
+                color: Colors.transparent,
+                child: Ink(
+                  decoration: cardDeco(radius: 16),
+                  child: InkWell(
+                    onTap: stats[i].$4,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      child: Column(
+                        children: [
+                          Icon(stats[i].$1, size: 18, color: green700),
+                          const SizedBox(height: 4),
+                          Text(
+                            stats[i].$2,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            stats[i].$3,
+                            style: const TextStyle(fontSize: 10, color: muted),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  Text(
-                    stats[i].$3,
-                    style: const TextStyle(fontSize: 10, color: muted),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -780,11 +930,7 @@ class _WeeklyCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.bar_chart_rounded,
-                  color: green700,
-                  size: 30,
-                ),
+                const Icon(Icons.bar_chart_rounded, color: green700, size: 30),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

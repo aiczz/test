@@ -92,10 +92,17 @@ class FoodsPageState extends State<FoodsPage> {
     final foodId = int.tryParse(food.id);
     if (foodId == null) return;
     try {
-      await BackendApi.instance.addMyFood(
+      final item = await BackendApi.instance.addMyFood(
         foodId: foodId,
         amount: (_amounts[food.id] ?? 1).toDouble(),
       );
+      if (!mounted) return;
+      if (_pantry.any((entry) => entry.id == food.id)) {
+        _serverItemIds[food.id] = item.id;
+      } else {
+        // 用户可能在请求返回前又点了勾取消；此时把刚创建的服务端记录清掉。
+        await BackendApi.instance.removeMyFood(item.id);
+      }
     } catch (error) {
       debugPrint('[FoodsPage] 加入我的食材同步失败：$error');
     }
@@ -143,8 +150,17 @@ class FoodsPageState extends State<FoodsPage> {
       _selected.remove(food.id);
       _amounts.remove(food.id);
     });
-    _toast('已从现有食材中移除${food.name}');
+    _toast('已将${food.name}从我的食材移除');
     unawaited(_syncRemove(food));
+  }
+
+  void _togglePantry(Food food) {
+    final isInPantry = _pantry.any((item) => item.id == food.id);
+    if (isInPantry) {
+      _removeFood(food);
+    } else {
+      _addToPantry(food);
+    }
   }
 
   void _addToPantry(Food food) {
@@ -370,6 +386,12 @@ class FoodsPageState extends State<FoodsPage> {
     );
   }
 
+  /// 从“我的”页统计卡进入时，直接展示库存，而不是仍停留在推荐列表。
+  void openPantry() {
+    if (!mounted) return;
+    setState(() => _showPantry = true);
+  }
+
   void _sendToAi() {
     final names = _pantry
         .where((food) => _selected.contains(food.id))
@@ -536,7 +558,7 @@ class FoodsPageState extends State<FoodsPage> {
                               amount: _amounts[food.id] ?? 1,
                               onTap: () => openFoodDetail(food),
                               onToggle: () => _toggleSelected(food),
-                              onAdd: () => _addToPantry(food),
+                              onAdd: () => _togglePantry(food),
                               onMinus: () => _changeAmount(food, -1),
                               onPlus: () => _changeAmount(food, 1),
                               onDelete: () => _removeFood(food),
@@ -613,69 +635,275 @@ class _FoodsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFE7F5E2), Color(0xFFFFF1D9)],
+          colors: [Color(0xFFE8F5E4), Color(0xFFFFF2D9)],
         ),
         borderRadius: BorderRadius.circular(rBlock),
         boxShadow: cardShadow,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Text(
-            showPantry ? '我家的食材' : '时令食材',
-            style: const TextStyle(
-              color: green900,
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -1,
+          Positioned(
+            right: -38,
+            top: -52,
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: const BoxDecoration(
+                color: Color(0x33FFFFFF),
+                shape: BoxShape.circle,
+              ),
             ),
           ),
-          const SizedBox(height: 5),
-          Text(
-            showPantry ? '记录家中库存，减少浪费' : '应季鲜美，营养更自然',
-            style: const TextStyle(color: muted, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: SegmentedButton<bool>(
-                  segments: [
-                    const ButtonSegment(
-                      value: false,
-                      icon: Icon(Icons.spa_rounded),
-                      label: Text('推荐'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: .72),
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: .9),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  showPantry
+                                      ? Icons.inventory_2_outlined
+                                      : Icons.eco_outlined,
+                                  size: 13,
+                                  color: green700,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  showPantry ? '家庭库存' : '杭州 · 秋季',
+                                  style: const TextStyle(
+                                    color: green700,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            showPantry ? '我家的食材' : '时令食材',
+                            style: const TextStyle(
+                              color: green900,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -1,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            showPantry ? '随手记录库存，做饭更省心' : '挑选正当季的新鲜味道',
+                            style: const TextStyle(
+                              color: muted,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    ButtonSegment(
-                      value: true,
-                      icon: const Icon(Icons.inventory_2_rounded),
-                      label: Text('我的 $pantryCount'),
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 128,
+                      height: 104,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: _FoodBubble(
+                              asset: 'assets/images/pumpkin-clean.jpg',
+                              size: 78,
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            bottom: 0,
+                            child: _FoodBubble(
+                              asset: 'assets/images/lotus-clean.jpg',
+                              size: 64,
+                            ),
+                          ),
+                          Positioned(
+                            left: 48,
+                            bottom: -1,
+                            child: _FoodBubble(
+                              asset: 'assets/images/bokchoy-clean.jpg',
+                              size: 48,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                  selected: <bool>{showPantry},
-                  onSelectionChanged: (value) => onChanged(value.first),
                 ),
-              ),
-              if (showPantry) ...[
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: onAdd,
-                  tooltip: '手动添加食材',
-                  style: IconButton.styleFrom(
-                    backgroundColor: orange,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.add_rounded),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 48,
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .74),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: .9),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _FoodHeaderTab(
+                                selected: !showPantry,
+                                icon: Icons.spa_rounded,
+                                label: '时令推荐',
+                                onTap: () => onChanged(false),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: _FoodHeaderTab(
+                                selected: showPantry,
+                                icon: Icons.inventory_2_rounded,
+                                label: '我的 $pantryCount',
+                                onTap: () => onChanged(true),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (showPantry) ...[
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        onPressed: onAdd,
+                        tooltip: '手动添加食材',
+                        style: IconButton.styleFrom(
+                          backgroundColor: orange,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(48, 48),
+                        ),
+                        icon: const Icon(Icons.add_rounded),
+                      ),
+                    ],
+                  ],
                 ),
               ],
-            ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FoodBubble extends StatelessWidget {
+  final String asset;
+  final double size;
+
+  const _FoodBubble({required this.asset, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x260B532F),
+            blurRadius: 12,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: Image.asset(
+          asset,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.high,
+        ),
+      ),
+    );
+  }
+}
+
+class _FoodHeaderTab extends StatelessWidget {
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _FoodHeaderTab({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            color: selected ? green700 : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 17, color: selected ? Colors.white : green700),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? Colors.white : ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -868,7 +1096,7 @@ class _AddFoodButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: added ? '已在我的食材中' : '添加到我的食材',
+      message: added ? '从我的食材中移除' : '添加到我的食材',
       child: Material(
         color: Colors.transparent,
         child: InkWell(

@@ -56,8 +56,9 @@ class BackendApi {
     ),
   );
 
-  Options get _auth =>
-      Options(headers: Map<String, String>.from(AuthStore.instance.authHeaders));
+  Options get _auth => Options(
+    headers: Map<String, String>.from(AuthStore.instance.authHeaders),
+  );
 
   // ---------------------------------------------------------------- 食材
 
@@ -78,10 +79,7 @@ class BackendApi {
       },
     );
     final items = (res.data?['items'] as List?) ?? const <dynamic>[];
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(_foodFromJson)
-        .toList();
+    return items.whereType<Map<String, dynamic>>().map(_foodFromJson).toList();
   }
 
   /// GET /api/foods/seasonal（说明书 §10.2）
@@ -140,15 +138,28 @@ class BackendApi {
   }
 
   /// POST /api/my-foods —— 需要登录
-  Future<void> addMyFood({
+  Future<MyFoodEntry> addMyFood({
     required int foodId,
     double amount = 1,
     String unit = '份',
   }) async {
-    await _dio.post<Map<String, dynamic>>(
+    final res = await _dio.post<Map<String, dynamic>>(
       '/api/my-foods',
-      data: <String, dynamic>{'food_id': foodId, 'amount': amount, 'unit': unit},
+      data: <String, dynamic>{
+        'food_id': foodId,
+        'amount': amount,
+        'unit': unit,
+      },
       options: _auth,
+    );
+    final json = res.data ?? const <String, dynamic>{};
+    return MyFoodEntry(
+      id: json['id'] as int? ?? 0,
+      foodId: json['food_id'] as int?,
+      name: json['name'] as String? ?? '',
+      amount: (json['amount'] as num?)?.toDouble() ?? amount,
+      unit: json['unit'] as String? ?? unit,
+      expireHint: json['expire_hint'] as String?,
     );
   }
 

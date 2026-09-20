@@ -44,7 +44,18 @@ void main() {
     await tester.tap(addButton);
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('已在我的食材中'), findsOneWidget);
+    final removeButton = find.byTooltip('从我的食材中移除').first;
+    expect(removeButton, findsOneWidget);
+    await tester.tap(removeButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('我的 0'), findsOneWidget);
+    expect(find.byTooltip('添加到我的食材'), findsWidgets);
+
+    final addAgainButton = find.byTooltip('添加到我的食材').first;
+    await tester.tap(addAgainButton);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('从我的食材中移除'), findsOneWidget);
     await tester.drag(find.byType(ListView).first, const Offset(0, 800));
     await tester.pumpAndSettle();
     expect(find.text('我的 1'), findsOneWidget);
@@ -55,5 +66,39 @@ void main() {
     expect(find.text('1'), findsOneWidget);
     expect(find.textContaining('节'), findsNothing);
     expect(find.byTooltip('删除莲藕'), findsOneWidget);
+  });
+
+  testWidgets('个人页统计卡可进入库存并编辑口味', (tester) async {
+    await tester.pumpWidget(const ShishiApp());
+
+    await tester.tap(find.text('我的'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('打开口味偏好'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑口味偏好'), findsOneWidget);
+    expect(find.text('保存设置'), findsOneWidget);
+
+    await tester.tap(find.text('保存设置'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('打开我的食材'));
+    await tester.pumpAndSettle();
+    expect(find.text('我家的食材'), findsWidgets);
+  });
+
+  testWidgets('首页快速选一餐打开轻量推荐面板', (tester) async {
+    await tester.pumpWidget(const ShishiApp());
+
+    final quickMeal = find.text('快速选一餐');
+    await tester.ensureVisible(quickMeal);
+    await tester.pumpAndSettle();
+    await tester.tap(quickMeal);
+    await tester.pumpAndSettle();
+
+    expect(find.text('今日一餐灵感'), findsOneWidget);
+    expect(find.text('换一个'), findsOneWidget);
+    expect(find.text('查看做法'), findsOneWidget);
+    expect(find.text('让 AI 帮我搭配'), findsOneWidget);
   });
 }

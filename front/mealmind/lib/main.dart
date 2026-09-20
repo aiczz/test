@@ -240,6 +240,13 @@ class _RootShellState extends State<RootShell> {
     });
   }
 
+  void _openPantry() {
+    setState(() => _index = 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _foodsKey.currentState?.openPantry();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -260,7 +267,10 @@ class _RootShellState extends State<RootShell> {
             initialPrompt: _pendingAiPrompt,
             requestToken: _aiRequestToken,
           ),
-          const ProfilePage(),
+          ProfilePage(
+            onOpenRecipes: () => _selectTab(2),
+            onOpenPantry: _openPantry,
+          ),
         ],
       ),
       bottomNavigationBar: DecoratedBox(
