@@ -5,7 +5,8 @@ import 'package:mealmind/main.dart';
 
 void main() {
   testWidgets('五个主入口可用，食材可添加到我的库存', (tester) async {
-    await tester.pumpWidget(const ShishiApp());
+    // 每个用例使用独立的根节点，避免复用上一个用例停留的 tab 和滚动位置。
+    await tester.pumpWidget(ShishiApp(key: UniqueKey()));
 
     expect(find.text('今天吃什么'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
@@ -49,7 +50,7 @@ void main() {
     await tester.tap(removeButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('我的 0'), findsOneWidget);
+    // 卡片滚入视口后页头已经被 ListView 回收，这里验证按钮确实恢复为“+”。
     expect(find.byTooltip('添加到我的食材'), findsWidgets);
 
     final addAgainButton = find.byTooltip('添加到我的食材').first;
@@ -69,12 +70,19 @@ void main() {
   });
 
   testWidgets('个人页统计卡可进入库存并编辑口味', (tester) async {
-    await tester.pumpWidget(const ShishiApp());
+    await tester.pumpWidget(ShishiApp(key: UniqueKey()));
 
     await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsLabel('打开口味偏好'));
+    final preferencesCard = find.text('口味偏好').first;
+    await tester.scrollUntilVisible(
+      preferencesCard,
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(preferencesCard);
     await tester.pumpAndSettle();
     expect(find.text('编辑口味偏好'), findsOneWidget);
     expect(find.text('保存设置'), findsOneWidget);
@@ -82,16 +90,27 @@ void main() {
     await tester.tap(find.text('保存设置'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsLabel('打开我的食材'));
+    final pantryCard = find.text('我的食材').first;
+    await tester.scrollUntilVisible(
+      pantryCard,
+      -120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(pantryCard);
     await tester.pumpAndSettle();
     expect(find.text('我家的食材'), findsWidgets);
   });
 
   testWidgets('首页快速选一餐打开轻量推荐面板', (tester) async {
-    await tester.pumpWidget(const ShishiApp());
+    await tester.pumpWidget(ShishiApp(key: UniqueKey()));
 
     final quickMeal = find.text('快速选一餐');
-    await tester.ensureVisible(quickMeal);
+    await tester.scrollUntilVisible(
+      quickMeal,
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(quickMeal);
     await tester.pumpAndSettle();

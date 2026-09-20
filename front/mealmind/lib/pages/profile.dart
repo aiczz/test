@@ -414,43 +414,52 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 12),
             Container(
-              decoration: cardDeco(),
-              child: Column(
-                children: [
-                  _MenuRow(
-                    icon: Icons.favorite_outline,
-                    title: '我的收藏',
-                    subtitle: '登录后同步到云端',
-                    onTap: () => _showInfo('我的收藏', '收藏的菜谱会同步到你的账号，换台设备登录也还在。'),
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  SwitchListTile.adaptive(
-                    contentPadding: const EdgeInsets.fromLTRB(16, 3, 12, 3),
-                    value: _reminders,
-                    activeThumbColor: green700,
-                    secondary: const Icon(
-                      Icons.notifications_none,
-                      color: green700,
+              decoration: const BoxDecoration(boxShadow: cardShadow),
+              child: Material(
+                color: Colors.white,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(rCard),
+                  side: const BorderSide(color: line),
+                ),
+                child: Column(
+                  children: [
+                    _MenuRow(
+                      icon: Icons.favorite_outline,
+                      title: '我的收藏',
+                      subtitle: '登录后同步到云端',
+                      onTap: () =>
+                          _showInfo('我的收藏', '收藏的菜谱会同步到你的账号，换台设备登录也还在。'),
                     ),
-                    title: const Text(
-                      '用餐与时令提醒',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                    const Divider(height: 1, indent: 56),
+                    SwitchListTile.adaptive(
+                      contentPadding: const EdgeInsets.fromLTRB(16, 3, 12, 3),
+                      value: _reminders,
+                      activeThumbColor: green700,
+                      secondary: const Icon(
+                        Icons.notifications_none,
+                        color: green700,
+                      ),
+                      title: const Text(
+                        '用餐与时令提醒',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: const Text(
+                        '菜单准备、临期食材提醒',
+                        style: TextStyle(fontSize: 12, color: muted),
+                      ),
+                      onChanged: (value) => setState(() => _reminders = value),
                     ),
-                    subtitle: const Text(
-                      '菜单准备、临期食材提醒',
-                      style: TextStyle(fontSize: 12, color: muted),
+                    const Divider(height: 1, indent: 56),
+                    _MenuRow(
+                      icon: Icons.chat_bubble_outline,
+                      title: '意见反馈',
+                      subtitle: '帮助我们改进推荐',
+                      onTap: () =>
+                          _showInfo('意见反馈', '反馈入口将在后端接入时启用。当前演示版本不会上传个人资料。'),
                     ),
-                    onChanged: (value) => setState(() => _reminders = value),
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  _MenuRow(
-                    icon: Icons.chat_bubble_outline,
-                    title: '意见反馈',
-                    subtitle: '帮助我们改进推荐',
-                    onTap: () =>
-                        _showInfo('意见反馈', '反馈入口将在后端接入时启用。当前演示版本不会上传个人资料。'),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             // 只有管理员才看得到这个入口。
