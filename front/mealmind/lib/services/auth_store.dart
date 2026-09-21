@@ -71,6 +71,11 @@ class AuthStore extends ChangeNotifier {
   static const String demoUsername = 'demo';
   static const String demoPassword = 'shishi2026';
 
+  // 管理后台演示账号。后端在线时使用数据库中的同名种子账号；
+  // GitHub Pages 没有后端时，只创建本机浏览器内的演示管理员会话。
+  static const String adminUsername = 'admin';
+  static const String adminPassword = 'admin123456';
+
   static const String _kToken = 'auth_token';
   static const String _kUser = 'auth_user';
   static const String _kRegisteredPhones = 'registered_phones';
@@ -209,6 +214,26 @@ class AuthStore extends ChangeNotifier {
 
   /// 登录。失败抛 [AuthException]。
   Future<void> login(String username, String password) async {
+    if (!BackendStatus.instance.online) {
+      if (username == adminUsername && password == adminPassword) {
+        await _persist(
+          'local-admin-token',
+          const AuthUser(
+            id: -1,
+            username: adminUsername,
+            nickname: '食时管理员',
+            isAdmin: true,
+          ),
+        );
+        return;
+      }
+      if (username == demoUsername && password == demoPassword) {
+        await loginAsDemo();
+        return;
+      }
+      throw const AuthException('演示站账号不存在或密码不正确');
+    }
+
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/auth/login',

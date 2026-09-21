@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mealmind/main.dart';
+import 'package:mealmind/pages/admin.dart';
 import 'package:mealmind/pages/login.dart';
 import 'package:mealmind/services/auth_store.dart';
 
@@ -163,6 +164,38 @@ void main() {
 
     expect(authenticated, isTrue);
     expect(AuthStore.instance.isLoggedIn, isTrue);
+    await AuthStore.instance.logout();
+  });
+
+  testWidgets('管理员演示账号可登录并打开新版控制台', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await AuthStore.instance.logout();
+    await AuthStore.instance.login(
+      AuthStore.adminUsername,
+      AuthStore.adminPassword,
+    );
+
+    expect(AuthStore.instance.user?.isAdmin, isTrue);
+
+    await tester.pumpWidget(const MaterialApp(home: AdminPage()));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('食时管理台'), findsOneWidget);
+    expect(find.text('演示数据'), findsOneWidget);
+    expect(find.text('总览'), findsOneWidget);
+    expect(find.text('用户管理'), findsOneWidget);
+    expect(find.text('登录安全'), findsOneWidget);
+    expect(find.text('早上好，食时管理员'), findsOneWidget);
+
+    await tester.tap(find.text('用户管理'));
+    await tester.pumpAndSettle();
+    expect(find.text('受限账号示例'), findsOneWidget);
+
+    await tester.tap(find.text('登录安全'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('登录活动'), findsOneWidget);
+    expect(find.text('只看失败'), findsOneWidget);
+
     await AuthStore.instance.logout();
   });
 }
