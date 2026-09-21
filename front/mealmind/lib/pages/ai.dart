@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/api_config.dart';
+import '../services/backend_api.dart';
 import '../services/content_store.dart';
 import '../services/recommender.dart';
 import '../state/app_state.dart';
@@ -101,7 +103,12 @@ class _AiPageState extends State<AiPage> {
     });
   }
 
-  /// 模拟一次完整的"多智能体协作 → 出推荐"
+  /// 问一次 AI：先播协作轨迹，轨迹放完出结果。
+  ///
+  /// ★ 回答是**真的调后端** `/api/ai/chat` 拿的，不再是写死的字符串。
+  ///   请求和轨迹动画**并行**开始 —— 动画是给人看的节奏，等它放完，
+  ///   答案通常已经回来了，用户感觉不到在等网络。
+  ///   后端离线（线上静态站的情形）时回落本地文案，界面照常能用。
   Future<void> _send(String raw) async {
     final text = raw.trim();
     if (text.isEmpty || _busy) return;
@@ -112,6 +119,9 @@ class _AiPageState extends State<AiPage> {
       _busy = true;
     });
     _scrollToBottom();
+
+    // 先把请求发出去，再放动画 —— 两者并行，谁也不等谁。
+    final pending = _askBackend(text);
 
     // ---- 协作轨迹逐步浮现 ----
     final growing = <AgentStep>[];
@@ -133,19 +143,43 @@ class _AiPageState extends State<AiPage> {
     await Future<void>.delayed(const Duration(milliseconds: 420));
     if (!mounted) return;
 
+    final reply = await pending;
+    if (!mounted) return;
+
     // ---- 轨迹定格，出推荐 ----
     setState(() {
       _items[_items.length - 1] =
           _Item.trace(List<AgentStep>.from(growing), false);
       _items.add(
         _Item.ai(
-          text.contains('食材') ? mockAiReplyByFood : mockAiReplyDefault,
-          recipeId: 'soup',
+          (reply != null && reply.answer.isNotEmpty)
+              ? reply.answer
+              : _localAnswer(text),
+          // 后端给了菜谱就用它 —— 在线时 ContentStore 里那批菜谱正是后端来的，
+          // id 同源，_MiniRecipeCard 能查到；离线兜底时才用本地菜谱。
+          recipeId: reply == null
+              ? 'soup'
+              : (reply.recipes.isEmpty ? null : reply.recipes.first.id),
         ),
       );
       _busy = false;
     });
     _scrollToBottom();
+  }
+
+  /// 本地兜底文案（后端离线、或这一问失败时用）。
+  String _localAnswer(String text) =>
+      text.contains('食材') ? mockAiReplyByFood : mockAiReplyDefault;
+
+  /// 问后端。任何失败都返回 null，交给调用方回落本地 ——
+  /// 表现和后端离线时完全一致，界面不会弹错误。
+  Future<AiChatResult?> _askBackend(String message) async {
+    if (!BackendStatus.instance.online) return null;
+    try {
+      return await BackendApi.instance.chat(message);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
