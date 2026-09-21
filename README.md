@@ -35,10 +35,24 @@
 │   ├── image/                                设计过程截图
 │   └── README.md                             前端子目录的详细说明
 │
-├── back/                                  后端
-│   └── 食时_App后端实现说明_Codex.md           后端实现说明（技术栈 / 表设计 / 接口规范 / 排期）
+├── back/                                  ★ 后端（可运行，不是"只有文档"）
+│   ├── app/                                  FastAPI 应用
+│   │   ├── main.py                             入口 + CORS + 建表 & 灌种子
+│   │   ├── core/                               配置 / 数据库 / 安全 / 依赖注入
+│   │   ├── api/routes/                         32 个接口，按业务分文件
+│   │   ├── models/                             14 张表（SQLModel）
+│   │   ├── schemas/ · repositories/ · services/ 响应模型 / 数据访问层 / 业务逻辑层
+│   │   └── data/seed.py                        种子数据（幂等）
+│   ├── tests/                                pytest —— CI 里真的会跑
+│   ├── data_tools/                           数据清洗辅助脚本
+│   ├── requirements.txt · README.md
+│   └── 食时_App后端实现说明_Codex.md            后端实现说明（技术栈 / 表设计 / 接口规范 / 排期）
 │
-└── .github/workflows/deploy-pages.yml     CI：构建 Flutter Web 并发布到 GitHub Pages
+├── sql/                                  菜谱数据库的数据清洗交付（MySQL schema + CSV）
+│
+└── .github/workflows/
+    ├── deploy-pages.yml                  CI：构建 Flutter Web 并发布到 GitHub Pages
+    └── backend-tests.yml                 CI：跑后端 pytest
 ```
 
 ---
@@ -47,10 +61,10 @@
 
 | | `front/mealmind/`（Flutter App） | `front/dist/`（网页原型） | `back/`（后端） |
 |---|---|---|---|
-| 技术 | Flutter + Dart | 静态 HTML/CSS/JS | Python / FastAPI（**仅说明文档**） |
+| 技术 | Flutter + Dart | 静态 HTML/CSS/JS | Python / FastAPI + SQLModel |
 | 定位 | **交付形态**，能装到手机 | 设计原型 / 交互参考 | 服务端 |
-| 状态 | 开发中，可运行 | 早期版本，已定型 | 待实现 |
-| 数据 | 先读假数据，后端就绪后切真接口 | 全部硬编码 | — |
+| 状态 | 开发中，可运行 | 早期版本，已定型 | **已实现**：14 张表 / 32 个接口 / 71 个测试 |
+| 数据 | 读后端数据，后端离线时静默降级到本地 | 全部硬编码 | SQLite 开箱即跑，改一行 `DATABASE_URL` 切 PostgreSQL |
 
 > **视觉与文案以 `dist/` 为准**，`mealmind/lib/theme.dart` 里的颜色值是从 `dist/styles.css`
 > 的 `:root` 逐字抄过来的 —— 两边必须保持一致。
@@ -141,16 +155,29 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
       关掉低钠约束，Critic 就不再否决方案 B）
 - [x] 品牌应用图标（自适应图标，非 Flutter 默认蓝色图标）+ PWA 清单
 - [x] 交互测试接入 CI（`flutter test` 是真实门禁，不是摆设）
-- [x] ★ **后端**：FastAPI + SQLModel，13 张表、24 个接口、54 个测试
-      （SQLite 开箱即跑，改一行 `DATABASE_URL` 即可切 PostgreSQL）
-- [x] ★ **登录闭环**：注册 / 登录 / 演示账号一键登录 / token 持久化；
-      按需登录 —— 首页、食材、菜谱不登录也能看
+- [x] ★ **后端**：FastAPI + SQLModel，**14 张表、32 个接口、71 个测试**
+      （SQLite 开箱即跑，改一行 `DATABASE_URL` 即可切 PostgreSQL；
+      后端测试在 CI 里真的会跑 —— 见 `backend-tests.yml`）
+- [x] ★ **登录闭环**：注册 / 登录 / 手机验证码 / 演示账号一键登录 / token 持久化；
+      **登录门禁** —— 未登录先看到登录页。
+      （「演示账号一键登录」不受门禁影响，评委仍然一步就能进）
+- [x] ★ **管理员后台**：用户统计 / 封禁与解封 / 登录记录（含失败尝试）
+      —— 说明书里没有这一节，属于本次新增
 - [x] ★ **前端业务数据接入后端，并保留静默降级**
       （后端不在线就用本地演示数据，界面照常能用、不弹错误；
       「我的食材」登录后同步到 `/api/my-foods`）
+- [x] ★ **AI 助手接 `/api/ai/chat`**：回答由后端生成，后端离线时回落本地文案。
+      协作轨迹仍由前端按家庭档案展开 —— 后端目前不返回轨迹，这一点没有假装
+- [x] ★ **token 失效自动登出**：任何接口返回 401（token 过期 / 账号被封禁）都会
+      清掉本地登录态、回到登录页并说明原因，不会再卡在
+      「显示着已登录、却什么都做不了」的状态
+- [ ] 把 `sql/` 里清洗好的菜谱数据导入后端
+      （后端目前仍是种子数据的 6 种食材 / 4 道菜谱，那批 CSV 还没接进来）
 - [ ] 真 CP-SAT 求解器（当前由 `lib/services/local_estimator.dart` 本地派生顶上）
-- [ ] AI 助手接 `/api/ai/chat`（协作轨迹目前仍是本地按设计展开的）
 - [ ] 菜单 / 购物清单接 `/api/menu/*`（当前走 `services/api.dart` 的本地分支）
+      —— ⚠️ 后端 `/api/menu/plan` 的响应结构与前端 `Plan.fromJson` 并不一致，
+      直接改 `useMock = false` 会得到一张**空白菜单页**（字段全部回落到默认值），
+      接它需要先写适配层
 
 ### 关于「联动」是怎么实现的
 

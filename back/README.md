@@ -100,7 +100,7 @@ start ms-settings:developers
 
 ## 三、接口清单
 
-共 **28 个接口**（24 条路径，部分路径带多个方法）。带 🔒 的需要登录
+共 **32 个接口**（32 条路径，`@router.*` 装饰器计数）。带 🔒 的需要登录
 （`Authorization: Bearer <token>`）。
 
 ### 认证（说明书 §12）
@@ -193,17 +193,17 @@ back/
 │   │   ├── config.py        pydantic-settings 配置
 │   │   ├── database.py      引擎与会话（唯一区分 SQLite/PG 的地方）
 │   │   ├── security.py      bcrypt 哈希 + JWT 签发/校验
-│   │   └── dependencies.py  get_current_user / get_current_user_optional
+│   │   └── dependencies.py  get_current_user / _optional / get_current_admin
 │   ├── api/
 │   │   ├── router.py        汇总路由（⚠️ 路由顺序有意义）
 │   │   └── routes/          按业务分文件
-│   ├── models/              13 张表（说明书 §7）
+│   ├── models/              14 张表（说明书 §7）
 │   ├── schemas/             请求 / 响应模型
 │   ├── repositories/        数据访问层（说明书 §5.3）
 │   ├── services/            业务逻辑层（说明书 §5.2）
 │   ├── data/seed.py         种子数据
 │   └── utils/time.py
-├── tests/                   pytest（54 个用例）
+├── tests/                   pytest（71 个用例，CI 里会真的跑）
 ├── requirements.txt
 ├── .env.example
 └── pytest.ini
@@ -278,3 +278,12 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 - 图片仍是前端的本地 asset 路径（`assets/images/*.jpg`），没有走说明书 §27 的
   后端静态托管 —— 前端图片是打包进 App 的，从后端再拉一遍反而更慢。
 - 没有 Alembic 迁移（SQLite 阶段用 `create_all` 足够）。
+- **`sql/` 里那批清洗数据还没接进来。** 后端现在的食材 / 菜谱仍是 `data/seed.py`
+  的种子数据（6 种食材 / 4 道菜谱）。仓库 `sql/` 下有十几万行的菜谱、营养、标签 CSV，
+  但它们是**独立交付物**：`app/` 里没有任何导入代码，启动流程（`main.py` 的 lifespan）
+  也只有建表 + 灌种子。要接进来得先定路线 —— 沿用 SQLite（扩 `foods` 表，
+  或者新建 ingredients 相关表），还是切到那批 CSV 自带的 MySQL schema
+  （那样 `app/models/` 这 14 张表要重写，现有测试跑在内存 SQLite 上，也要跟着改）。
+- 前端已在 `lib/services/auth_store.dart` 里用 `createApiDio()` 统一处理 401：
+  token 过期或账号被封禁时自动清登录态、回到登录页。后端这边不需要额外配合，
+  但**新加的接口层必须走这个工厂**，自己 `new Dio()` 会漏掉这一步。
