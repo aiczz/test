@@ -695,6 +695,13 @@ class _AccountCard extends StatelessWidget {
                       '家庭人数 ${user.familySize} 人',
                       style: const TextStyle(fontSize: 10.5, color: muted),
                     ),
+                    // 后端离线时的一键登录、以及手机号登录，写的都是后端不认的
+                    // 本地 token。必须在这里如实标出来 —— 否则用户看到收藏 / 食材
+                    // 全是「—」，只会以为功能坏了。
+                    if (AuthStore.instance.isOfflineDemo) ...[
+                      const SizedBox(height: 6),
+                      const _OfflineDemoBadge(),
+                    ],
                   ],
                 ),
               ),
@@ -752,6 +759,34 @@ class _LocalOnlyBadge extends StatelessWidget {
       child: const Text(
         '本地匿名档案',
         style: TextStyle(fontSize: 10, color: green700),
+      ),
+    );
+  }
+}
+
+/// 「这次登录后端不认」的诚实标注。
+///
+/// 后端离线时的一键登录、以及手机号验证码登录，写的都是后端不认的本地 token。
+/// 这类会话能进 App，但收藏 / 我的食材 / 管理后台都拿不到数据 ——
+/// 不标出来，用户只会以为功能坏了。
+class _OfflineDemoBadge extends StatelessWidget {
+  const _OfflineDemoBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1E0),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: const Text(
+        '离线演示 · 个人数据不会保存',
+        style: TextStyle(
+          fontSize: 10,
+          color: orange,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

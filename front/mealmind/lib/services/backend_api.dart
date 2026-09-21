@@ -11,7 +11,6 @@
 import 'package:dio/dio.dart';
 
 import '../models/content.dart';
-import 'api_config.dart';
 import 'auth_store.dart';
 
 /// 前端分类（中文）→ 后端分类（说明书 §7.3 的英文枚举）
@@ -47,13 +46,11 @@ class BackendApi {
 
   static final BackendApi instance = BackendApi._();
 
-  Dio get _dio => Dio(
-    BaseOptions(
-      baseUrl: BackendStatus.instance.apiBase,
-      connectTimeout: const Duration(seconds: 6),
-      receiveTimeout: const Duration(seconds: 10),
-      contentType: 'application/json; charset=utf-8',
-    ),
+  // 统一走 createApiDio：它会挂上 401 拦截器（token 失效 / 账号被封禁）。
+  // 自己 new 一个 Dio 就会漏掉这一步。
+  Dio get _dio => createApiDio(
+    connectTimeout: const Duration(seconds: 6),
+    receiveTimeout: const Duration(seconds: 10),
   );
 
   Options get _auth => Options(

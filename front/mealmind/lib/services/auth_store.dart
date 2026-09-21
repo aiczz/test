@@ -80,9 +80,19 @@ class AuthStore extends ChangeNotifier {
   static const String _kUser = 'auth_user';
   static const String _kRegisteredPhones = 'registered_phones';
 
+  /// 后端离线时「演示账号一键登录」写的假 token。
+  /// 它能让登录门禁放行，但后端不认 —— 见 [isOfflineDemo]。
+  static const String offlineDemoToken = 'local-demo-token';
+
+  /// 手机号登录写的假 token 前缀（这套流程目前是纯前端本地闭环）。
+  static const String phoneTokenPrefix = 'demo-phone-';
+
   String? _token;
   AuthUser? _user;
   bool _restored = false;
+
+  /// 一次性提示（目前用于「登录已失效」），由登录页取走后清空。
+  String? _notice;
 
   String? get token => _token;
   AuthUser? get user => _user;
@@ -92,15 +102,38 @@ class AuthStore extends ChangeNotifier {
 
   bool get isLoggedIn => _token != null && _user != null;
 
-  Dio get _dio => Dio(
-    BaseOptions(
-      baseUrl: BackendStatus.instance.apiBase,
-      connectTimeout: const Duration(seconds: 8),
-      receiveTimeout: const Duration(seconds: 8),
-      sendTimeout: const Duration(seconds: 8),
-      contentType: 'application/json; charset=utf-8',
-    ),
-  );
+  /// 给登录页看的一次性提示。取走后请调用 [clearNotice]。
+  String? get notice => _notice;
+
+  void clearNotice() => _notice = null;
+
+  /// 当前登录是不是「后端不认的本地演示登录」。
+  ///
+  /// 两种情况会写这种 token：
+  ///   1. 后端离线时点「演示账号一键登录」—— 公网静态站永远走这条
+  ///   2. 手机号验证码登录 —— 这套流程目前是纯前端本地闭环，后端没有对应接口
+  ///
+  /// 这类会话能进 App，但**所有需要登录的接口都会 401**：收藏数、我的食材、
+  /// 管理后台全是空的。所以界面必须如实标注，不能让用户以为数据被保存了。
+  bool get isOfflineDemo =>
+      _token == offlineDemoToken ||
+      (_token?.startsWith(phoneTokenPrefix) ?? false);
+
+  /// token 失效（过期 / 账号被封禁）时调用：清掉本地登录态，并留一句提示。
+  ///
+  /// ★ 这是「封禁立刻生效」在前端真正落地的地方。
+  ///   后端 `get_current_user*` 对被封禁账号直接返回 401/403，
+  ///   但如果没有这一条，用户会停在一个「显示着已登录、却什么都做不了」的状态。
+  void expireSession() {
+    if (_token == null) return;
+    _notice = '登录已失效，请重新登录';
+    // 不 await：这里跑在 Dio 拦截器里，不需要等本地存储落盘
+    logout();
+  }
+
+  // 统一走 createApiDio：它会挂上 401 拦截器。
+  // 自己 new 一个 Dio 就会漏掉「封禁 / token 过期」的处理。
+  Dio get _dio => createApiDio();
 
   /// 启动时从本地恢复登录状态。token 过期不在这里校验 ——
   /// 等真正调接口时后端返回 401，那时再清理。
@@ -143,6 +176,7 @@ class AuthStore extends ChangeNotifier {
   Future<void> _persist(String token, AuthUser user) async {
     _token = token;
     _user = user;
+    _notice = null; // 登录成功，清掉上一条「登录已失效」
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kToken, token);
     await prefs.setString(_kUser, jsonEncode(user.toJson()));
@@ -156,7 +190,7 @@ class AuthStore extends ChangeNotifier {
       return;
     }
     await _persist(
-      'local-demo-token',
+      offlineDemoToken,
       const AuthUser(id: 0, username: demoUsername, nickname: '演示用户'),
     );
   }
@@ -203,7 +237,7 @@ class AuthStore extends ChangeNotifier {
 
     final suffix = normalized.substring(normalized.length - 4);
     await _persist(
-      'demo-phone-$normalized',
+      '$phoneTokenPrefix$normalized',
       AuthUser(
         id: normalized.hashCode & 0x7fffffff,
         username: 'phone_$suffix',
@@ -318,4 +352,42 @@ class AuthStore extends ChangeNotifier {
     }
     return AuthException('请求失败（$code）');
   }
+}
+
+/// 建一个带统一 401 处理的 Dio。
+///
+/// 为什么必须统一：`/api/my-foods`、`/api/favorites`、`/api/admin/*` 都靠
+/// `Authorization` 头。token 一旦失效（过期，或者账号被管理员封禁），后端返回 401。
+/// 如果各处自己 catch，就会出现「有的地方清了登录态、有的地方没清」——
+/// 用户最终卡在一个「看着已登录、其实什么都做不了」的界面里。
+///
+/// 现在只有一条路径：任何 401 → [AuthStore.expireSession] → 登录门禁自动回到登录页。
+/// 这也正是「封禁立刻生效」在前端真正落地的地方。
+Dio createApiDio({
+  Duration connectTimeout = const Duration(seconds: 8),
+  Duration receiveTimeout = const Duration(seconds: 8),
+  Duration? sendTimeout,
+}) {
+  final dio = Dio(
+    BaseOptions(
+      baseUrl: BackendStatus.instance.apiBase,
+      connectTimeout: connectTimeout,
+      receiveTimeout: receiveTimeout,
+      sendTimeout: sendTimeout,
+      contentType: 'application/json; charset=utf-8',
+    ),
+  );
+
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onError: (DioException error, ErrorInterceptorHandler handler) {
+        if (error.response?.statusCode == 401) {
+          AuthStore.instance.expireSession();
+        }
+        handler.next(error);
+      },
+    ),
+  );
+
+  return dio;
 }

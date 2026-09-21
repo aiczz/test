@@ -47,6 +47,19 @@ class _LoginPageState extends State<LoginPage> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    // 上一段会话是被后端踢掉的（token 过期，或者账号被封禁）——
+    // 登录门禁会把用户送回这里。原因必须显示出来，
+    // 否则用户只会看到「莫名回到登录页」，不知道发生了什么。
+    final notice = AuthStore.instance.notice;
+    if (notice != null) {
+      _error = notice;
+      AuthStore.instance.clearNotice();
+    }
+  }
+
+  @override
   void dispose() {
     _username.dispose();
     _password.dispose();
