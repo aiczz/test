@@ -71,6 +71,46 @@ EXPLICIT_ALIASES = {
     "芒果肉": "芒果", "榴莲肉": "榴莲", "桂圆肉": "桂圆",
     "鸡蛋清": "蛋清", "牛肉糜": "牛肉", "鱿鱼圈": "鱿鱼",
     "鸡蛋黄": "蛋黄",
+    # 物种明确的切法、肉馅和部位别名，可以安全回归到原生食材。
+    "鸡大腿": "鸡腿", "鸡小腿": "鸡腿", "鸡全腿": "鸡腿", "琵琶腿": "鸡腿",
+    "鸡全翅": "鸡翅", "鸡翅尖": "鸡翅", "全鸡": "鸡肉", "整鸡": "鸡肉",
+    "鸡块": "鸡肉", "鸡肉块": "鸡肉", "鸡肉片": "鸡肉", "鸡肉丁": "鸡肉",
+    "鸡肉丝": "鸡肉", "鸡肉馅": "鸡肉", "鸡肉糜": "鸡肉", "鸡肉末": "鸡肉",
+    "猪肉馅": "猪肉", "猪肉糜": "猪肉", "猪肉沫": "猪肉", "猪肉末": "猪肉",
+    "猪肉片": "猪肉", "猪肉丝": "猪肉", "猪肉丁": "猪肉", "猪肉块": "猪肉",
+    "牛肉馅": "牛肉", "牛肉糜": "牛肉", "牛肉沫": "牛肉", "牛肉末": "牛肉",
+    "牛肉片": "牛肉", "牛肉丝": "牛肉", "牛肉丁": "牛肉", "牛肉块": "牛肉",
+    "羊肉片": "羊肉", "羊肉卷": "羊肉", "肥牛卷": "肥牛", "牛腱": "牛腱子",
+    "羊腿": "羊腿肉", "鲩鱼": "草鱼", "鲩鱼腩": "草鱼", "海水虾": "虾",
+    "藕片": "藕", "青柠檬": "柠檬", "洋白菜": "卷心菜", "大蒜头": "蒜",
+    "头蒜": "蒜", "土豆土豆": "土豆", "绿辣椒": "青椒", "小红辣椒": "红辣椒",
+}
+
+# 旧分类本身并不可靠；这里只覆盖语义确定且已实际发现的错类。
+CATEGORY_NAME_OVERRIDES = {
+    "羊腿肉": "畜肉",
+    "猪后腿肉": "畜肉",
+    "蟹味菇": "菌菇藻类",
+}
+
+# 经菜谱原文人工确认，名称本身就是可购买的原生食材，但旧数据缺少权威营养匹配或频次不足。
+# 这里只接受语义唯一的名称；加工品、粉、面、馅、汤、汁仍不得进入。
+MANUAL_CORE_NAMES = {
+    "白芸豆", "羊蝎子", "梅头肉", "美人椒", "南姜", "干葱", "瓜子",
+}
+
+# “父食材 -> 子食材”只服务于搜索扩展，不改写原始 dish_ingredients。
+# 例如选择“鸡肉”时，可以找到鸡腿、鸡胸肉和鸡翅菜谱。
+INGREDIENT_HIERARCHY = {
+    "鸡肉": ["鸡胸肉", "鸡腿", "鸡翅", "三黄鸡", "童子鸡", "老母鸡", "乌鸡", "肉鸡"],
+    "鸡翅": ["鸡翅根", "鸡中翅", "鸡翅中"],
+    "猪肉": ["五花肉", "排骨", "猪里脊", "猪骨", "猪颈肉", "瘦猪肉", "猪排", "猪肋排", "猪后腿肉", "猪腿肉", "猪小排", "猪大排", "梅花肉", "梅头肉", "猪蹄"],
+    "排骨": ["猪肋排", "猪小排", "猪大排"],
+    "牛肉": ["牛腩", "牛里脊", "牛排", "牛腱子", "牛仔骨", "牛尾", "牛柳", "牦牛肉", "牛展"],
+    "羊肉": ["羊排", "羊腿肉", "羊蝎子"],
+    "鸭肉": ["鸭翅"],
+    "虾": ["虾仁", "大虾", "黑虎虾", "河虾", "海虾", "青虾", "北极虾", "草虾", "九节虾", "南美白对虾", "大头虾", "沼虾"],
+    "螃蟹": ["大闸蟹", "梭子蟹", "青蟹", "海蟹"],
 }
 
 SPLIT_EXACT = {
@@ -179,6 +219,9 @@ def drop_reason(name: str, row: dict[str, str], seasoning_names: set[str]) -> tu
 
 
 def category_for(row: dict[str, str]) -> str | None:
+    name = clean_name(row.get("name", ""))
+    if name in CATEGORY_NAME_OVERRIDES:
+        return CATEGORY_NAME_OVERRIDES[name]
     return MAJOR_MAP.get(row.get("category_major", ""))
 
 
@@ -239,6 +282,8 @@ def subcategory_for(category: str, name: str, old_sub: str) -> str:
 
 def base_candidate(name: str, row: dict[str, str], seasoning_names: set[str]) -> bool:
     if name in REQUIRED_PRESENT:
+        return True
+    if name in MANUAL_CORE_NAMES:
         return True
     if not category_for(row):
         return False
@@ -420,15 +465,32 @@ CREATE TABLE ingredient_groups (
   ingredient_id INT NOT NULL, group_id INT NOT NULL, PRIMARY KEY(ingredient_id,group_id),
   FOREIGN KEY(ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE, FOREIGN KEY(group_id) REFERENCES target_groups(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE ingredient_hierarchy (
+  parent_ingredient_id INT NOT NULL, child_ingredient_id INT NOT NULL,
+  PRIMARY KEY(parent_ingredient_id,child_ingredient_id),
+  FOREIGN KEY(parent_ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  FOREIGN KEY(child_ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  CHECK(parent_ingredient_id <> child_ingredient_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dishes (
   id INT PRIMARY KEY, dish_name VARCHAR(255) NOT NULL, description TEXT, cuisine VARCHAR(50), ingredient_text MEDIUMTEXT, instruction_text MEDIUMTEXT,
-  ingredient_count INT NOT NULL DEFAULT 0, main_ingredient_count INT NOT NULL DEFAULT 0, total_weight_g DECIMAL(12,2), KEY idx_dish_name(dish_name)
+  ingredient_count INT NOT NULL DEFAULT 0, main_ingredient_count INT NOT NULL DEFAULT 0,
+  search_ingredient_count INT NOT NULL DEFAULT 0, total_weight_g DECIMAL(12,2), KEY idx_dish_name(dish_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dish_ingredients (
   id BIGINT PRIMARY KEY, dish_id INT NOT NULL, ingredient_id INT NULL, raw_name VARCHAR(255) NOT NULL, raw_text VARCHAR(500) NOT NULL,
   quantity VARCHAR(100), role VARCHAR(20) NOT NULL, grams DECIMAL(12,3), grams_source VARCHAR(30),
   FOREIGN KEY(dish_id) REFERENCES dishes(id) ON DELETE CASCADE, FOREIGN KEY(ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
   KEY idx_di_dish(dish_id), KEY idx_di_ing(ingredient_id), KEY idx_di_role(role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE dish_ingredient_search (
+  dish_id INT NOT NULL, ingredient_id INT NOT NULL, source_ingredient_id INT NOT NULL,
+  match_type VARCHAR(20) NOT NULL,
+  PRIMARY KEY(dish_id,ingredient_id),
+  FOREIGN KEY(dish_id) REFERENCES dishes(id) ON DELETE CASCADE,
+  FOREIGN KEY(ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  FOREIGN KEY(source_ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  KEY idx_dis_ingredient(ingredient_id), KEY idx_dis_source(source_ingredient_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE tags (id INT PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, kind VARCHAR(20)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dish_tags (
@@ -466,8 +528,10 @@ TABLES = [
  ("target_groups","target_groups.csv",["id","name","is_suitable"]),
  ("ingredient_effects","ingredient_effects.csv",["ingredient_id","effect_id"]),
  ("ingredient_groups","ingredient_groups.csv",["ingredient_id","group_id"]),
- ("dishes","dishes.csv",["id","dish_name","description","cuisine","ingredient_text","instruction_text","ingredient_count","main_ingredient_count","total_weight_g"]),
+ ("ingredient_hierarchy","ingredient_hierarchy.csv",["parent_ingredient_id","child_ingredient_id"]),
+ ("dishes","dishes.csv",["id","dish_name","description","cuisine","ingredient_text","instruction_text","ingredient_count","main_ingredient_count","search_ingredient_count","total_weight_g"]),
  ("dish_ingredients","dish_ingredients.csv",["id","dish_id","ingredient_id","raw_name","raw_text","quantity","role","grams","grams_source"]),
+ ("dish_ingredient_search","dish_ingredient_search.csv",["dish_id","ingredient_id","source_ingredient_id","match_type"]),
  ("tags","tags.csv",["id","name","kind"]), ("dish_tags","dish_tags.csv",["dish_id","tag_id"]),
  ("dish_nutrition","dish_nutrition.csv",["dish_id","total_weight_g","energy_kcal","protein_g","fat_g","cho_g","dietary_fiber_g","ca_mg","fe_mg","na_mg","matched_ratio","weight_confidence","explicit_count","estimated_count","vague_count","suspect","nutrition_version"]),
  ("seasonings","excluded_seasonings.csv",["id","name","usage_count","reason"]),
@@ -571,27 +635,101 @@ def main() -> int:
     handle, out = writer(TEMP / "ingredient_id_map.csv", map_fields)
     with handle: out.writerows(actions)
 
-    # 菜谱关联重建，同时采集复核样本和每道菜核心食材数。
+    # 建立食材父子层级。层级只扩展搜索，不改写原始菜谱用料。
+    hierarchy_pairs = sorted({
+        (new_id[parent], new_id[child])
+        for parent, children in INGREDIENT_HIERARCHY.items()
+        if parent in new_id
+        for child in children
+        if child in new_id and child != parent
+    })
+    handle, out = writer(
+        TEMP / "ingredient_hierarchy.csv",
+        ["parent_ingredient_id", "child_ingredient_id"],
+    )
+    with handle:
+        for parent_id, child_id in hierarchy_pairs:
+            out.writerow({
+                "parent_ingredient_id": parent_id,
+                "child_ingredient_id": child_id,
+            })
+
+    parents_by_child: dict[int, set[int]] = defaultdict(set)
+    for parent_id, child_id in hierarchy_pairs:
+        parents_by_child[child_id].add(parent_id)
+
+    def ancestors(ingredient_id: int) -> set[int]:
+        result: set[int] = set()
+        stack = list(parents_by_child.get(ingredient_id, set()))
+        while stack:
+            parent_id = stack.pop()
+            if parent_id in result:
+                continue
+            result.add(parent_id)
+            stack.extend(parents_by_child.get(parent_id, set()))
+        return result
+
+    # 第一遍扫描全部菜谱用料：采集复核样本、直接/拆分食材，并据此决定菜谱保留集合。
     samples_text: dict[int, list[str]] = defaultdict(list)
     samples_dish: dict[int, list[str]] = defaultdict(list)
-    main_count = Counter()
-    role_count = Counter()
-    di_fields = ["id", "dish_id", "ingredient_id", "raw_name", "raw_text", "quantity", "role", "grams", "grams_source"]
-    handle, out = writer(TEMP / "dish_ingredients.csv", di_fields)
+    direct_by_dish: dict[int, set[int]] = defaultdict(set)
+    search_rows: dict[tuple[int, int], tuple[int, str]] = {}
     source_di_count = 0
-    with handle, (SOURCE / "dish_ingredients.csv").open("r", encoding="utf-8-sig", newline="") as src:
-        for new_rel_id, rel in enumerate(csv.DictReader(src), 1):
+    with (SOURCE / "dish_ingredients.csv").open("r", encoding="utf-8-sig", newline="") as src:
+        for source_rel_id, rel in enumerate(csv.DictReader(src), 1):
             source_di_count += 1
+            dish_id = int(rel["dish_id"])
             old_id = int(rel["ingredient_id"]) if rel.get("ingredient_id") else 0
             action = action_by_old.get(old_id)
             if action and len(samples_text[old_id]) < 3:
-                if rel.get("raw_text") not in samples_text[old_id]: samples_text[old_id].append(rel.get("raw_text", ""))
-                if rel.get("dish_id") not in samples_dish[old_id]: samples_dish[old_id].append(rel.get("dish_id", ""))
-            rel["id"] = new_rel_id
+                if rel.get("raw_text") not in samples_text[old_id]:
+                    samples_text[old_id].append(rel.get("raw_text", ""))
+                if rel.get("dish_id") not in samples_dish[old_id]:
+                    samples_dish[old_id].append(rel.get("dish_id", ""))
+
+            resolved: list[tuple[int, str]] = []
+            if action and action["action"] in {"KEEP", "MERGE"}:
+                resolved.append((int(action["new_id"]), "direct"))
+            elif action and action["action"] == "SPLIT":
+                resolved.extend(
+                    (int(value), "split")
+                    for value in str(action.get("new_id", "")).split("|")
+                    if value
+                )
+
+            for ingredient_id, match_type in resolved:
+                direct_by_dish[dish_id].add(ingredient_id)
+                key = (dish_id, ingredient_id)
+                existing = search_rows.get(key)
+                priority = {"direct": 0, "split": 1, "ancestor": 2}
+                if existing is None or priority[match_type] < priority[existing[1]]:
+                    search_rows[key] = (ingredient_id, match_type)
+                for parent_id in ancestors(ingredient_id):
+                    search_rows.setdefault(
+                        (dish_id, parent_id), (ingredient_id, "ancestor")
+                    )
+
+    kept_dish_ids = set(direct_by_dish)
+    main_count = {dish_id: len(ids) for dish_id, ids in direct_by_dish.items()}
+    search_count = Counter(dish_id for dish_id, _ in search_rows)
+
+    # 第二遍只输出仍有有效基础食材的菜谱用料；删除菜谱的全部用料同步退出。
+    role_count = Counter()
+    di_fields = ["id", "dish_id", "ingredient_id", "raw_name", "raw_text", "quantity", "role", "grams", "grams_source"]
+    handle, out = writer(TEMP / "dish_ingredients.csv", di_fields)
+    output_di_count = 0
+    with handle, (SOURCE / "dish_ingredients.csv").open("r", encoding="utf-8-sig", newline="") as src:
+        for rel in csv.DictReader(src):
+            dish_id = int(rel["dish_id"])
+            if dish_id not in kept_dish_ids:
+                continue
+            output_di_count += 1
+            old_id = int(rel["ingredient_id"]) if rel.get("ingredient_id") else 0
+            action = action_by_old.get(old_id)
+            rel["id"] = output_di_count
             if action and action["action"] in {"KEEP", "MERGE"}:
                 rel["ingredient_id"] = action["new_id"]
                 rel["role"] = "main"
-                main_count[int(rel["dish_id"])] += 1
             elif action and action["action"] == "DROP" and action["drop_type"] == "seasoning":
                 rel["ingredient_id"] = ""
                 rel["role"] = "seasoning"
@@ -603,6 +741,19 @@ def main() -> int:
                     rel["grams_source"] = "split_unknown"
             role_count[rel["role"]] += 1
             out.writerow(rel)
+
+    handle, out = writer(
+        TEMP / "dish_ingredient_search.csv",
+        ["dish_id", "ingredient_id", "source_ingredient_id", "match_type"],
+    )
+    with handle:
+        for (dish_id, ingredient_id), (source_id, match_type) in sorted(search_rows.items()):
+            out.writerow({
+                "dish_id": dish_id,
+                "ingredient_id": ingredient_id,
+                "source_ingredient_id": source_id,
+                "match_type": match_type,
+            })
 
     drop_fields = ["old_id", "name", "usage_count", "category_major", "category_sub", "drop_type", "reason"]
     review_fields = ["old_id", "name", "usage_count", "category_major", "possible_candidates", "sample_raw_text", "sample_dish_ids", "reason"]
@@ -646,29 +797,64 @@ def main() -> int:
             for ing, other in pairs: out.writerow({"ingredient_id": ing, second_col: other})
         rel_stats[filename] = (len(source_rel), len(pairs))
 
-    # 菜品文本字段保持原值，只新增 main_ingredient_count，不改 ingredient_count 语义。
+    # 只保留至少关联一个确定基础食材（含确定 SPLIT）的菜谱。
+    # 保留原 dish id，避免外部收藏等引用因重编号整体错位。
+    dropped_dishes = []
+    kept_dish_count = 0
     with (SOURCE / "dishes.csv").open("r", encoding="utf-8-sig", newline="") as src:
         rd = csv.DictReader(src); dish_fields = list(rd.fieldnames or [])
         insert_at = dish_fields.index("total_weight_g")
         dish_fields.insert(insert_at, "main_ingredient_count")
+        dish_fields.insert(insert_at + 1, "search_ingredient_count")
         handle, out = writer(TEMP / "dishes.csv", dish_fields)
         with handle:
             for row in rd:
-                row["main_ingredient_count"] = main_count[int(row["id"])]
+                dish_id = int(row["id"])
+                if dish_id not in kept_dish_ids:
+                    dropped_dishes.append({
+                        "id": dish_id,
+                        "dish_name": row["dish_name"],
+                        "ingredient_count": row.get("ingredient_count", ""),
+                        "reason": "没有可确定关联的基础原生食材",
+                        "ingredient_text": row.get("ingredient_text", ""),
+                    })
+                    continue
+                kept_dish_count += 1
+                row["main_ingredient_count"] = main_count[dish_id]
+                row["search_ingredient_count"] = search_count[dish_id]
                 out.writerow(row)
 
-    # 旧菜品营养只做版本标记，绝不使用部分核心食材重新估算。
+    handle, out = writer(
+        TEMP / "dropped_dishes.csv",
+        ["id", "dish_name", "ingredient_count", "reason", "ingredient_text"],
+    )
+    with handle:
+        out.writerows(dropped_dishes)
+
+    # 删除菜谱时同步删除营养；保留菜谱仍沿用 legacy，绝不伪造部分营养。
     with (SOURCE / "dish_nutrition.csv").open("r", encoding="utf-8-sig", newline="") as src:
         rd = csv.DictReader(src); dn_fields = list(rd.fieldnames or []) + ["nutrition_version"]
         handle, out = writer(TEMP / "dish_nutrition.csv", dn_fields)
         dn_count = 0
         with handle:
             for row in rd:
+                if int(row["dish_id"]) not in kept_dish_ids:
+                    continue
                 dn_count += 1; row["nutrition_version"] = "legacy"; out.writerow(row)
 
-    # 与食材清洗无关的字典/关联保持原样。
-    for filename in ["tcm_effects.csv", "target_groups.csv", "tags.csv", "dish_tags.csv"]:
+    # 字典保持原样；菜谱标签必须按保留菜谱同步过滤。
+    for filename in ["tcm_effects.csv", "target_groups.csv", "tags.csv"]:
         shutil.copy2(SOURCE / filename, TEMP / filename)
+    source_dish_tag_count = 0
+    dish_tag_count = 0
+    handle, out = writer(TEMP / "dish_tags.csv", ["dish_id", "tag_id"])
+    with handle, (SOURCE / "dish_tags.csv").open("r", encoding="utf-8-sig", newline="") as src:
+        for row in csv.DictReader(src):
+            source_dish_tag_count += 1
+            if int(row["dish_id"]) not in kept_dish_ids:
+                continue
+            dish_tag_count += 1
+            out.writerow(row)
 
     # 排除表由本轮动作重新生成，理由可审计。
     season_out = [r for r in dropped if r["drop_type"] == "seasoning"]
@@ -691,7 +877,7 @@ def main() -> int:
     valid_ing_ids = set(new_id.values())
     orphan_ingredients = 0
     orphan_dishes = 0
-    dish_ids = {int(r["id"]) for r in read_csv(SOURCE / "dishes.csv")}
+    dish_ids = {int(r["id"]) for r in read_csv(TEMP / "dishes.csv")}
     with (TEMP / "dish_ingredients.csv").open("r", encoding="utf-8-sig", newline="") as fh:
         for rel in csv.DictReader(fh):
             if rel["ingredient_id"] and int(rel["ingredient_id"]) not in valid_ing_ids: orphan_ingredients += 1
@@ -700,6 +886,23 @@ def main() -> int:
     group_ids = {int(r["id"]) for r in read_csv(TEMP / "target_groups.csv")}
     orphan_effects = sum(1 for r in read_csv(TEMP / "ingredient_effects.csv") if int(r["ingredient_id"]) not in valid_ing_ids or int(r["effect_id"]) not in effect_ids)
     orphan_groups = sum(1 for r in read_csv(TEMP / "ingredient_groups.csv") if int(r["ingredient_id"]) not in valid_ing_ids or int(r["group_id"]) not in group_ids)
+    hierarchy_rows = read_csv(TEMP / "ingredient_hierarchy.csv")
+    orphan_hierarchy = sum(
+        1 for r in hierarchy_rows
+        if int(r["parent_ingredient_id"]) not in valid_ing_ids
+        or int(r["child_ingredient_id"]) not in valid_ing_ids
+        or r["parent_ingredient_id"] == r["child_ingredient_id"]
+    )
+    search_data = read_csv(TEMP / "dish_ingredient_search.csv")
+    orphan_search = sum(
+        1 for r in search_data
+        if int(r["dish_id"]) not in dish_ids
+        or int(r["ingredient_id"]) not in valid_ing_ids
+        or int(r["source_ingredient_id"]) not in valid_ing_ids
+    )
+    duplicate_search = len(search_data) - len({
+        (r["dish_id"], r["ingredient_id"]) for r in search_data
+    })
     duplicate_names = len(ordered_names) - len(main_names)
     duplicate_rel = source_di_count - len({})  # 行 ID 已重新连续生成；保留所有原始用料行。
 
@@ -718,13 +921,29 @@ def main() -> int:
     nutrition_covered = sum(1 for name in ordered_names if canonical_source[name].get("能量kcal") not in NULLISH)
     effects_covered = len({int(r["ingredient_id"]) for r in read_csv(TEMP / "ingredient_effects.csv")})
 
-    if failed_present or failed_absent or not continuous or any([orphan_ingredients, orphan_dishes, orphan_effects, orphan_groups, duplicate_names]) or not all(reverse_counts.values()) or not all(nutrition_check.values()):
-        raise RuntimeError({"failed_present": failed_present, "failed_absent": failed_absent, "continuous": continuous, "orphans": [orphan_ingredients, orphan_dishes, orphan_effects, orphan_groups], "reverse_counts": reverse_counts, "nutrition_check": nutrition_check})
+    # 通用“鸡肉”必须覆盖鸡腿、鸡胸肉、鸡翅菜谱，但不伪造原始用料行。
+    chicken_id = new_id["鸡肉"]
+    chicken_children = {new_id[n] for n in ["鸡腿", "鸡胸肉", "鸡翅"]}
+    child_dishes = {
+        int(r["dish_id"]) for r in search_data
+        if int(r["ingredient_id"]) in chicken_children and r["match_type"] != "ancestor"
+    }
+    chicken_dishes = {
+        int(r["dish_id"]) for r in search_data
+        if int(r["ingredient_id"]) == chicken_id
+    }
+    chicken_expansion_ok = bool(child_dishes) and child_dishes <= chicken_dishes
+
+    if failed_present or failed_absent or not continuous or any([
+        orphan_ingredients, orphan_dishes, orphan_effects, orphan_groups,
+        orphan_hierarchy, orphan_search, duplicate_search, duplicate_names,
+    ]) or not all(reverse_counts.values()) or not all(nutrition_check.values()) or not chicken_expansion_ok:
+        raise RuntimeError({"failed_present": failed_present, "failed_absent": failed_absent, "continuous": continuous, "orphans": [orphan_ingredients, orphan_dishes, orphan_effects, orphan_groups, orphan_hierarchy, orphan_search], "reverse_counts": reverse_counts, "nutrition_check": nutrition_check, "chicken_expansion_ok": chicken_expansion_ok})
 
     counts = Counter(str(a["action"]) for a in actions)
     drop_types = Counter(str(a["drop_type"]) for a in actions if a["action"] == "DROP")
     mapped_old = counts["KEEP"] + counts["MERGE"]
-    relation_coverage = role_count["main"] / source_di_count if source_di_count else 0
+    relation_coverage = role_count["main"] / output_di_count if output_di_count else 0
     report = f"""# 菜谱数据库 V2 清洗报告
 
 ## 1. 处理范围与原则
@@ -767,15 +986,24 @@ def main() -> int:
 
 | 指标 | 数量 |
 |---|---:|
-| dish_ingredients 总数 | {source_di_count:,} |
+| 原菜谱总数 | 200,000 |
+| 保留菜谱 | {kept_dish_count:,} |
+| 删除零有效食材菜谱 | {len(dropped_dishes):,} |
+| 原 dish_ingredients | {source_di_count:,} |
+| 新 dish_ingredients | {output_di_count:,} |
 | main | {role_count['main']:,} |
 | seasoning | {role_count['seasoning']:,} |
 | other | {role_count['other']:,} |
-| 菜谱关联覆盖率（main/全部用料） | {relation_coverage:.2%} |
+| 菜谱核心关联覆盖率（main/保留用料） | {relation_coverage:.2%} |
+| 菜谱搜索关联 | {len(search_data):,} |
+| 食材父子关系 | {len(hierarchy_pairs):,} |
+| 原 dish_tags / 新 dish_tags | {source_dish_tag_count:,} / {dish_tag_count:,} |
 
-`raw_name`、`raw_text`、`quantity` 均保留；SPLIT 因无法可靠分摊克数，`grams` 置空并标记 `split_unknown`。原 `ingredient_count` 不变，新增 `main_ingredient_count`。
+保留菜谱的 `raw_name`、`raw_text`、`quantity` 均保留；SPLIT 因无法可靠分摊克数，`grams` 置空并标记 `split_unknown`。原 `ingredient_count` 不变，新增 `main_ingredient_count` 与 `search_ingredient_count`。删除清单见 `dropped_dishes.csv`。
 
 反向菜谱关联回归：{', '.join(f'{k}={v:,}' for k,v in reverse_counts.items())}。
+
+“鸡肉”搜索展开回归：鸡腿/鸡胸肉/鸡翅菜谱共 {len(child_dishes):,} 道，全部可由鸡肉检索到。
 
 ## 5. 其他关联与覆盖率
 
@@ -796,6 +1024,9 @@ def main() -> int:
 - dish_ingredients 菜品外键孤儿：{orphan_dishes}。
 - ingredient_effects 外键孤儿：{orphan_effects}。
 - ingredient_groups 外键孤儿：{orphan_groups}。
+- ingredient_hierarchy 外键/自环错误：{orphan_hierarchy}。
+- dish_ingredient_search 外键孤儿：{orphan_search}，重复键：{duplicate_search}。
+- 删除菜谱在 dish_ingredients、dish_tags、dish_nutrition、dish_ingredient_search 中残留：0。
 - 指南“必须存在”清单：全部通过。
 - 指南“必须不存在”清单：全部通过。
 - 全部 16,693 个旧名称均分配 KEEP/MERGE/DROP/SPLIT/REVIEW 动作。
@@ -809,7 +1040,7 @@ def main() -> int:
     (TEMP / "CLEANING_REPORT.md").write_text(report, encoding="utf-8")
 
     # 输出清单，便于开发验收。
-    readme = """# cleaned_v2 交付说明\n\n本目录由 `../scripts/clean_v2.py` 从原始交付目录确定性生成。\n\n- 先阅读 `CLEANING_REPORT.md`。\n- `main_ingredient.csv` 使用明确、连续的新 ID。\n- `ingredient_id_map.csv` 是所有旧 ID 的审计映射。\n- `review_ingredients.csv` 必须人工复核后才能扩大主表。\n- 导入前先执行 `schema.sql`，再配置环境变量运行 `load_to_mysql.py`。\n"""
+    readme = """# cleaned_v2 交付说明\n\n本目录由 `../scripts/clean_v2.py` 从原始交付目录确定性生成。\n\n- 先阅读 `CLEANING_REPORT.md`。\n- `main_ingredient.csv` 使用明确、连续的新 ID。\n- `ingredient_id_map.csv` 是所有旧 ID 的审计映射。\n- `review_ingredients.csv` 必须人工复核后才能扩大主表。\n- `dropped_dishes.csv` 是零有效基础食材菜谱的删除审计清单。\n- `ingredient_hierarchy.csv` 保存通用食材与具体部位/品种关系。\n- `dish_ingredient_search.csv` 已展开父级搜索，例如鸡肉可查到鸡腿、鸡胸肉和鸡翅菜谱。\n- 导入前先执行 `schema.sql`，再配置环境变量运行 `load_to_mysql.py`。\n"""
     (TEMP / "README.md").write_text(readme, encoding="utf-8")
 
     # 原子替换：所有校验通过后才替换上次成功结果。
@@ -825,7 +1056,7 @@ def main() -> int:
         for path in sorted(OUTPUT.rglob("*")):
             if path.is_file(): archive.write(path, Path("cleaned_v2") / path.relative_to(OUTPUT))
     os.replace(zip_tmp, ZIP_PATH)
-    print(f"OK old={len(rows)} new={len(ordered_names)} actions={dict(counts)} roles={dict(role_count)} output={OUTPUT}")
+    print(f"OK old={len(rows)} new={len(ordered_names)} dishes={kept_dish_count}/{kept_dish_count + len(dropped_dishes)} actions={dict(counts)} roles={dict(role_count)} output={OUTPUT}")
     return 0
 
 

@@ -31,15 +31,32 @@ CREATE TABLE ingredient_groups (
   ingredient_id INT NOT NULL, group_id INT NOT NULL, PRIMARY KEY(ingredient_id,group_id),
   FOREIGN KEY(ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE, FOREIGN KEY(group_id) REFERENCES target_groups(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE ingredient_hierarchy (
+  parent_ingredient_id INT NOT NULL, child_ingredient_id INT NOT NULL,
+  PRIMARY KEY(parent_ingredient_id,child_ingredient_id),
+  FOREIGN KEY(parent_ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  FOREIGN KEY(child_ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  CHECK(parent_ingredient_id <> child_ingredient_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dishes (
   id INT PRIMARY KEY, dish_name VARCHAR(255) NOT NULL, description TEXT, cuisine VARCHAR(50), ingredient_text MEDIUMTEXT, instruction_text MEDIUMTEXT,
-  ingredient_count INT NOT NULL DEFAULT 0, main_ingredient_count INT NOT NULL DEFAULT 0, total_weight_g DECIMAL(12,2), KEY idx_dish_name(dish_name)
+  ingredient_count INT NOT NULL DEFAULT 0, main_ingredient_count INT NOT NULL DEFAULT 0,
+  search_ingredient_count INT NOT NULL DEFAULT 0, total_weight_g DECIMAL(12,2), KEY idx_dish_name(dish_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dish_ingredients (
   id BIGINT PRIMARY KEY, dish_id INT NOT NULL, ingredient_id INT NULL, raw_name VARCHAR(255) NOT NULL, raw_text VARCHAR(500) NOT NULL,
   quantity VARCHAR(100), role VARCHAR(20) NOT NULL, grams DECIMAL(12,3), grams_source VARCHAR(30),
   FOREIGN KEY(dish_id) REFERENCES dishes(id) ON DELETE CASCADE, FOREIGN KEY(ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
   KEY idx_di_dish(dish_id), KEY idx_di_ing(ingredient_id), KEY idx_di_role(role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE dish_ingredient_search (
+  dish_id INT NOT NULL, ingredient_id INT NOT NULL, source_ingredient_id INT NOT NULL,
+  match_type VARCHAR(20) NOT NULL,
+  PRIMARY KEY(dish_id,ingredient_id),
+  FOREIGN KEY(dish_id) REFERENCES dishes(id) ON DELETE CASCADE,
+  FOREIGN KEY(ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  FOREIGN KEY(source_ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  KEY idx_dis_ingredient(ingredient_id), KEY idx_dis_source(source_ingredient_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE tags (id INT PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, kind VARCHAR(20)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dish_tags (
