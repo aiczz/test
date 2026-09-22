@@ -15,6 +15,16 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+/// 编译期注入的后端地址（可选）。
+///
+/// 用法：
+///     flutter run -d chrome --dart-define=API_BASE=http://8.148.69.56:8000
+///
+/// 不传就退回下面的平台默认值，所以队友本地开发照旧、完全不受影响。
+/// 有了它，就能让前端指向任意后端（公网那台、队友的机器、局域网 IP），
+/// 而不必去改这个文件。
+const String _apiBaseOverride = String.fromEnvironment('API_BASE');
+
 /// 后端地址。
 ///
 /// - **Android 模拟器**：必须用 `10.0.2.2` —— 模拟器里的 127.0.0.1 指模拟器自己
@@ -22,6 +32,8 @@ import 'package:flutter/foundation.dart';
 /// - **Android 真机**：改成电脑的局域网 IP，如 `http://192.168.1.5:8000`
 ///   （电脑上 `ipconfig` 查 IPv4；手机和电脑连同一个 WiFi）
 String get defaultApiBase {
+  // 优先级最高：命令行 --dart-define=API_BASE=...
+  if (_apiBaseOverride.isNotEmpty) return _apiBaseOverride;
   if (kIsWeb) return 'http://127.0.0.1:8000';
   if (defaultTargetPlatform == TargetPlatform.android) {
     return 'http://10.0.2.2:8000';
