@@ -18,8 +18,15 @@ TABLES = [
  ("ingredient_effects","ingredient_effects.csv",["ingredient_id","effect_id"]),
  ("ingredient_groups","ingredient_groups.csv",["ingredient_id","group_id"]),
  ("ingredient_hierarchy","ingredient_hierarchy.csv",["parent_ingredient_id","child_ingredient_id"]),
+ ("ingredient_catalog","ingredient_catalog.csv",["id","name","ingredient_type","core_ingredient_id","category","subcategory","is_core_raw","is_edible","review_status","usage_count","reason"]),
+ ("ingredient_catalog_aliases","ingredient_catalog_aliases.csv",["alias_name","catalog_ingredient_id","canonical_name","usage_count","source"]),
+ ("seasonal_calendar","seasonal_calendar.csv",["id","level","name","gregorian_time","lunar_time","season","sort_order","description"]),
+ ("seasonal_food","seasonal_food.csv",["id","calendar_id","level","time_name","season","category","name","note","recommendation_reason","source","entity_type","catalog_ingredient_id","core_ingredient_id","match_status"]),
+ ("seasonal_knowledge","seasonal_knowledge.csv",["id","calendar_id","seasonal_food_id","time_name","level","season","category","name","content","source","knowledge_type"]),
  ("dishes","dishes.csv",["id","dish_name","description","cuisine","ingredient_text","instruction_text","ingredient_count","main_ingredient_count","search_ingredient_count","total_weight_g"]),
- ("dish_ingredients","dish_ingredients.csv",["id","dish_id","ingredient_id","raw_name","raw_text","quantity","role","grams","grams_source"]),
+ ("seasonal_dish_links","seasonal_dish_links.csv",["seasonal_food_id","dish_id","match_type"]),
+ ("dish_ingredients","dish_ingredients.csv",["id","dish_id","ingredient_id","catalog_ingredient_id","raw_name","raw_text","quantity","role","grams","grams_source"]),
+ ("dish_ingredient_components","dish_ingredient_components.csv",["dish_ingredient_id","component_ingredient_id"]),
  ("dish_ingredient_search","dish_ingredient_search.csv",["dish_id","ingredient_id","source_ingredient_id","match_type"]),
  ("tags","tags.csv",["id","name","kind"]), ("dish_tags","dish_tags.csv",["dish_id","tag_id"]),
  ("dish_nutrition","dish_nutrition.csv",["dish_id","total_weight_g","energy_kcal","protein_g","fat_g","cho_g","dietary_fiber_g","ca_mg","fe_mg","na_mg","matched_ratio","weight_confidence","explicit_count","estimated_count","vague_count","suspect","nutrition_version"]),
@@ -45,7 +52,11 @@ def main():
             if args.verify:
                 for table,_,_ in TABLES: cur.execute(f"SELECT COUNT(*) FROM `{table}`"); print(table,cur.fetchone()[0])
                 cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN dishes x ON x.id=d.dish_id WHERE x.id IS NULL"); print("orphan_dish",cur.fetchone()[0])
-                cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN ingredients i ON i.id=d.ingredient_id WHERE d.ingredient_id IS NOT NULL AND i.id IS NULL"); print("orphan_ingredient",cur.fetchone()[0]); return
+                cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN ingredients i ON i.id=d.ingredient_id WHERE d.ingredient_id IS NOT NULL AND i.id IS NULL"); print("orphan_ingredient",cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN ingredient_catalog c ON c.id=d.catalog_ingredient_id WHERE c.id IS NULL"); print("orphan_catalog",cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM seasonal_food f LEFT JOIN seasonal_calendar c ON c.id=f.calendar_id WHERE c.id IS NULL"); print("orphan_seasonal_calendar",cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM seasonal_dish_links l LEFT JOIN seasonal_food f ON f.id=l.seasonal_food_id LEFT JOIN dishes d ON d.id=l.dish_id WHERE f.id IS NULL OR d.id IS NULL"); print("orphan_seasonal_dish",cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM dish_ingredient_components c LEFT JOIN dish_ingredients d ON d.id=c.dish_ingredient_id LEFT JOIN ingredients i ON i.id=c.component_ingredient_id WHERE d.id IS NULL OR i.id IS NULL"); print("orphan_component",cur.fetchone()[0]); return
             cur.execute("SET FOREIGN_KEY_CHECKS=0")
             for table in ORDER_DELETE: cur.execute(f"DELETE FROM `{table}`")
             for table,filename,csv_cols in TABLES:

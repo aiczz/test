@@ -1,4 +1,4 @@
--- 菜谱数据库 V2：基础原生食材版（utf8mb4）
+-- 菜谱数据库 V2：核心原生食材 + 完整菜谱食材目录（utf8mb4）
 SET NAMES utf8mb4;
 
 CREATE TABLE ingredient_categories (
@@ -38,16 +38,73 @@ CREATE TABLE ingredient_hierarchy (
   FOREIGN KEY(child_ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
   CHECK(parent_ingredient_id <> child_ingredient_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE ingredient_catalog (
+  id INT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, ingredient_type VARCHAR(30) NOT NULL,
+  core_ingredient_id INT NULL, category VARCHAR(50) NOT NULL, subcategory VARCHAR(50) NOT NULL,
+  is_core_raw TINYINT(1) NOT NULL DEFAULT 0, is_edible TINYINT(1) NOT NULL DEFAULT 1,
+  review_status VARCHAR(20) NOT NULL, usage_count INT NOT NULL DEFAULT 0, reason VARCHAR(255),
+  FOREIGN KEY(core_ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
+  KEY idx_catalog_type(ingredient_type), KEY idx_catalog_core(core_ingredient_id), KEY idx_catalog_review(review_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE ingredient_catalog_aliases (
+  alias_name VARCHAR(255) NOT NULL, catalog_ingredient_id INT NOT NULL,
+  canonical_name VARCHAR(255) NOT NULL, usage_count INT NOT NULL DEFAULT 0, source VARCHAR(50) NOT NULL,
+  PRIMARY KEY(alias_name,catalog_ingredient_id),
+  FOREIGN KEY(catalog_ingredient_id) REFERENCES ingredient_catalog(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE seasonal_calendar (
+  id VARCHAR(50) PRIMARY KEY, level VARCHAR(20) NOT NULL, name VARCHAR(50) NOT NULL,
+  gregorian_time VARCHAR(100), lunar_time VARCHAR(100), season VARCHAR(10) NOT NULL,
+  sort_order INT NOT NULL, description VARCHAR(500),
+  UNIQUE KEY uk_seasonal_calendar_level_name(level,name), KEY idx_seasonal_calendar_sort(sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE seasonal_food (
+  id VARCHAR(20) PRIMARY KEY, calendar_id VARCHAR(50) NOT NULL, level VARCHAR(20) NOT NULL,
+  time_name VARCHAR(50) NOT NULL, season VARCHAR(10) NOT NULL, category VARCHAR(20) NOT NULL,
+  name VARCHAR(100) NOT NULL, note VARCHAR(500), recommendation_reason VARCHAR(500), source VARCHAR(100) NOT NULL,
+  entity_type VARCHAR(30) NOT NULL, catalog_ingredient_id INT NULL, core_ingredient_id INT NULL,
+  match_status VARCHAR(40) NOT NULL,
+  UNIQUE KEY uk_seasonal_food(calendar_id,category,name),
+  FOREIGN KEY(calendar_id) REFERENCES seasonal_calendar(id) ON DELETE CASCADE,
+  FOREIGN KEY(catalog_ingredient_id) REFERENCES ingredient_catalog(id) ON DELETE SET NULL,
+  FOREIGN KEY(core_ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
+  KEY idx_seasonal_food_name(name), KEY idx_seasonal_food_catalog(catalog_ingredient_id),
+  KEY idx_seasonal_food_season(season)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE seasonal_knowledge (
+  id VARCHAR(20) PRIMARY KEY, calendar_id VARCHAR(50) NOT NULL, seasonal_food_id VARCHAR(20) NULL,
+  time_name VARCHAR(50) NOT NULL, level VARCHAR(20) NOT NULL, season VARCHAR(10) NOT NULL,
+  category VARCHAR(30) NOT NULL, name VARCHAR(100) NOT NULL, content TEXT NOT NULL,
+  source VARCHAR(100) NOT NULL, knowledge_type VARCHAR(20) NOT NULL,
+  FOREIGN KEY(calendar_id) REFERENCES seasonal_calendar(id) ON DELETE CASCADE,
+  FOREIGN KEY(seasonal_food_id) REFERENCES seasonal_food(id) ON DELETE SET NULL,
+  KEY idx_seasonal_knowledge_calendar(calendar_id), KEY idx_seasonal_knowledge_food(seasonal_food_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dishes (
   id INT PRIMARY KEY, dish_name VARCHAR(255) NOT NULL, description TEXT, cuisine VARCHAR(50), ingredient_text MEDIUMTEXT, instruction_text MEDIUMTEXT,
   ingredient_count INT NOT NULL DEFAULT 0, main_ingredient_count INT NOT NULL DEFAULT 0,
   search_ingredient_count INT NOT NULL DEFAULT 0, total_weight_g DECIMAL(12,2), KEY idx_dish_name(dish_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE seasonal_dish_links (
+  seasonal_food_id VARCHAR(20) NOT NULL, dish_id INT NOT NULL, match_type VARCHAR(30) NOT NULL,
+  PRIMARY KEY(seasonal_food_id,dish_id),
+  FOREIGN KEY(seasonal_food_id) REFERENCES seasonal_food(id) ON DELETE CASCADE,
+  FOREIGN KEY(dish_id) REFERENCES dishes(id) ON DELETE CASCADE,
+  KEY idx_seasonal_dish_links_dish(dish_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dish_ingredients (
-  id BIGINT PRIMARY KEY, dish_id INT NOT NULL, ingredient_id INT NULL, raw_name VARCHAR(255) NOT NULL, raw_text VARCHAR(500) NOT NULL,
+  id BIGINT PRIMARY KEY, dish_id INT NOT NULL, ingredient_id INT NULL, catalog_ingredient_id INT NOT NULL,
+  raw_name VARCHAR(255) NOT NULL, raw_text VARCHAR(500) NOT NULL,
   quantity VARCHAR(100), role VARCHAR(20) NOT NULL, grams DECIMAL(12,3), grams_source VARCHAR(30),
   FOREIGN KEY(dish_id) REFERENCES dishes(id) ON DELETE CASCADE, FOREIGN KEY(ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
-  KEY idx_di_dish(dish_id), KEY idx_di_ing(ingredient_id), KEY idx_di_role(role)
+  FOREIGN KEY(catalog_ingredient_id) REFERENCES ingredient_catalog(id) ON DELETE RESTRICT,
+  KEY idx_di_dish(dish_id), KEY idx_di_ing(ingredient_id), KEY idx_di_catalog(catalog_ingredient_id), KEY idx_di_role(role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE dish_ingredient_components (
+  dish_ingredient_id BIGINT NOT NULL, component_ingredient_id INT NOT NULL,
+  PRIMARY KEY(dish_ingredient_id,component_ingredient_id),
+  FOREIGN KEY(dish_ingredient_id) REFERENCES dish_ingredients(id) ON DELETE CASCADE,
+  FOREIGN KEY(component_ingredient_id) REFERENCES ingredients(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE dish_ingredient_search (
   dish_id INT NOT NULL, ingredient_id INT NOT NULL, source_ingredient_id INT NOT NULL,
