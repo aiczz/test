@@ -87,6 +87,9 @@ class AuthStore extends ChangeNotifier {
   /// 手机号登录写的假 token 前缀（这套流程目前是纯前端本地闭环）。
   static const String phoneTokenPrefix = 'demo-phone-';
 
+  /// 后端离线时用 admin 账号登录写的假 token（见 [login] 的离线分支）。
+  static const String localAdminToken = 'local-admin-token';
+
   String? _token;
   AuthUser? _user;
   bool _restored = false;
@@ -109,14 +112,16 @@ class AuthStore extends ChangeNotifier {
 
   /// 当前登录是不是「后端不认的本地演示登录」。
   ///
-  /// 两种情况会写这种 token：
+  /// 三种情况会写这种 token：
   ///   1. 后端离线时点「演示账号一键登录」—— 公网静态站永远走这条
   ///   2. 手机号验证码登录 —— 这套流程目前是纯前端本地闭环，后端没有对应接口
+  ///   3. 后端离线时用 admin 账号登录 —— 同上，只在浏览器里造一个演示管理员会话
   ///
   /// 这类会话能进 App，但**所有需要登录的接口都会 401**：收藏数、我的食材、
   /// 管理后台全是空的。所以界面必须如实标注，不能让用户以为数据被保存了。
   bool get isOfflineDemo =>
       _token == offlineDemoToken ||
+      _token == localAdminToken ||
       (_token?.startsWith(phoneTokenPrefix) ?? false);
 
   /// token 失效（过期 / 账号被封禁）时调用：清掉本地登录态，并留一句提示。
@@ -251,7 +256,7 @@ class AuthStore extends ChangeNotifier {
     if (!BackendStatus.instance.online) {
       if (username == adminUsername && password == adminPassword) {
         await _persist(
-          'local-admin-token',
+          localAdminToken,
           const AuthUser(
             id: -1,
             username: adminUsername,
