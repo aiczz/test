@@ -77,7 +77,7 @@ class _ProfilePageState extends State<ProfilePage> {
       const SnackBar(
         content: Text('家庭档案已保存 —— 菜单与购物清单已按新约束重算'),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: Color(0xFF163A26),
+        backgroundColor: orange900,
       ),
     );
   }
@@ -333,7 +333,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       value: _lowSodium,
-                      activeThumbColor: green700,
+                      activeThumbColor: orange700,
                       title: const Text(
                         '低钠约束',
                         style: TextStyle(fontWeight: FontWeight.w800),
@@ -344,7 +344,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       secondary: const Icon(
                         Icons.favorite_outline,
-                        color: green700,
+                        color: orange700,
                       ),
                       onChanged: (value) => setState(() => _lowSodium = value),
                     ),
@@ -435,10 +435,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     SwitchListTile.adaptive(
                       contentPadding: const EdgeInsets.fromLTRB(16, 3, 12, 3),
                       value: _reminders,
-                      activeThumbColor: green700,
+                      activeThumbColor: orange700,
                       secondary: const Icon(
                         Icons.notifications_none,
-                        color: green700,
+                        color: orange700,
                       ),
                       title: const Text(
                         '用餐与时令提醒',
@@ -546,7 +546,7 @@ class _ProfileHero extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 21,
                         fontWeight: FontWeight.w900,
-                        color: green900,
+                        color: orange900,
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -584,7 +584,7 @@ class _AccountCard extends StatelessWidget {
         const SnackBar(
           content: Text('登录成功 —— 家庭档案与收藏已同步'),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: Color(0xFF163A26),
+          backgroundColor: orange900,
         ),
       );
     }
@@ -608,13 +608,13 @@ class _AccountCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: green100,
+                    color: orange100,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
                     Icons.login_rounded,
                     size: 18,
-                    color: green700,
+                    color: orange700,
                   ),
                 ),
                 const SizedBox(width: 11),
@@ -641,7 +641,7 @@ class _AccountCard extends StatelessWidget {
                 FilledButton(
                   onPressed: () => _openLogin(context),
                   style: FilledButton.styleFrom(
-                    backgroundColor: green700,
+                    backgroundColor: orange700,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 9,
@@ -668,13 +668,13 @@ class _AccountCard extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: green100,
+                  color: orange100,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.verified_user_outlined,
                   size: 18,
-                  color: green700,
+                  color: orange700,
                 ),
               ),
               const SizedBox(width: 11),
@@ -712,7 +712,7 @@ class _AccountCard extends StatelessWidget {
                 TextButton(
                   onPressed: () => AdminPage.open(context),
                   style: TextButton.styleFrom(
-                    foregroundColor: green700,
+                    foregroundColor: orange700,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: const Size(0, 34),
                     visualDensity: VisualDensity.compact,
@@ -730,7 +730,7 @@ class _AccountCard extends StatelessWidget {
                       const SnackBar(
                         content: Text('已退出登录'),
                         behavior: SnackBarBehavior.floating,
-                        backgroundColor: Color(0xFF163A26),
+                        backgroundColor: orange900,
                       ),
                     );
                   }
@@ -758,7 +758,7 @@ class _LocalOnlyBadge extends StatelessWidget {
       decoration: tagDeco(),
       child: const Text(
         '本地匿名档案',
-        style: TextStyle(fontSize: 10, color: green700),
+        style: TextStyle(fontSize: 10, color: orange700),
       ),
     );
   }
@@ -914,7 +914,7 @@ class _StatsRowState extends State<_StatsRow> {
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       child: Column(
                         children: [
-                          Icon(stats[i].$1, size: 18, color: green700),
+                          Icon(stats[i].$1, size: 18, color: orange700),
                           const SizedBox(height: 4),
                           Text(
                             stats[i].$2,
@@ -969,12 +969,12 @@ class _WeeklyCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(17),
             decoration: BoxDecoration(
-              color: green50,
+              color: orange50,
               borderRadius: BorderRadius.circular(rBlock),
             ),
             child: Row(
               children: [
-                const Icon(Icons.bar_chart_rounded, color: green700, size: 30),
+                const Icon(Icons.bar_chart_rounded, color: orange700, size: 30),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1002,7 +1002,7 @@ class _WeeklyCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: green700),
+                const Icon(Icons.chevron_right, color: orange700),
               ],
             ),
           ),
@@ -1027,7 +1027,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: green700),
+        Icon(icon, color: orange700),
         const SizedBox(width: 9),
         Expanded(
           child: Column(
@@ -1071,7 +1071,7 @@ class _CounterRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: green700),
+        Icon(icon, color: orange700),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -1124,7 +1124,7 @@ class _SliderSetting extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, color: green700),
+            Icon(icon, color: orange700),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -1135,7 +1135,7 @@ class _SliderSetting extends StatelessWidget {
             Text(
               value,
               style: const TextStyle(
-                color: green700,
+                color: orange700,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1146,7 +1146,7 @@ class _SliderSetting extends StatelessWidget {
           max: max,
           divisions: divisions,
           value: sliderValue,
-          activeColor: green700,
+          activeColor: orange700,
           onChanged: onChanged,
         ),
       ],
@@ -1226,7 +1226,7 @@ class _MenuRow extends StatelessWidget {
       color: Colors.transparent,
       child: ListTile(
         onTap: onTap,
-        leading: Icon(icon, color: green700),
+        leading: Icon(icon, color: orange700),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
         trailing: const Icon(Icons.chevron_right),

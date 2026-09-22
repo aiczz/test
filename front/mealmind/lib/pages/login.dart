@@ -143,7 +143,7 @@ class _LoginPageState extends State<LoginPage> {
         const SnackBar(
           content: Text('注册成功，请登录'),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: green900,
+          backgroundColor: orange900,
         ),
       );
   }
@@ -183,7 +183,7 @@ class _LoginPageState extends State<LoginPage> {
       const SnackBar(
         content: Text('演示验证码已发送：123456'),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: green900,
+        backgroundColor: orange900,
       ),
     );
   }
@@ -328,7 +328,7 @@ class _LoginPageState extends State<LoginPage> {
             FilledButton(
               onPressed: _busy ? null : () => _submit(),
               style: FilledButton.styleFrom(
-                backgroundColor: green700,
+                backgroundColor: orange700,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -357,7 +357,7 @@ class _LoginPageState extends State<LoginPage> {
               onPressed: _busy ? null : _switchMode,
               child: Text(
                 _registerMode ? '已有账号？去登录' : '还没有账号？先注册',
-                style: const TextStyle(fontSize: 12, color: green700),
+                style: const TextStyle(fontSize: 12, color: orange700),
               ),
             ),
 
@@ -413,7 +413,7 @@ class _LoginPageState extends State<LoginPage> {
       height: 44,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: green50,
+        color: orange50,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: line),
       ),
@@ -483,8 +483,8 @@ class _LoginPageState extends State<LoginPage> {
               child: OutlinedButton(
                 onPressed: _countdown > 0 ? null : _sendCode,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: green700,
-                  side: const BorderSide(color: green700),
+                  foregroundColor: orange700,
+                  side: const BorderSide(color: orange700),
                   padding: EdgeInsets.zero,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -539,11 +539,11 @@ class _LoginPageState extends State<LoginPage> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(fontSize: 13, color: muted),
-        prefixIcon: Icon(icon, size: 18, color: green700),
+        prefixIcon: Icon(icon, size: 18, color: orange700),
         suffixIcon: suffix,
         counterText: '',
         filled: true,
-        fillColor: green50,
+        fillColor: orange50,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 14,
@@ -558,7 +558,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: green700, width: 1.4),
+          borderSide: const BorderSide(color: orange700, width: 1.4),
         ),
       ),
     );
@@ -613,13 +613,13 @@ class _LoginModeButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 16, color: selected ? green700 : muted),
+            Icon(icon, size: 16, color: selected ? orange700 : muted),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: selected ? green700 : muted,
+                color: selected ? orange700 : muted,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
               ),
             ),
@@ -645,7 +645,7 @@ class _Brand extends StatelessWidget {
           width: 62,
           height: 62,
           decoration: BoxDecoration(
-            color: green700,
+            color: orange700,
             borderRadius: BorderRadius.circular(20),
             boxShadow: cardShadow,
           ),
@@ -657,7 +657,7 @@ class _Brand extends StatelessWidget {
           style: TextStyle(
             fontSize: 27,
             fontWeight: FontWeight.w900,
-            color: green900,
+            color: orange900,
             letterSpacing: -1.2,
             height: 1,
           ),
@@ -667,7 +667,7 @@ class _Brand extends StatelessWidget {
           '顺应时令 · 智慧饮食',
           style: TextStyle(
             fontSize: 10.5,
-            color: green700,
+            color: orange700,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.2,
           ),
@@ -697,7 +697,7 @@ class _BackendHint extends StatelessWidget {
           return Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: green100,
+              color: orange100,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -705,13 +705,13 @@ class _BackendHint extends StatelessWidget {
                 const Icon(
                   Icons.check_circle_outline,
                   size: 15,
-                  color: green700,
+                  color: orange700,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '已连接后端 ${status.apiBase}',
-                    style: const TextStyle(fontSize: 11, color: green700),
+                    style: const TextStyle(fontSize: 11, color: orange700),
                   ),
                 ),
               ],
@@ -754,14 +754,14 @@ class _BackendHint extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: green50,
+                  color: orange50,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
                   'python -m uvicorn app.main:app --port 8000',
                   style: TextStyle(
                     fontSize: 10.5,
-                    color: green900,
+                    color: orange900,
                     fontFamily: 'monospace',
                   ),
                 ),

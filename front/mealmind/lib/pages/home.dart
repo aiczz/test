@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
@@ -129,10 +131,10 @@ class _ConstraintBar extends StatelessWidget {
               width: 34,
               height: 34,
               decoration: BoxDecoration(
-                color: green100,
+                color: orange100,
                 borderRadius: BorderRadius.circular(11),
               ),
-              child: const Icon(Icons.tune, size: 18, color: green700),
+              child: const Icon(Icons.tune, size: 18, color: orange700),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -164,11 +166,11 @@ class _ConstraintBar extends StatelessWidget {
               '去修改',
               style: TextStyle(
                 fontSize: 11,
-                color: green700,
+                color: orange700,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const Icon(Icons.chevron_right, size: 16, color: green700),
+            const Icon(Icons.chevron_right, size: 16, color: orange700),
           ],
         ),
       ),
@@ -195,7 +197,7 @@ class _TopBar extends StatelessWidget {
               style: TextStyle(
                 fontSize: 31,
                 fontWeight: FontWeight.w900,
-                color: green900,
+                color: orange900,
                 letterSpacing: -1.5,
                 height: 1,
               ),
@@ -205,7 +207,7 @@ class _TopBar extends StatelessWidget {
               '顺应时令 · 智慧饮食',
               style: TextStyle(
                 fontSize: 10,
-                color: green700,
+                color: orange700,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1.2,
               ),
@@ -250,7 +252,7 @@ class _Pill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: green700),
+          Icon(icon, size: 13, color: orange700),
           const SizedBox(width: 4),
           Text(text, style: const TextStyle(fontSize: 12, color: ink)),
           // 可点的 pill 加个小箭头，暗示这里能操作
@@ -294,10 +296,60 @@ class _HomeCarouselState extends State<_HomeCarousel> {
   final PageController _controller = PageController();
   int _currentPage = 0;
 
+  /// 页数：主 hero / 我的食材 / AI 助手（和 build 里的 pages 对应）
+  static const int _pageCount = 3;
+
+  /// 自动轮播节奏。4 秒是折中 ——
+  /// 太快像广告位，太慢用户会以为它就是一张静态图。
+  static const Duration _autoPlayEvery = Duration(seconds: 4);
+  static const Duration _slideDuration = Duration(milliseconds: 560);
+
+  /// 用户手动滑动之后暂停多久再恢复自动播放。
+  /// 立刻恢复的话，手还没松开它就自己跑了；
+  /// 一直不恢复的话，用户滑一下这个轮播就"死"了。
+  static const Duration _manualPause = Duration(seconds: 8);
+
+  Timer? _autoPlay;
+  Timer? _resume;
+  bool _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startAutoPlay();
+  }
+
   @override
   void dispose() {
+    // ⚠️ 两个 Timer 都必须取消。忘了这一步，页面销毁后回调仍会触发，
+    //    在已经 dispose 的 PageController 上调 animateToPage 会直接抛异常。
+    _autoPlay?.cancel();
+    _resume?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _startAutoPlay() {
+    _autoPlay?.cancel();
+    _autoPlay = Timer.periodic(_autoPlayEvery, (_) {
+      // 页面已经销毁、用户正在拖、或者还没布局好 —— 这几种情况都别动，
+      // 否则要么抛异常，要么跟用户抢方向。
+      if (!mounted || _dragging || !_controller.hasClients) return;
+      _controller.animateToPage(
+        (_currentPage + 1) % _pageCount,
+        duration: _slideDuration,
+        curve: Curves.easeInOutCubic,
+      );
+    });
+  }
+
+  void _pauseForManual() {
+    _autoPlay?.cancel();
+    _autoPlay = null;
+    _resume?.cancel();
+    _resume = Timer(_manualPause, () {
+      if (mounted) _startAutoPlay();
+    });
   }
 
   @override
@@ -328,10 +380,20 @@ class _HomeCarouselState extends State<_HomeCarousel> {
       children: [
         SizedBox(
           height: 252,
-          child: PageView(
-            controller: _controller,
-            onPageChanged: (page) => setState(() => _currentPage = page),
-            children: pages,
+          // Listener 只负责感知「用户碰了它」：一碰就让自动播放让路，
+          // 不能和用户抢方向盘。
+          child: Listener(
+            onPointerDown: (_) {
+              _dragging = true;
+              _pauseForManual();
+            },
+            onPointerUp: (_) => _dragging = false,
+            onPointerCancel: (_) => _dragging = false,
+            child: PageView(
+              controller: _controller,
+              onPageChanged: (page) => setState(() => _currentPage = page),
+              children: pages,
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -351,7 +413,7 @@ class _HomeCarouselState extends State<_HomeCarousel> {
                 height: 7,
                 margin: const EdgeInsets.symmetric(horizontal: 3),
                 decoration: BoxDecoration(
-                  color: active ? orange : const Color(0xFFD4DDD0),
+                  color: active ? orange : const Color(0xFFE3D8CB),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
@@ -412,7 +474,7 @@ class _Hero extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: green700,
+                    color: orange700,
                     letterSpacing: 0.6,
                   ),
                 ),
@@ -422,7 +484,7 @@ class _Hero extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 33,
                     fontWeight: FontWeight.w900,
-                    color: green900,
+                    color: orange900,
                     height: 1.05,
                     letterSpacing: -1.4,
                   ),
@@ -524,7 +586,7 @@ class _FeatureHero extends StatelessWidget {
               child: Icon(
                 Icons.auto_awesome_rounded,
                 size: 170,
-                color: green700.withValues(alpha: 0.10),
+                color: orange700.withValues(alpha: 0.10),
               ),
             ),
           DecoratedBox(
@@ -551,14 +613,14 @@ class _FeatureHero extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(buttonIcon, size: 16, color: green700),
+                    Icon(buttonIcon, size: 16, color: orange700),
                     const SizedBox(width: 6),
                     Text(
                       eyebrow,
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: green700,
+                        color: orange700,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -570,7 +632,7 @@ class _FeatureHero extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
-                    color: green900,
+                    color: orange900,
                     height: 1.08,
                     letterSpacing: -1.1,
                   ),
@@ -640,10 +702,10 @@ class _SectionHeader extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: green100,
+            color: orange100,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, size: 19, color: green700),
+          child: Icon(icon, size: 19, color: orange700),
         ),
         const SizedBox(width: 10),
         Column(
@@ -695,6 +757,44 @@ class _FoodRow extends StatelessWidget {
   }
 }
 
+/// 卡片按压反馈：按住时轻微缩小。
+///
+/// 为什么不只靠 InkWell 的涟漪：涟漪是「点中那一瞬」的反馈，
+/// 而缩放是「按住期间」持续存在的反馈 —— 手指按着不动，
+/// 也看得出这张卡是可以点的。
+class _PressCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final BorderRadius? borderRadius;
+
+  const _PressCard({required this.child, this.onTap, this.borderRadius});
+
+  @override
+  State<_PressCard> createState() => _PressCardState();
+}
+
+class _PressCardState extends State<_PressCard> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      // 0.972 是"看得出来在缩、但不会晃眼"的量；再大就像在抖。
+      scale: _pressed ? 0.972 : 1,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOut,
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: widget.borderRadius ?? BorderRadius.circular(rCard),
+        onHighlightChanged: (value) {
+          if (_pressed != value) setState(() => _pressed = value);
+        },
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _FoodCard extends StatelessWidget {
   final Food food;
   final VoidCallback onTap;
@@ -704,7 +804,7 @@ class _FoodCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 这张卡片以前点了没反应 —— 现在点开食材详情
-    return InkWell(
+    return _PressCard(
       onTap: onTap,
       borderRadius: BorderRadius.circular(rCard),
       child: Container(
@@ -752,7 +852,7 @@ class _FoodCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 10,
-                          color: green700,
+                          color: orange700,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -804,7 +904,7 @@ class _RecipeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return _PressCard(
       borderRadius: BorderRadius.circular(rCard),
       onTap: onOpenRecipes,
       child: Container(
@@ -907,7 +1007,7 @@ class _AiTipBar extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: green700,
+                color: orange700,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(
@@ -942,7 +1042,7 @@ class _AiTipBar extends StatelessWidget {
               ),
             ),
             // 右侧箭头暗示这里可以点
-            const Icon(Icons.chevron_right, size: 18, color: green700),
+            const Icon(Icons.chevron_right, size: 18, color: orange700),
           ],
         ),
       ),
@@ -999,12 +1099,12 @@ class _QuickActions extends StatelessWidget {
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.casino_outlined, size: 17, color: green700),
+                Icon(Icons.casino_outlined, size: 17, color: orange700),
                 SizedBox(width: 6),
                 Text(
                   '快速选一餐',
                   style: TextStyle(
-                    color: green700,
+                    color: orange700,
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
                   ),
@@ -1113,13 +1213,13 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: green100,
+                  color: orange100,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.auto_awesome_rounded,
                   size: 19,
-                  color: green700,
+                  color: orange700,
                 ),
               ),
               const SizedBox(width: 10),
@@ -1144,7 +1244,7 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
               IconButton(
                 onPressed: _next,
                 tooltip: '换一个推荐',
-                icon: const Icon(Icons.refresh_rounded, color: green700),
+                icon: const Icon(Icons.refresh_rounded, color: orange700),
               ),
             ],
           ),
@@ -1226,7 +1326,7 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
                   label: const Text('换一个'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 13),
-                    foregroundColor: green700,
+                    foregroundColor: orange700,
                   ),
                 ),
               ),
@@ -1298,13 +1398,13 @@ class _MealMeta extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: green700),
+          Icon(icon, size: 13, color: orange700),
           const SizedBox(width: 4),
           Text(
             text.isEmpty ? '待补充' : text,
             style: const TextStyle(
               fontSize: 11,
-              color: green700,
+              color: orange700,
               fontWeight: FontWeight.w700,
             ),
           ),

@@ -115,7 +115,7 @@ class _Loading extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(color: green700),
+          CircularProgressIndicator(color: orange700),
           SizedBox(height: 16),
           Text('正在求解本周方案…', style: TextStyle(color: muted)),
         ],
@@ -167,7 +167,7 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 20),
             FilledButton(
               onPressed: onRetry,
-              style: FilledButton.styleFrom(backgroundColor: green700),
+              style: FilledButton.styleFrom(backgroundColor: orange700),
               child: const Text('重试'),
             ),
           ],
@@ -244,7 +244,7 @@ class _ActiveConstraintsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.tune, size: 16, color: green700),
+              const Icon(Icons.tune, size: 16, color: orange700),
               const SizedBox(width: 6),
               const Text(
                 '本次求解采用的约束',
@@ -266,23 +266,23 @@ class _ActiveConstraintsCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _Tag(text: '${p.people} 人', bg: green100, fg: green700),
+              _Tag(text: '${p.people} 人', bg: orange100, fg: orange700),
               _Tag(
                 text: '预算 ¥${p.budget.toStringAsFixed(0)}',
-                bg: green100,
-                fg: green700,
+                bg: orange100,
+                fg: orange700,
               ),
               _Tag(
                 text: '钠上限 ${p.sodiumLimitMg}mg',
                 bg: p.lowSodium ? green100 : orange100,
                 fg: p.lowSodium ? green700 : orange,
               ),
-              _Tag(text: '忌口 $avoidText', bg: green100, fg: green700),
-              _Tag(text: '口味 $prefText', bg: green100, fg: green700),
+              _Tag(text: '忌口 $avoidText', bg: orange100, fg: orange700),
+              _Tag(text: '口味 $prefText', bg: orange100, fg: orange700),
               _Tag(
                 text: '厨具 ${p.tools.length} 种',
-                bg: green100,
-                fg: green700,
+                bg: orange100,
+                fg: orange700,
               ),
             ],
           ),
@@ -319,7 +319,7 @@ class _WeightSlider extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: leftOn ? FontWeight.w800 : FontWeight.w500,
-                  color: leftOn ? green700 : muted,
+                  color: leftOn ? orange700 : muted,
                 ),
               ),
               const Spacer(),
@@ -333,16 +333,16 @@ class _WeightSlider extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: rightOn ? FontWeight.w800 : FontWeight.w500,
-                  color: rightOn ? green700 : muted,
+                  color: rightOn ? orange700 : muted,
                 ),
               ),
             ],
           ),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: green600,
-              inactiveTrackColor: green100,
-              thumbColor: green700,
+              activeTrackColor: orange700,
+              inactiveTrackColor: orange100,
+              thumbColor: orange700,
               overlayColor: const Color(0x1A17733D),
             ),
             child: Slider(
@@ -388,7 +388,7 @@ class _SummaryCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w900,
-                  color: green900,
+                  color: orange900,
                   height: 1,
                 ),
               ),
@@ -413,7 +413,7 @@ class _SummaryCard extends StatelessWidget {
               minHeight: 7,
               backgroundColor: line,
               valueColor: AlwaysStoppedAnimation<Color>(
-                over ? orange : green600,
+                over ? orange : green700,
               ),
             ),
           ),
@@ -449,7 +449,7 @@ class _SummaryCard extends StatelessWidget {
               minHeight: 6,
               backgroundColor: line,
               valueColor: AlwaysStoppedAnimation<Color>(
-                sodium.sodiumRatio > 0.95 ? orange : green600,
+                sodium.sodiumRatio > 0.95 ? orange : green700,
               ),
             ),
           ),
@@ -507,7 +507,7 @@ class _NutriChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: green50,
+          color: orange50,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -610,7 +610,7 @@ class _MealBlock extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: green700,
+                  color: orange700,
                 ),
               ),
             ),
@@ -643,7 +643,7 @@ class _DishTile extends StatelessWidget {
       SnackBar(
         content: Text('菜谱库里暂时没有「${dish.name}」的做法'),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF163A26),
+        backgroundColor: orange900,
       ),
     );
   }
@@ -682,10 +682,10 @@ class _DishTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
                 decoration: BoxDecoration(
-                  color: green50,
+                  color: orange50,
                   borderRadius: BorderRadius.circular(10),
                   border: const Border(
-                    left: BorderSide(color: green600, width: 2.5),
+                    left: BorderSide(color: orange700, width: 2.5),
                   ),
                 ),
                 child: Text(
@@ -712,7 +712,7 @@ class _DishTile extends StatelessWidget {
                       t,
                       style: const TextStyle(
                         fontSize: 10,
-                        color: green700,
+                        color: orange700,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -739,7 +739,7 @@ class _MetaFooter extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: green50,
+        color: orange50,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -1008,7 +1008,7 @@ class _PriceLegend extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: green50,
+        color: orange50,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -1032,8 +1032,8 @@ class _PriceLegend extends StatelessWidget {
           const _LegendRow(
             label: '本地公示价格',
             desc: '该城市有官方开放数据接口，直接采用',
-            color: green100,
-            fg: green700,
+            color: orange100,
+            fg: orange700,
           ),
           const SizedBox(height: 6),
           const _LegendRow(
@@ -1108,7 +1108,7 @@ class _LegendRow extends StatelessWidget {
 Color _sourceBg(String source) {
   switch (source) {
     case 'local':
-      return green100;
+      return orange100;
     case 'nearby':
       return orange100;
     default:
@@ -1119,7 +1119,7 @@ Color _sourceBg(String source) {
 Color _sourceFg(String source) {
   switch (source) {
     case 'local':
-      return green700;
+      return orange700;
     case 'nearby':
       return orange;
     default:

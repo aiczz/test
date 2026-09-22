@@ -104,7 +104,7 @@ class _SplashScreen extends StatelessWidget {
                 width: 74,
                 height: 74,
                 decoration: BoxDecoration(
-                  color: green700,
+                  color: orange700,
                   borderRadius: BorderRadius.circular(22),
                   boxShadow: cardShadow,
                 ),
@@ -116,7 +116,7 @@ class _SplashScreen extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 27,
                   fontWeight: FontWeight.w900,
-                  color: green900,
+                  color: orange900,
                   letterSpacing: -1.2,
                   height: 1,
                 ),
@@ -126,7 +126,7 @@ class _SplashScreen extends StatelessWidget {
                 '顺应时令 · 智慧饮食',
                 style: TextStyle(
                   fontSize: 10.5,
-                  color: green700,
+                  color: orange700,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 1.2,
                 ),
@@ -137,7 +137,7 @@ class _SplashScreen extends StatelessWidget {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: green700,
+                  color: orange700,
                 ),
               ),
             ],
@@ -161,8 +161,8 @@ class ShishiApp extends StatelessWidget {
         useMaterial3: true,
         // 主色用队友那套深绿
         colorScheme: ColorScheme.fromSeed(
-          seedColor: green700,
-          primary: green700,
+          seedColor: orange700,
+          primary: orange700,
         ),
         scaffoldBackgroundColor: page,
         appBarTheme: const AppBarTheme(
@@ -179,7 +179,7 @@ class ShishiApp extends StatelessWidget {
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(
-              color: selected ? green700 : muted,
+              color: selected ? orange700 : muted,
               fontSize: 11,
               fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
             );
@@ -312,7 +312,7 @@ class _RootShellState extends State<RootShell> {
             for (final t in _tabs)
               NavigationDestination(
                 icon: Icon(t.icon, color: muted, size: 22),
-                selectedIcon: Icon(t.activeIcon, color: green700, size: 22),
+                selectedIcon: Icon(t.activeIcon, color: orange700, size: 22),
                 label: t.label,
               ),
           ],

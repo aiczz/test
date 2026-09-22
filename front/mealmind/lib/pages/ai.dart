@@ -230,7 +230,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [green700, green900],
+          colors: [orange700, orange900],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -329,7 +329,7 @@ class _ItemView extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: green700,
+              color: orange700,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
@@ -441,7 +441,7 @@ class _MiniRecipeCard extends StatelessWidget {
                           content: Text('已把「${recipe!.name}」加入今日菜单'),
                           duration: const Duration(milliseconds: 1400),
                           behavior: SnackBarBehavior.floating,
-                          backgroundColor: const Color(0xFF163A26),
+                          backgroundColor: orange900,
                           shape: const StadiumBorder(),
                         ),
                       );
@@ -487,8 +487,8 @@ class _TraceCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: green50,
-        border: Border.all(color: green100),
+        color: orange50,
+        border: Border.all(color: orange100),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -500,7 +500,7 @@ class _TraceCard extends StatelessWidget {
               Icon(
                 running ? Icons.sync : Icons.account_tree_outlined,
                 size: 16,
-                color: green700,
+                color: orange700,
               ),
               const SizedBox(width: 7),
               Text(
@@ -508,7 +508,7 @@ class _TraceCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
-                  color: green900,
+                  color: orange900,
                 ),
               ),
               const Spacer(),
@@ -516,7 +516,7 @@ class _TraceCard extends StatelessWidget {
                 running
                     ? '协作中…'
                     : '${steps.length} 步 · ${(_totalMs / 1000).toStringAsFixed(2)} s',
-                style: const TextStyle(fontSize: 10.5, color: green700),
+                style: const TextStyle(fontSize: 10.5, color: orange700),
               ),
             ],
           ),
@@ -537,7 +537,7 @@ class _TraceCard extends StatelessWidget {
                 height: 14,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: green600,
+                  color: orange700,
                 ),
               ),
             ),
@@ -559,7 +559,7 @@ class _TraceRow extends StatelessWidget {
     final info = step.status == 'info';
 
     final Color dotColor =
-        vetoed ? orange : (info ? muted : green600);
+        vetoed ? orange : (info ? muted : orange700);
     final IconData dotIcon = vetoed
         ? Icons.block
         : (info ? Icons.info_outline : Icons.check);
@@ -583,7 +583,7 @@ class _TraceRow extends StatelessWidget {
               ),
               if (!last)
                 Expanded(
-                  child: Container(width: 1.2, color: green100),
+                  child: Container(width: 1.2, color: orange100),
                 ),
             ],
           ),

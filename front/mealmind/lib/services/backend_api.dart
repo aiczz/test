@@ -114,13 +114,25 @@ class BackendApi {
         .toList();
   }
 
-  /// GET /api/recipes/{id} —— 配方、做法与收藏状态都来自后端。
+  /// GET /api/recipes/{id}（说明书 §11.2）
+  ///
+  /// ★ 为什么详情页必须单独拉这一次：
+  ///   列表接口 `/api/recipes` 只给摘要 ——
+  ///   id / name / image / description / duration_minutes / servings /
+  ///   difficulty / tags，**不含 ingredients 和 steps**（已实测确认）。
+  ///   完整数据只在详情接口里。详情页如果一直用列表传过来的那个对象，
+  ///   「所需食材」「做法步骤」两块就永远是空的，下面留一大片白。
   Future<Recipe> fetchRecipeDetail(String recipeId) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/recipes/$recipeId',
+      // 带上 token：后端会顺带返回 is_favorite
       options: _auth,
     );
-    return _recipeFromJson(res.data ?? const <String, dynamic>{});
+    final data = res.data;
+    if (data == null) {
+      throw const FormatException('菜谱详情接口返回了空数据');
+    }
+    return _recipeFromJson(data);
   }
 
   Future<Set<String>> fetchFavoriteIds() async {

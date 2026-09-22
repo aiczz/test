@@ -161,7 +161,7 @@ class _RecipesPageState extends State<RecipesPage> {
                                   Icon(
                                     Icons.local_dining_rounded,
                                     size: 15,
-                                    color: green700,
+                                    color: orange700,
                                   ),
                                   SizedBox(width: 6),
                                   Text(
@@ -169,7 +169,7 @@ class _RecipesPageState extends State<RecipesPage> {
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w800,
-                                      color: green700,
+                                      color: orange700,
                                       letterSpacing: .4,
                                     ),
                                   ),
@@ -181,7 +181,7 @@ class _RecipesPageState extends State<RecipesPage> {
                                 style: TextStyle(
                                   fontSize: 29,
                                   fontWeight: FontWeight.w900,
-                                  color: green900,
+                                  color: orange900,
                                   height: 1.05,
                                   letterSpacing: -1,
                                 ),
@@ -300,7 +300,7 @@ class _RecipesPageState extends State<RecipesPage> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: green600, width: 1.5),
+                  borderSide: const BorderSide(color: orange700, width: 1.5),
                 ),
               ),
             ),
@@ -331,10 +331,10 @@ class _RecipesPageState extends State<RecipesPage> {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: green100,
+                    color: orange100,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.eco, size: 18, color: green700),
+                  child: const Icon(Icons.eco, size: 18, color: orange700),
                 ),
                 const SizedBox(width: 10),
                 Column(
@@ -392,7 +392,7 @@ class _RecipesPageState extends State<RecipesPage> {
                       icon: const Icon(Icons.refresh, size: 16),
                       label: const Text('清空筛选，看全部菜谱'),
                       style: TextButton.styleFrom(
-                        foregroundColor: green700,
+                        foregroundColor: orange700,
                         textStyle: const TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
@@ -437,13 +437,13 @@ class _RecipeHeaderTag extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: green700),
+          Icon(icon, size: 12, color: orange700),
           const SizedBox(width: 4),
           Text(
             text,
             style: const TextStyle(
               fontSize: 10.5,
-              color: green700,
+              color: orange700,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -475,8 +475,8 @@ class _CategoryChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
         decoration: BoxDecoration(
-          color: active ? green700 : Colors.white,
-          border: Border.all(color: active ? green700 : line),
+          color: active ? orange700 : Colors.white,
+          border: Border.all(color: active ? orange700 : line),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
@@ -523,10 +523,15 @@ class _RecipeListCard extends StatelessWidget {
           children: [
             SizedBox(
               width: 116,
-              child: Image.asset(
-                recipe.image,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.high,
+              // Hero：点开详情时，这张缩略图会"飞"到详情页顶部那张大图的位置。
+              // ⚠️ tag 必须和 _RecipeDetailSheet 那边完全一致，否则不会有动画。
+              child: Hero(
+                tag: 'recipe-image-${recipe.id}',
+                child: Image.asset(
+                  recipe.image,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.high,
+                ),
               ),
             ),
             Expanded(
@@ -639,79 +644,102 @@ class _RecipeListCard extends StatelessWidget {
 /// 公开函数 —— 菜单页的菜品格子也走这里，
 /// 保证「从菜谱页点」和「从菜单点」看到的是同一个详情。
 void openRecipeDetail(BuildContext context, Recipe recipe) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
+  // ⚠️ 这里特意【不用】showModalBottomSheet。
+  //
+  //   它建出来的是 ModalBottomSheetRoute（PopupRoute），而 Flutter 的 Hero
+  //   只在【PageRoute 之间】飞 —— 见 flutter/lib/src/widgets/heroes.dart 的
+  //   _maybeStartHeroTransition：
+  //       if (toRoute is! PageRoute || fromRoute is! PageRoute) return;
+  //   只要有一边不是 PageRoute 就直接放弃，不报错、但也不会有动画。
+  //
+  //   换成 PageRouteBuilder：它仍然是 PageRoute，缩略图能飞；
+  //   再用 opaque:false + 从底部滑入 + 半透明遮罩，
+  //   视觉上和原来那个「底部弹层」是一样的。
+  Navigator.of(context).push<void>(
+    PageRouteBuilder<void>(
+      opaque: false,
+      barrierColor: Colors.black54,
+      barrierLabel: '关闭菜谱详情',
+      barrierDismissible: true,
+      transitionDuration: const Duration(milliseconds: 320),
+      reverseTransitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (_, _, _) => Align(
+        alignment: Alignment.bottomCenter,
+        child: SizedBox(
+          width: double.infinity,
+          // 原来的白底 + 顶部圆角是 showModalBottomSheet 的
+          // backgroundColor / shape 参数给的，现在得自己包一层。
+          child: Material(
+            color: Colors.white,
+            clipBehavior: Clip.antiAlias,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
+            ),
+            child: _RecipeDetailSheet(recipe: recipe),
+          ),
+        ),
+      ),
+      transitionsBuilder: (context, animation, _, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        );
+      },
     ),
-    builder: (_) => _RecipeDetailLoader(recipe: recipe),
   );
 }
 
-class _RecipeDetailLoader extends StatefulWidget {
-  final Recipe recipe;
-
-  const _RecipeDetailLoader({required this.recipe});
-
-  @override
-  State<_RecipeDetailLoader> createState() => _RecipeDetailLoaderState();
-}
-
-class _RecipeDetailLoaderState extends State<_RecipeDetailLoader> {
-  late Future<Recipe> _future = _load();
-
-  Future<Recipe> _load() {
-    if (!ContentStore.instance.fromBackend ||
-        int.tryParse(widget.recipe.id) == null) {
-      return Future<Recipe>.value(widget.recipe);
-    }
-    return BackendApi.instance.fetchRecipeDetail(widget.recipe.id);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Recipe>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          return _RecipeDetailSheet(recipe: snapshot.data!);
-        }
-        if (snapshot.hasError) {
-          return SizedBox(
-            height: 420,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.cloud_off_outlined, color: muted, size: 34),
-                  const SizedBox(height: 12),
-                  const Text('菜谱详情加载失败', style: TextStyle(color: ink)),
-                  const SizedBox(height: 10),
-                  TextButton.icon(
-                    onPressed: () => setState(() => _future = _load()),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('重新加载'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        return const SizedBox(
-          height: 420,
-          child: Center(child: CircularProgressIndicator(color: green700)),
-        );
-      },
-    );
-  }
-}
-
-class _RecipeDetailSheet extends StatelessWidget {
+class _RecipeDetailSheet extends StatefulWidget {
   final Recipe recipe;
 
   const _RecipeDetailSheet({required this.recipe});
+
+  @override
+  State<_RecipeDetailSheet> createState() => _RecipeDetailSheetState();
+}
+
+class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
+  /// 初值来自列表（只有摘要），拉到详情后整体替换。
+  /// 用一个可变字段而不是到处写 widget.recipe，是为了让下面的
+  /// `recipe.xxx` 一处都不用改。
+  late Recipe recipe;
+
+  @override
+  void initState() {
+    super.initState();
+    recipe = widget.recipe;
+    _loadFullDetail();
+  }
+
+  /// 补拉一次详情，把 ingredients / steps 填上。
+  ///
+  /// 列表接口不返回这两个字段，所以少了这一下，详情页的
+  /// 「所需食材」「做法步骤」就永远是空的 —— 表现出来就是下面一大片留白。
+  /// 拉不到（离线、后端没开）就保持列表数据：少两块内容，但不白屏。
+  Future<void> _loadFullDetail() async {
+    // 本地假数据本身就是完整的，不用再拉
+    if (recipe.ingredients.isNotEmpty || recipe.steps.isNotEmpty) return;
+    if (!BackendStatus.instance.online) return;
+
+    // 本地假数据的 id 是 'soup' 这种字符串，传不到接口上
+    if (int.tryParse(recipe.id) == null) return;
+
+    try {
+      final full = await BackendApi.instance.fetchRecipeDetail(recipe.id);
+      if (!mounted) return;
+      setState(() => recipe = full);
+    } catch (error) {
+      debugPrint('[RecipeDetail] 详情加载失败，保持列表数据：$error');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -731,10 +759,14 @@ class _RecipeDetailSheet extends StatelessWidget {
                 SizedBox(
                   height: 200,
                   width: double.infinity,
-                  child: Image.asset(
-                    recipe.image,
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.high,
+                  child: Hero(
+                    // 和列表卡片那张缩略图配对（tag 必须一模一样）
+                    tag: 'recipe-image-${recipe.id}',
+                    child: Image.asset(
+                      recipe.image,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                    ),
                   ),
                 ),
                 Positioned(
@@ -767,7 +799,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: green700,
+                      color: orange700,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -930,7 +962,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                           child: const Text(
                             '加入今日菜单',
                             style: TextStyle(
-                              color: green700,
+                              color: orange700,
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
                             ),
@@ -1000,12 +1032,12 @@ class _Fact extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
-          color: green50,
+          color: orange50,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 17, color: green700),
+            Icon(icon, size: 17, color: orange700),
             const SizedBox(height: 6),
             Text(
               label,
@@ -1028,7 +1060,7 @@ void _snack(BuildContext context, String message) {
       content: Text(message),
       duration: const Duration(milliseconds: 1400),
       behavior: SnackBarBehavior.floating,
-      backgroundColor: const Color(0xFF163A26),
+      backgroundColor: orange900,
       shape: const StadiumBorder(),
     ),
   );

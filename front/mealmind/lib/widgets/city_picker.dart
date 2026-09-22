@@ -108,13 +108,13 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                             height: 15,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: green700,
+                              color: orange700,
                             ),
                           )
                         : const Icon(
                             Icons.my_location,
                             size: 17,
-                            color: green700,
+                            color: orange700,
                           ),
                     label: Text(
                       store.detecting ? '正在定位…' : '用当前位置',
@@ -125,7 +125,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                     ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: ink,
-                      side: const BorderSide(color: green700),
+                      side: const BorderSide(color: orange700),
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(13),
@@ -170,12 +170,12 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                           ),
                           decoration: BoxDecoration(
                             color: store.city.name == city.name
-                                ? green700
+                                ? orange700
                                 : Colors.white,
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
                               color: store.city.name == city.name
-                                  ? green700
+                                  ? orange700
                                   : line,
                             ),
                           ),

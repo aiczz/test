@@ -150,7 +150,9 @@ class FoodsPageState extends State<FoodsPage> {
       _selected.remove(food.id);
       _amounts.remove(food.id);
     });
-    _toast('已将${food.name}从我的食材移除');
+    // 这里原本会弹一条「已将 X 从我的食材移除」的浮层提示。
+    // 去掉了：卡片上的加号会立刻变回未选中态、食材也当场从列表里消失，
+    // 视觉反馈已经足够；再压一条浮层只是挡住下面的内容。
     unawaited(_syncRemove(food));
   }
 
@@ -172,7 +174,8 @@ class FoodsPageState extends State<FoodsPage> {
       _pantry.add(food);
       _amounts[food.id] = 1;
     });
-    _toast('已将${food.name}添加到我的食材');
+    // 这里原本弹「已将 X 添加到我的食材」。和移除那边对称地去掉：
+    // 加号当场变 ✓、食材进列表，视觉反馈已经够了。
     unawaited(_syncAdd(food));
   }
 
@@ -245,7 +248,7 @@ class FoodsPageState extends State<FoodsPage> {
       _amounts[result.id] = 1;
       _showPantry = true;
     });
-    _toast('已添加${result.name}');
+    // 同上：不再弹「已添加 X」—— 自动切到「我的食材」这个动作本身就是反馈。
   }
 
   /// 打开食材详情弹层（时令、能做的菜、加入我的食材）。
@@ -311,7 +314,7 @@ class FoodsPageState extends State<FoodsPage> {
                       style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w900,
-                        color: green900,
+                        color: orange900,
                       ),
                     ),
                   ),
@@ -409,7 +412,7 @@ class FoodsPageState extends State<FoodsPage> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF163A26),
+        backgroundColor: orange900,
       ),
     );
   }
@@ -482,7 +485,7 @@ class FoodsPageState extends State<FoodsPage> {
                         height: 38,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFF4DA85D), green700],
+                            colors: [Color(0xFF4DA85D), orange700],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -572,12 +575,12 @@ class FoodsPageState extends State<FoodsPage> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: green50,
+                        color: orange50,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: const Row(
                         children: [
-                          Icon(Icons.lightbulb_outline, color: green700),
+                          Icon(Icons.lightbulb_outline, color: orange700),
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -691,13 +694,13 @@ class _FoodsHeader extends StatelessWidget {
                                       ? Icons.inventory_2_outlined
                                       : Icons.eco_outlined,
                                   size: 13,
-                                  color: green700,
+                                  color: orange700,
                                 ),
                                 const SizedBox(width: 5),
                                 Text(
                                   showPantry ? '家庭库存' : '杭州 · 秋季',
                                   style: const TextStyle(
-                                    color: green700,
+                                    color: orange700,
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -709,7 +712,7 @@ class _FoodsHeader extends StatelessWidget {
                           Text(
                             showPantry ? '我家的食材' : '时令食材',
                             style: const TextStyle(
-                              color: green900,
+                              color: orange900,
                               fontSize: 28,
                               fontWeight: FontWeight.w900,
                               letterSpacing: -1,
@@ -880,14 +883,14 @@ class _FoodHeaderTab extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           decoration: BoxDecoration(
-            color: selected ? green700 : Colors.transparent,
+            color: selected ? orange700 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           alignment: Alignment.center,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 17, color: selected ? Colors.white : green700),
+              Icon(icon, size: 17, color: selected ? Colors.white : orange700),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
@@ -994,7 +997,7 @@ class _FoodInventoryCard extends StatelessWidget {
                                     ? Icons.check_circle_rounded
                                     : Icons.radio_button_unchecked_rounded,
                                 size: 19,
-                                color: selected ? green700 : muted,
+                                color: selected ? orange700 : muted,
                               ),
                             ),
                             const SizedBox(width: 5),
@@ -1040,7 +1043,7 @@ class _FoodInventoryCard extends StatelessWidget {
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
-                                  color: green700,
+                                  color: orange700,
                                 ),
                               ),
                             ),
@@ -1109,10 +1112,10 @@ class _AddFoodButton extends StatelessWidget {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: added ? green700 : Colors.white,
+              color: added ? orange700 : Colors.white,
               shape: BoxShape.circle,
               border: Border.all(
-                color: added ? green700 : const Color(0xFFD8E5D5),
+                color: added ? orange700 : const Color(0xFFD8E5D5),
               ),
               boxShadow: const [
                 BoxShadow(
@@ -1128,7 +1131,7 @@ class _AddFoodButton extends StatelessWidget {
                 added ? Icons.check_rounded : Icons.add_rounded,
                 key: ValueKey(added),
                 size: 20,
-                color: added ? Colors.white : green700,
+                color: added ? Colors.white : orange700,
               ),
             ),
           ),
@@ -1161,7 +1164,7 @@ class _CategoryChip extends StatelessWidget {
     '肉蛋' => const Color(0xFFE76543),
     '水产' => const Color(0xFF3587A4),
     '豆制品' => const Color(0xFFC88A2D),
-    _ => green700,
+    _ => orange700,
   };
 
   @override
@@ -1170,17 +1173,17 @@ class _CategoryChip extends StatelessWidget {
       avatar: Icon(
         selected ? Icons.check_circle_rounded : _icon,
         size: 17,
-        color: selected ? green700 : _iconColor,
+        color: selected ? orange700 : _iconColor,
       ),
       label: Text(category),
       selected: selected,
       showCheckmark: false,
-      selectedColor: green100,
+      selectedColor: orange100,
       backgroundColor: Colors.white,
       side: BorderSide(color: selected ? const Color(0xFFB9DDB3) : line),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
       labelStyle: TextStyle(
-        color: selected ? green700 : ink,
+        color: selected ? orange700 : ink,
         fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
         fontSize: 12,
       ),
@@ -1205,10 +1208,10 @@ class _AmountButton extends StatelessWidget {
         width: 28,
         height: 28,
         decoration: BoxDecoration(
-          color: green50,
+          color: orange50,
           borderRadius: BorderRadius.circular(9),
         ),
-        child: Icon(icon, size: 16, color: green700),
+        child: Icon(icon, size: 16, color: orange700),
       ),
     );
   }
@@ -1254,7 +1257,7 @@ class _Tag extends StatelessWidget {
         softWrap: false,
         style: const TextStyle(
           fontSize: 10,
-          color: green700,
+          color: orange700,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -1279,7 +1282,7 @@ class _EmptyFoods extends StatelessWidget {
             width: 58,
             height: 58,
             decoration: const BoxDecoration(
-              color: green100,
+              color: orange100,
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -1287,7 +1290,7 @@ class _EmptyFoods extends StatelessWidget {
                   ? Icons.add_shopping_cart_rounded
                   : Icons.search_off_rounded,
               size: 29,
-              color: green700,
+              color: orange700,
             ),
           ),
           const SizedBox(height: 12),
