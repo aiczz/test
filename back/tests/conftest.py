@@ -10,8 +10,13 @@ from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
 from app.core.database import get_session
+from app.core.config import settings
 from app.data.seed import seed_all
 from app.main import app
+
+# 本机生产配置可以强制 CONTENT_MODE=compact；测试同时覆盖旧演示表和六表适配器，
+# 因此必须按每个临时数据库的实际表结构自动识别。
+settings.content_mode = "auto"
 
 
 @pytest.fixture(name="engine")

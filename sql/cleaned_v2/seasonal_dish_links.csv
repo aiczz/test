@@ -1,6 +1,6 @@
 ﻿seasonal_food_id,dish_id,match_type
 SF0394,6411,title_contains
-SF0400,17560,title_contains
+SF0400,17560,exact_title
 SF0406,12921,title_contains
 SF0406,103707,title_contains
 SF0408,15013,exact_title
@@ -23,8 +23,6 @@ SF0448,24312,title_contains
 SF0448,25055,title_contains
 SF0448,29173,title_contains
 SF0448,29514,title_contains
-SF0448,30208,title_contains
-SF0448,37141,title_contains
 SF0448,40977,title_contains
 SF0448,47218,title_contains
 SF0448,47232,title_contains
@@ -71,7 +69,6 @@ SF0448,157116,title_contains
 SF0448,158490,title_contains
 SF0448,163223,title_contains
 SF0448,165557,title_contains
-SF0448,165998,title_contains
 SF0448,168433,title_contains
 SF0448,168832,title_contains
 SF0448,170029,title_contains
@@ -80,8 +77,6 @@ SF0448,173070,title_contains
 SF0448,173994,title_contains
 SF0448,175390,title_contains
 SF0448,176155,title_contains
-SF0448,178084,title_contains
-SF0448,183422,title_contains
 SF0448,186367,title_contains
 SF0448,187347,title_contains
 SF0448,187528,title_contains
@@ -99,7 +94,7 @@ SF0459,79724,exact_title
 SF0459,97076,exact_title
 SF0459,101328,exact_title
 SF0459,138051,exact_title
-SF0490,17560,title_contains
+SF0490,17560,exact_title
 SF0516,102833,title_contains
 SF0528,42394,title_contains
 SF0528,44756,title_contains

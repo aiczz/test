@@ -185,8 +185,8 @@ class ShishiApp extends StatelessWidget {
             );
           }),
         ),
-        // 中文优先用系统的苹方 / 微软雅黑
-        fontFamily: null,
+        // Web 端随包提供中文字体，避免 CanvasKit 环境出现方框字。
+        fontFamily: 'NotoSansSC',
       ),
       home: const RootShell(),
       // 桌面浏览器 / 平板上，把界面限制成「手机宽度」居中显示。

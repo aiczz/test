@@ -10,33 +10,23 @@ DB = dict(host=os.getenv("MYSQL_HOST", "localhost"), port=int(os.getenv("MYSQL_P
           database=os.getenv("MYSQL_DB", "recipe_db"), charset="utf8mb4", autocommit=False)
 
 TABLES = [
- ("ingredient_categories","ingredient_categories.csv",["id","name","sort_order"]),
- ("ingredient_subcategories","ingredient_subcategories.csv",["id","category_id","name","sort_order"]),
- ("ingredients","main_ingredient.csv",["id","name","category_id","subcategory_id","usage_count","is_core_raw","可食部%","水分g","能量kcal","能量kJ","蛋白质g","脂肪g","碳水化合物g","膳食纤维g","胆固醇mg","灰分g","维生素A(ugRE)","胡萝卜素(ug)","视黄醇(ug)","硫胺素mg","核黄素mg","烟酸mg","维生素Cmg","维生素E总mg","钙mg","磷mg","钾mg","钠mg","镁mg","铁mg","锌mg","硒(ug)","铜mg","锰mg","nutrition_source_name","nutrition_match","quality","category_source","tcm_user","tcm_not_user"]),
- ("tcm_effects","tcm_effects.csv",["id","name"]),
- ("target_groups","target_groups.csv",["id","name","is_suitable"]),
- ("ingredient_effects","ingredient_effects.csv",["ingredient_id","effect_id"]),
- ("ingredient_groups","ingredient_groups.csv",["ingredient_id","group_id"]),
- ("ingredient_hierarchy","ingredient_hierarchy.csv",["parent_ingredient_id","child_ingredient_id"]),
- ("ingredient_catalog","ingredient_catalog.csv",["id","name","ingredient_type","core_ingredient_id","category","subcategory","is_core_raw","is_edible","review_status","usage_count","reason"]),
- ("ingredient_catalog_aliases","ingredient_catalog_aliases.csv",["alias_name","catalog_ingredient_id","canonical_name","usage_count","source"]),
- ("seasonal_calendar","seasonal_calendar.csv",["id","level","name","gregorian_time","lunar_time","season","sort_order","description"]),
- ("seasonal_food","seasonal_food.csv",["id","calendar_id","level","time_name","season","category","name","note","recommendation_reason","source","entity_type","catalog_ingredient_id","core_ingredient_id","match_status"]),
- ("seasonal_knowledge","seasonal_knowledge.csv",["id","calendar_id","seasonal_food_id","time_name","level","season","category","name","content","source","knowledge_type"]),
- ("dishes","dishes.csv",["id","dish_name","description","cuisine","ingredient_text","instruction_text","ingredient_count","main_ingredient_count","search_ingredient_count","total_weight_g"]),
+ ("ingredients","db_ingredients.csv",["id","name","ingredient_type","core_ingredient_id","category","subcategory","is_core_raw","is_edible","review_status","usage_count","reason","edible","water","energy_kcal","energy_kj","protein","fat","cho","dietary_fiber","cholesterol","ash","vitamin_a","carotene","retinol","thiamin","riboflavin","niacin","vitamin_c","vitamin_e","ca","p","k","na","mg","fe","zn","se","cu","mn","nutrition_source","nutrition_match","quality","category_source","tcm_user","tcm_not_user","effects_json","suitable_groups_json","unsuitable_groups_json","aliases_json","parent_core_ids_json","child_core_ids_json"]),
+ ("dishes","db_dishes.csv",["id","dish_name","dish_name_original","description","cuisine","ingredient_text","instruction_text","ingredient_count","main_ingredient_count","search_ingredient_count","total_weight_g","energy_kcal","protein_g","fat_g","cho_g","dietary_fiber_g","ca_mg","fe_mg","na_mg","matched_ratio","weight_confidence","explicit_count","estimated_count","vague_count","suspect","nutrition_version","tags_json","search_ingredient_ids_json"]),
+ ("dish_ingredients","db_dish_ingredients.csv",["id","dish_id","ingredient_id","core_ingredient_id","raw_name","raw_text","quantity","role","grams","grams_source","component_core_ids_json"]),
+ ("seasonal_calendar","db_seasonal_calendar.csv",["id","level","name","gregorian_time","lunar_time","season","sort_order","description","knowledge_json"]),
+ ("seasonal_food","db_seasonal_food.csv",["id","calendar_id","level","time_name","season","category","name","note","recommendation_reason","source","entity_type","ingredient_id","core_ingredient_id","match_status","knowledge_json"]),
  ("seasonal_dish_links","seasonal_dish_links.csv",["seasonal_food_id","dish_id","match_type"]),
- ("dish_ingredients","dish_ingredients.csv",["id","dish_id","ingredient_id","catalog_ingredient_id","raw_name","raw_text","quantity","role","grams","grams_source"]),
- ("dish_ingredient_components","dish_ingredient_components.csv",["dish_ingredient_id","component_ingredient_id"]),
- ("dish_ingredient_search","dish_ingredient_search.csv",["dish_id","ingredient_id","source_ingredient_id","match_type"]),
- ("tags","tags.csv",["id","name","kind"]), ("dish_tags","dish_tags.csv",["dish_id","tag_id"]),
- ("dish_nutrition","dish_nutrition.csv",["dish_id","total_weight_g","energy_kcal","protein_g","fat_g","cho_g","dietary_fiber_g","ca_mg","fe_mg","na_mg","matched_ratio","weight_confidence","explicit_count","estimated_count","vague_count","suspect","nutrition_version"]),
- ("seasonings","excluded_seasonings.csv",["id","name","usage_count","reason"]),
- ("excluded_names","excluded_junk.csv",["id","name","usage_count","reason"]),
 ]
-DB_COL = {"ingredients": ["id","name","category_id","subcategory_id","usage_count","is_core_raw","edible","water","energy_kcal","energy_kj","protein","fat","cho","dietary_fiber","cholesterol","ash","vitamin_a","carotene","retinol","thiamin","riboflavin","niacin","vitamin_c","vitamin_e","ca","p","k","na","mg","fe","zn","se","cu","mn","nutrition_source","nutrition_match","quality","category_source","tcm_user","tcm_not_user"]}
+DB_COL = {}
 ORDER_DELETE = [x[0] for x in reversed(TABLES)]
 
-def value(v): return None if v is None or v.strip() in {"", "—", "-", "NULL", "null"} else v
+NULL_LIKE_VALUES = {"", "—", "-", "NULL", "null", "Tr", "tr", "TR", "un", "UN"}
+
+def value(v):
+    if v is None:
+        return None
+    v = v.strip()
+    return None if v in NULL_LIKE_VALUES else v
 def batches(reader, size=2000):
     batch=[]
     for row in reader:
@@ -52,11 +42,11 @@ def main():
             if args.verify:
                 for table,_,_ in TABLES: cur.execute(f"SELECT COUNT(*) FROM `{table}`"); print(table,cur.fetchone()[0])
                 cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN dishes x ON x.id=d.dish_id WHERE x.id IS NULL"); print("orphan_dish",cur.fetchone()[0])
-                cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN ingredients i ON i.id=d.ingredient_id WHERE d.ingredient_id IS NOT NULL AND i.id IS NULL"); print("orphan_ingredient",cur.fetchone()[0])
-                cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN ingredient_catalog c ON c.id=d.catalog_ingredient_id WHERE c.id IS NULL"); print("orphan_catalog",cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN ingredients i ON i.id=d.ingredient_id WHERE i.id IS NULL"); print("orphan_ingredient",cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM dish_ingredients d LEFT JOIN ingredients i ON i.id=d.core_ingredient_id WHERE d.core_ingredient_id IS NOT NULL AND i.id IS NULL"); print("orphan_core",cur.fetchone()[0])
                 cur.execute("SELECT COUNT(*) FROM seasonal_food f LEFT JOIN seasonal_calendar c ON c.id=f.calendar_id WHERE c.id IS NULL"); print("orphan_seasonal_calendar",cur.fetchone()[0])
                 cur.execute("SELECT COUNT(*) FROM seasonal_dish_links l LEFT JOIN seasonal_food f ON f.id=l.seasonal_food_id LEFT JOIN dishes d ON d.id=l.dish_id WHERE f.id IS NULL OR d.id IS NULL"); print("orphan_seasonal_dish",cur.fetchone()[0])
-                cur.execute("SELECT COUNT(*) FROM dish_ingredient_components c LEFT JOIN dish_ingredients d ON d.id=c.dish_ingredient_id LEFT JOIN ingredients i ON i.id=c.component_ingredient_id WHERE d.id IS NULL OR i.id IS NULL"); print("orphan_component",cur.fetchone()[0]); return
+                return
             cur.execute("SET FOREIGN_KEY_CHECKS=0")
             for table in ORDER_DELETE: cur.execute(f"DELETE FROM `{table}`")
             for table,filename,csv_cols in TABLES:

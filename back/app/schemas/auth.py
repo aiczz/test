@@ -18,6 +18,13 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class SmsAuthRequest(BaseModel):
+    """比赛演示用的手机验证码认证请求。"""
+
+    phone: str = Field(pattern=r"^1\d{10}$", description="11 位中国大陆手机号")
+    code: str = Field(min_length=6, max_length=6, description="6 位验证码")
+
+
 class TokenResponse(BaseModel):
     """说明书的登录响应格式。"""
 

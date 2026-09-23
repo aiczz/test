@@ -17,5 +17,6 @@ class Favorite(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
-    recipe_id: int = Field(foreign_key="recipes.id", index=True)
+    # 内容库可能来自清洗后的 dishes 表；逻辑存在性由服务层校验。
+    recipe_id: int = Field(index=True)
     created_at: datetime = Field(default_factory=utcnow)

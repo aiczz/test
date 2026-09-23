@@ -114,6 +114,35 @@ class BackendApi {
         .toList();
   }
 
+  /// GET /api/recipes/{id} —— 配方、做法与收藏状态都来自后端。
+  Future<Recipe> fetchRecipeDetail(String recipeId) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/recipes/$recipeId',
+      options: _auth,
+    );
+    return _recipeFromJson(res.data ?? const <String, dynamic>{});
+  }
+
+  Future<Set<String>> fetchFavoriteIds() async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/favorites',
+      options: _auth,
+    );
+    final items = (res.data?['items'] as List?) ?? const <dynamic>[];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map((item) => '${item['id']}')
+        .toSet();
+  }
+
+  Future<void> setFavorite(String recipeId, {required bool favorite}) async {
+    if (favorite) {
+      await _dio.post<void>('/api/favorites/$recipeId', options: _auth);
+    } else {
+      await _dio.delete<void>('/api/favorites/$recipeId', options: _auth);
+    }
+  }
+
   // ---------------------------------------------------------------- 现有食材
 
   /// GET /api/my-foods —— 需要登录
@@ -265,7 +294,10 @@ class BackendApi {
     // 前端模型用 String id，后端是 int —— 统一转成字符串
     id: '${json['id']}',
     name: json['name'] as String? ?? '',
-    image: json['image'] as String? ?? '',
+    image: _imageOrFallback(
+      json['image'],
+      _foodFallbackImage(json['category'] as String?),
+    ),
     category: fromBackendCategory(json['category'] as String?),
     tags: ((json['tags'] as List?) ?? const <dynamic>[])
         .map((e) => e.toString())
@@ -275,7 +307,10 @@ class BackendApi {
   static Recipe _recipeFromJson(Map<String, dynamic> json) => Recipe(
     id: '${json['id']}',
     name: json['name'] as String? ?? '',
-    image: json['image'] as String? ?? '',
+    image: _imageOrFallback(
+      json['image'],
+      _recipeFallbackImage('${json['id']}'),
+    ),
     desc: json['description'] as String? ?? '',
     // 后端给的是分钟数，前端展示用「60分钟」这种文案
     time: '${json['duration_minutes'] ?? 0}分钟',
@@ -302,6 +337,27 @@ class BackendApi {
     final unit = json['unit']?.toString() ?? '';
     final quantity = '$amount$unit';
     return quantity.isEmpty ? name : '$name $quantity';
+  }
+
+  static String _imageOrFallback(Object? value, String fallback) {
+    final image = value?.toString().trim() ?? '';
+    return image.isEmpty ? fallback : image;
+  }
+
+  static String _foodFallbackImage(String? category) => switch (category) {
+    'fruit' => 'assets/images/tomato-clean.jpg',
+    'meat_egg' => 'assets/images/egg-clean.jpg',
+    'grain' => 'assets/images/pumpkin-clean.jpg',
+    _ => 'assets/images/bokchoy-clean.jpg',
+  };
+
+  static String _recipeFallbackImage(String id) {
+    const images = <String>[
+      'assets/images/tomato-egg.jpg',
+      'assets/images/mushroom-chicken.jpg',
+      'assets/images/hero-soup.jpg',
+    ];
+    return images[(int.tryParse(id) ?? 0).abs() % images.length];
   }
 }
 

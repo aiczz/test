@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
+import re
 import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from clean_v2 import DISH_TARGET_COUNT, dish_filter_reason, normalized_dish_title
+from clean_v2 import (
+    DISH_TARGET_COUNT, clean_dish_display_name, dish_filter_reason, extract_unsuitable_groups,
+    normalized_dish_title,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +77,25 @@ def main():
             dish_search_count[dish_id] = int(row["search_ingredient_count"])
             require(dish_main_count[dish_id] > 0, f"保留菜谱没有基础食材：{dish_id}")
             require(dish_search_count[dish_id] >= dish_main_count[dish_id], f"搜索食材数小于直接食材数：{dish_id}")
+
+    name_map = rows(OUT / "dish_name_map.csv")
+    require(len(name_map) == len(dish_ids), "菜名审计映射未完整覆盖保留菜谱")
+    require({int(r["id"]) for r in name_map} == dish_ids, "菜名审计映射 ID 不一致")
+    for row in name_map:
+        expected_name, expected_rules = clean_dish_display_name(row["original_name"])
+        require(row["cleaned_name"] == expected_name, f"菜名清洗结果不可复现：{row['id']}")
+        require(row["rules"] == expected_rules, f"菜名清洗规则不可复现：{row['id']}")
+        require(dish_names[int(row["id"])] == row["cleaned_name"], f"菜名未同步到 dishes：{row['id']}")
+        require(bool(row["cleaned_name"].strip()), f"菜名清洗为空：{row['id']}")
+    name_examples = {
+        "西红柿肥牛汤（2人食快手菜）": "西红柿肥牛汤",
+        "超美味的西红柿蛋汤": "西红柿蛋汤",
+        "水煮海螺（附海螺的挑选方法）": "水煮海螺",
+        "下饭菜-豆角肉丁": "豆角肉丁",
+        "【杭椒牛肉】快手下饭菜": "杭椒牛肉",
+    }
+    mapped_examples = {r["original_name"]: r["cleaned_name"] for r in name_map}
+    require(all(mapped_examples.get(k) == v for k, v in name_examples.items()), "代表菜名清洗回归失败")
 
     dropped_rows = rows(OUT / "dropped_dishes.csv")
     dropped_ids = {int(r["id"]) for r in dropped_rows}
@@ -258,22 +282,79 @@ def main():
     normalized_title_counts = Counter(normalized_dish_title(name) for name in dish_names.values())
 
     effect_ids = {int(r["id"]) for r in rows(OUT / "tcm_effects.csv")}
-    group_ids = {int(r["id"]) for r in rows(OUT / "target_groups.csv")}
+    target_group_rows = rows(OUT / "target_groups.csv")
+    group_ids = {int(r["id"]) for r in target_group_rows}
+    group_names = {int(r["id"]): r["name"] for r in target_group_rows}
     effects = rows(OUT / "ingredient_effects.csv")
     groups = rows(OUT / "ingredient_groups.csv")
     require(all(int(r["ingredient_id"]) in valid_ing and int(r["effect_id"]) in effect_ids for r in effects), "功效关系有孤儿")
     require(all(int(r["ingredient_id"]) in valid_ing and int(r["group_id"]) in group_ids for r in groups), "人群关系有孤儿")
     require(len({(r["ingredient_id"], r["effect_id"]) for r in effects}) == len(effects), "功效关系重复")
-    require(len({(r["ingredient_id"], r["group_id"]) for r in groups}) == len(groups), "人群关系重复")
+    require(len({(r["ingredient_id"], r["group_id"], r["is_suitable"]) for r in groups}) == len(groups), "人群关系重复")
+    require(all(r["is_suitable"] in {"0", "1"} and r["evidence_source"] and r["evidence_text"] for r in groups), "人群关系缺少方向或证据")
+    suitable_group_count = sum(r["is_suitable"] == "1" for r in groups)
+    unsuitable_group_count = sum(r["is_suitable"] == "0" for r in groups)
+    require(suitable_group_count > 0 and unsuitable_group_count > 0, "人群关系缺少正向或负向数据")
+    positive_group_pairs = {(r["ingredient_id"], r["group_id"]) for r in groups if r["is_suitable"] == "1"}
+    negative_group_pairs = {(r["ingredient_id"], r["group_id"]) for r in groups if r["is_suitable"] == "0"}
+    require(not positive_group_pairs & negative_group_pairs, "同一食材和人群同时存在正负关系")
+    extraction_audit = rows(OUT / "ingredient_group_extraction_audit.csv")
+    require(len(extraction_audit) == sum(bool(r["tcm_not_user"].strip()) for r in main_rows), "禁忌解析审计未覆盖全部非空原文")
+    for row in extraction_audit:
+        extracted_names = [name for name, _ in extract_unsuitable_groups(row["tcm_not_user"])]
+        require(json.loads(row["extracted_groups_json"]) == list(dict.fromkeys(extracted_names)), f"禁忌解析不可复现：{row['ingredient_id']}")
+    negative_pairs = {(int(r["ingredient_id"]), group_names[int(r["group_id"])]) for r in groups if r["is_suitable"] == "0"}
+    require((by_name["鸡蛋"], "高血压患者") in negative_pairs, "鸡蛋高血压禁忌未结构化")
+    require((by_name["薄荷"], "孕妇") in negative_pairs, "薄荷孕妇禁忌未结构化")
+    require((by_name["西瓜"], "糖尿病患者") in negative_pairs, "西瓜糖尿病禁忌未结构化")
+
+    # MySQL 运行结构只保留 6 张表，所有合并 JSON 和外键均可解析、可闭合。
+    runtime_ingredients = rows(OUT / "db_ingredients.csv")
+    runtime_dishes = rows(OUT / "db_dishes.csv")
+    runtime_di = rows(OUT / "db_dish_ingredients.csv")
+    runtime_calendar = rows(OUT / "db_seasonal_calendar.csv")
+    runtime_food = rows(OUT / "db_seasonal_food.csv")
+    require(len(runtime_ingredients) == len(catalog), "运行食材表数量错误")
+    require(len(runtime_dishes) == len(dish_ids), "运行菜谱表数量错误")
+    require(len(runtime_di) == di_count, "运行菜谱用料表数量错误")
+    require(len(runtime_calendar) == len(calendar), "运行季节日历表数量错误")
+    require(len(runtime_food) == len(seasonal_food), "运行时令食物表数量错误")
+    runtime_ingredient_ids = {int(r["id"]) for r in runtime_ingredients}
+    require(runtime_ingredient_ids == catalog_ids, "运行食材表 ID 与完整目录不一致")
+    require(all(int(r["dish_id"]) in dish_ids and int(r["ingredient_id"]) in runtime_ingredient_ids for r in runtime_di), "运行菜谱用料存在孤儿")
+    require(all(not r["core_ingredient_id"] or int(r["core_ingredient_id"]) in valid_ing for r in runtime_di), "运行菜谱用料核心食材孤儿")
+    require(all(r["calendar_id"] in calendar_ids for r in runtime_food), "运行时令食物日历孤儿")
+    require(all(not r["ingredient_id"] or int(r["ingredient_id"]) in runtime_ingredient_ids for r in runtime_food), "运行时令食物食材孤儿")
+    json_columns = [
+        (runtime_ingredients, ["effects_json", "suitable_groups_json", "unsuitable_groups_json", "aliases_json", "parent_core_ids_json", "child_core_ids_json"]),
+        (runtime_dishes, ["tags_json", "search_ingredient_ids_json"]),
+        (runtime_di, ["component_core_ids_json"]),
+        (runtime_calendar, ["knowledge_json"]),
+        (runtime_food, ["knowledge_json"]),
+    ]
+    for table_rows, fields in json_columns:
+        for row in table_rows:
+            for field in fields:
+                require(isinstance(json.loads(row[field]), list), f"运行 JSON 列非法：{field}")
+    runtime_ingredient_by_name = {r["name"]: r for r in runtime_ingredients}
+    require("高血压患者" in json.loads(runtime_ingredient_by_name["鸡蛋"]["unsuitable_groups_json"]), "运行表未合并鸡蛋禁忌人群")
+    require("孕妇" in json.loads(runtime_ingredient_by_name["薄荷"]["unsuitable_groups_json"]), "运行表未合并薄荷禁忌人群")
+    require("糖尿病患者" in json.loads(runtime_ingredient_by_name["西瓜"]["unsuitable_groups_json"]), "运行表未合并西瓜禁忌人群")
+    schema = (OUT / "schema.sql").read_text(encoding="utf-8")
+    schema_tables = re.findall(r"CREATE TABLE\s+([a-z_]+)\s*\(", schema, flags=re.I)
+    runtime_tables = ["ingredients", "dishes", "dish_ingredients", "seasonal_calendar", "seasonal_food", "seasonal_dish_links"]
+    require(schema_tables == runtime_tables, f"运行表结构不是预期 6 表：{schema_tables}")
 
     compile((OUT / "load_to_mysql.py").read_text(encoding="utf-8"), "load_to_mysql.py", "exec")
     expected = {
         "main_ingredient.csv", "ingredient_id_map.csv", "dropped_ingredients.csv", "review_ingredients.csv",
         "ingredient_catalog.csv", "ingredient_catalog_aliases.csv", "dish_ingredient_components.csv",
         "dish_ingredients.csv", "dish_ingredient_search.csv", "ingredient_hierarchy.csv", "dropped_dishes.csv",
-        "ingredient_effects.csv", "ingredient_groups.csv", "dishes.csv", "dish_nutrition.csv", "dish_tags.csv",
+        "ingredient_effects.csv", "ingredient_groups.csv", "ingredient_group_extraction_audit.csv", "dishes.csv", "dish_nutrition.csv", "dish_tags.csv",
         "ingredient_categories.csv", "ingredient_subcategories.csv", "excluded_seasonings.csv", "excluded_junk.csv",
         "seasonal_calendar.csv", "seasonal_food.csv", "seasonal_knowledge.csv", "seasonal_dish_links.csv",
+        "dish_name_map.csv", "db_ingredients.csv", "db_dishes.csv", "db_dish_ingredients.csv",
+        "db_seasonal_calendar.csv", "db_seasonal_food.csv",
         "schema.sql", "load_to_mysql.py", "CLEANING_REPORT.md", "README.md",
     }
     require(expected <= {p.name for p in OUT.iterdir()}, "交付文件不完整")
@@ -283,6 +364,7 @@ def main():
 - 旧名称动作覆盖：{len(mapping):,}/16,693；动作分布：{dict(action_counts)}。
 - 新核心食材：{len(main_rows):,}；ID 连续、名称唯一、十类分类完整。
 - 菜谱：源表 {len(source_dish_ids):,}，保留 {len(dish_ids):,}，删除 {len(dropped_ids):,}；删除类型分布：{dict(drop_type_counts)}。
+- 菜名规范：修改 {sum(r['changed'] == '1' for r in name_map):,}/{len(name_map):,}，原名、结果和规则可逐行复核。
 - 菜谱删减规则回归：保留集零残留命中；代表家常菜保留数量：{staple_counts}。
 - 精选库：目标 {DISH_TARGET_COUNT:,} 道，直接/拆分食材覆盖 {len(covered_direct_ingredients):,}/590；规范同名标题最大保留 {max(normalized_title_counts.values()):,} 道。
 - 菜谱用料：{di_count:,}；角色分布：{dict(roles)}；每条均有非空完整目录 ID，目录外键零孤儿。
@@ -294,7 +376,9 @@ def main():
 - 季节关联：日历、完整食材目录、核心食材、知识和精选菜谱外键均零孤儿；具体食物知识 {sum(bool(r['seasonal_food_id']) for r in seasonal_knowledge):,}/{len(seasonal_food):,} 一一覆盖。
 - 菜谱标签：{len(dish_tags):,}；菜谱营养：{len(nutrition):,}，版本分布 {dict(nutrition_versions)}；被删菜谱零残留。
 - 食材、功效、人群关系零孤儿且零重复；代表营养字段未被错误继承。
-- `load_to_mysql.py` 语法编译通过，新层级表与搜索表均包含在导入顺序中。
+- 人群关系：适宜 {suitable_group_count:,} 条，不适宜 {unsuitable_group_count:,} 条；方向存放在食材×人群关系并保留证据原句。
+- MySQL 运行结构：23 张明细表合并为 6 张业务表；运行数据数量分别为 {len(runtime_ingredients):,}/{len(runtime_dishes):,}/{len(runtime_di):,}/{len(runtime_calendar):,}/{len(runtime_food):,}/{len(seasonal_dish_links):,}。
+- `load_to_mysql.py` 语法编译通过，6 张运行表的合并字段、JSON 与外键全部校验通过。
 """
     (OUT / "VALIDATION_REPORT.md").write_text(report, encoding="utf-8")
 

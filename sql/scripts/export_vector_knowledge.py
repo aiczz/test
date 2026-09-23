@@ -77,10 +77,7 @@ def main() -> int:
     catalog = rows("ingredient_catalog.csv")
     aliases = rows("ingredient_catalog_aliases.csv")
     effects = {int(row["id"]): row["name"] for row in rows("tcm_effects.csv")}
-    groups = {
-        int(row["id"]): (row["name"], row["is_suitable"] == "1")
-        for row in rows("target_groups.csv")
-    }
+    groups = {int(row["id"]): row["name"] for row in rows("target_groups.csv")}
 
     seasonal_calendar = {row["id"]: row for row in rows("seasonal_calendar.csv")}
     seasonal_food = rows("seasonal_food.csv")
@@ -110,7 +107,8 @@ def main() -> int:
     suitable_by_ingredient: dict[int, list[str]] = defaultdict(list)
     unsuitable_by_ingredient: dict[int, list[str]] = defaultdict(list)
     for row in rows("ingredient_groups.csv"):
-        group_name, is_suitable = groups[int(row["group_id"])]
+        group_name = groups[int(row["group_id"])]
+        is_suitable = row["is_suitable"] == "1"
         target = suitable_by_ingredient if is_suitable else unsuitable_by_ingredient
         target[int(row["ingredient_id"])].append(group_name)
 

@@ -1,13 +1,17 @@
 """认证业务逻辑（说明书 §12）。"""
 
+import hashlib
+import hmac
+
 from fastapi import HTTPException, Request, status
 from sqlmodel import Session
 
 from app.core.security import create_access_token, hash_password, verify_password
+from app.core.config import settings
 from app.models.login_log import LoginLog
 from app.models.user import User, UserPreference
 from app.repositories import user_repository
-from app.schemas.auth import LoginRequest, RegisterRequest
+from app.schemas.auth import LoginRequest, RegisterRequest, SmsAuthRequest
 from app.utils.time import utcnow
 
 
@@ -72,6 +76,46 @@ def register(session: Session, payload: RegisterRequest) -> User:
     session.add(UserPreference(user_id=user.id))
     session.commit()
     return user
+
+
+def _sms_password(phone: str) -> str:
+    """生成只在服务端使用的稳定口令，客户端和数据库都不保存验证码明文。"""
+    return hmac.new(
+        settings.secret_key.encode("utf-8"),
+        f"sms:{phone}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _verify_demo_sms(payload: SmsAuthRequest) -> None:
+    # 当前没有短信供应商，固定码仅用于竞赛演示；以后只需替换这里的校验。
+    if payload.code != "123456":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="验证码不正确"
+        )
+
+
+def register_sms(session: Session, payload: SmsAuthRequest) -> User:
+    _verify_demo_sms(payload)
+    return register(
+        session,
+        RegisterRequest(
+            username=payload.phone,
+            password=_sms_password(payload.phone),
+            nickname=f"用户{payload.phone[-4:]}",
+        ),
+    )
+
+
+def login_sms(
+    session: Session, payload: SmsAuthRequest, request: Request | None = None
+) -> str:
+    _verify_demo_sms(payload)
+    return login(
+        session,
+        LoginRequest(username=payload.phone, password=_sms_password(payload.phone)),
+        request,
+    )
 
 
 def login(

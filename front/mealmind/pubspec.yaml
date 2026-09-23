@@ -76,6 +76,13 @@ flutter:
     - assets/images/
     - assets/mock/
 
+  # Flutter Web 的 CanvasKit 不保证能读取系统中文字体；随应用打包开源
+  # Noto Sans SC，避免部署后中文显示成方框。
+  fonts:
+    - family: NotoSansSC
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Regular.otf
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

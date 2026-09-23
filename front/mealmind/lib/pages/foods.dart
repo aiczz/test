@@ -972,6 +972,8 @@ class _FoodInventoryCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               food.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800,
@@ -1023,7 +1025,7 @@ class _FoodInventoryCard extends StatelessWidget {
                           spacing: 5,
                           runSpacing: 5,
                           children: [
-                            for (final tag in food.tags) _Tag(text: tag),
+                            for (final tag in food.tags.take(2)) _Tag(text: tag),
                           ],
                         ),
                       const Spacer(),
@@ -1247,7 +1249,9 @@ class _Tag extends StatelessWidget {
       decoration: tagDeco(),
       child: Text(
         text,
-        softWrap: true,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
         style: const TextStyle(
           fontSize: 10,
           color: green700,

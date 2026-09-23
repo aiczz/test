@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/content.dart';
+import '../services/api_config.dart';
+import '../services/auth_store.dart';
+import '../services/backend_api.dart';
 import '../services/content_store.dart';
 import '../theme.dart';
 
@@ -30,6 +35,30 @@ class _RecipesPageState extends State<RecipesPage> {
   ///    登录后可以接上（见 back/README.md 的 /api/favorites）。
   final Set<String> _favorites = <String>{};
 
+  bool get _canSyncFavorites =>
+      BackendStatus.instance.online && AuthStore.instance.isLoggedIn;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadFavorites());
+  }
+
+  Future<void> _loadFavorites() async {
+    if (!_canSyncFavorites) return;
+    try {
+      final ids = await BackendApi.instance.fetchFavoriteIds();
+      if (!mounted) return;
+      setState(() {
+        _favorites
+          ..clear()
+          ..addAll(ids);
+      });
+    } catch (error) {
+      debugPrint('[RecipesPage] 收藏加载失败：$error');
+    }
+  }
+
   @override
   void dispose() {
     _search.dispose();
@@ -57,14 +86,30 @@ class _RecipesPageState extends State<RecipesPage> {
     return list.toList();
   }
 
-  void _toggleFavorite(String id) {
+  Future<void> _toggleFavorite(String id) async {
+    final adding = !_favorites.contains(id);
     setState(() {
-      if (_favorites.contains(id)) {
-        _favorites.remove(id);
-      } else {
+      if (adding) {
         _favorites.add(id);
+      } else {
+        _favorites.remove(id);
       }
     });
+    if (!_canSyncFavorites) return;
+    try {
+      await BackendApi.instance.setFavorite(id, favorite: adding);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (adding) {
+          _favorites.remove(id);
+        } else {
+          _favorites.add(id);
+        }
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('收藏同步失败，请稍后重试')));
+    }
   }
 
   @override
@@ -362,7 +407,7 @@ class _RecipesPageState extends State<RecipesPage> {
                 _RecipeListCard(
                   recipe: r,
                   favorite: _favorites.contains(r.id),
-                  onFavorite: () => _toggleFavorite(r.id),
+                  onFavorite: () => unawaited(_toggleFavorite(r.id)),
                   onOpen: () => openRecipeDetail(context, r),
                 ),
                 const SizedBox(height: 12),
@@ -601,8 +646,66 @@ void openRecipeDetail(BuildContext context, Recipe recipe) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
     ),
-    builder: (_) => _RecipeDetailSheet(recipe: recipe),
+    builder: (_) => _RecipeDetailLoader(recipe: recipe),
   );
+}
+
+class _RecipeDetailLoader extends StatefulWidget {
+  final Recipe recipe;
+
+  const _RecipeDetailLoader({required this.recipe});
+
+  @override
+  State<_RecipeDetailLoader> createState() => _RecipeDetailLoaderState();
+}
+
+class _RecipeDetailLoaderState extends State<_RecipeDetailLoader> {
+  late Future<Recipe> _future = _load();
+
+  Future<Recipe> _load() {
+    if (!ContentStore.instance.fromBackend ||
+        int.tryParse(widget.recipe.id) == null) {
+      return Future<Recipe>.value(widget.recipe);
+    }
+    return BackendApi.instance.fetchRecipeDetail(widget.recipe.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Recipe>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return _RecipeDetailSheet(recipe: snapshot.data!);
+        }
+        if (snapshot.hasError) {
+          return SizedBox(
+            height: 420,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off_outlined, color: muted, size: 34),
+                  const SizedBox(height: 12),
+                  const Text('菜谱详情加载失败', style: TextStyle(color: ink)),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _future = _load()),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重新加载'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return const SizedBox(
+          height: 420,
+          child: Center(child: CircularProgressIndicator(color: green700)),
+        );
+      },
+    );
+  }
 }
 
 class _RecipeDetailSheet extends StatelessWidget {

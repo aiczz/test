@@ -14,6 +14,7 @@ from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
     RegisterRequest,
+    SmsAuthRequest,
     TokenResponse,
     UserPublic,
 )
@@ -45,6 +46,30 @@ def login(
     # 管理员页面靠它「监听」谁在什么时候登录了
     return TokenResponse(
         access_token=auth_service.login(session, payload, request)
+    )
+
+
+@router.post(
+    "/sms/register",
+    response_model=UserPublic,
+    status_code=201,
+    summary="手机号验证码注册（演示码）",
+)
+def register_sms(
+    payload: SmsAuthRequest,
+    session: Session = Depends(get_session),
+) -> User:
+    return auth_service.register_sms(session, payload)
+
+
+@router.post("/sms/login", response_model=TokenResponse, summary="手机号验证码登录")
+def login_sms(
+    payload: SmsAuthRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> TokenResponse:
+    return TokenResponse(
+        access_token=auth_service.login_sms(session, payload, request)
     )
 
 

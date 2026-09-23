@@ -366,11 +366,12 @@ def _seed_recipes(session: Session) -> None:
     session.commit()
 
 
-def seed_all(session: Session) -> None:
+def seed_all(session: Session, *, include_content: bool = True) -> None:
     """灌全部种子数据。幂等 —— 重复调用不会重复插入。"""
     _seed_users(session)
-    _seed_foods(session)
-    _seed_recipes(session)
+    if include_content:
+        _seed_foods(session)
+        _seed_recipes(session)
 
 
 if __name__ == "__main__":

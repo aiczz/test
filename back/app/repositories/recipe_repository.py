@@ -2,7 +2,9 @@
 
 from sqlmodel import Session, col, func, select
 
+from app.core.database import uses_compact_catalog
 from app.models.recipe import Recipe, RecipeIngredient, RecipeStep
+from app.repositories import compact_catalog_repository as compact
 
 
 def _conditions(
@@ -39,6 +41,17 @@ def list_recipes(
     offset: int = 0,
     limit: int = 20,
 ) -> tuple[list[Recipe], int]:
+    if uses_compact_catalog(session.get_bind()):
+        return compact.list_recipes(
+            session,
+            category=category,
+            season=season,
+            difficulty=difficulty,
+            max_duration=max_duration,
+            keyword=keyword,
+            offset=offset,
+            limit=limit,
+        )
     conditions = _conditions(
         category=category,
         season=season,
@@ -65,6 +78,10 @@ def search(
     session: Session, keyword: str, *, offset: int = 0, limit: int = 20
 ) -> tuple[list[Recipe], int]:
     """菜名 或 配料名 命中即可（说明书 §11.2）。"""
+    if uses_compact_catalog(session.get_bind()):
+        return compact.search_recipes(
+            session, keyword, offset=offset, limit=limit
+        )
     like = f"%{keyword}%"
     # 配料命中的菜谱 id 子查询
     by_ingredient = select(RecipeIngredient.recipe_id).where(
@@ -87,10 +104,14 @@ def search(
 
 
 def get(session: Session, recipe_id: int) -> Recipe | None:
+    if uses_compact_catalog(session.get_bind()):
+        return compact.get_recipe(session, recipe_id)
     return session.get(Recipe, recipe_id)
 
 
 def list_ingredients(session: Session, recipe_id: int) -> list[RecipeIngredient]:
+    if uses_compact_catalog(session.get_bind()):
+        return compact.list_recipe_ingredients(session, recipe_id)
     return list(
         session.exec(
             select(RecipeIngredient)
@@ -101,6 +122,8 @@ def list_ingredients(session: Session, recipe_id: int) -> list[RecipeIngredient]
 
 
 def list_steps(session: Session, recipe_id: int) -> list[RecipeStep]:
+    if uses_compact_catalog(session.get_bind()):
+        return compact.list_recipe_steps(session, recipe_id)
     return list(
         session.exec(
             select(RecipeStep)
@@ -112,6 +135,8 @@ def list_steps(session: Session, recipe_id: int) -> list[RecipeStep]:
 
 def list_by_food(session: Session, food_id: int, *, limit: int = 5) -> list[Recipe]:
     """某食材能做的菜谱 —— 食材详情页的 recommended_recipes。"""
+    if uses_compact_catalog(session.get_bind()):
+        return compact.list_recipes_by_food(session, food_id, limit=limit)
     subquery = select(RecipeIngredient.recipe_id).where(
         RecipeIngredient.food_id == food_id
     )
@@ -125,6 +150,8 @@ def list_by_food(session: Session, food_id: int, *, limit: int = 5) -> list[Reci
 def list_by_ids(session: Session, recipe_ids: list[int]) -> list[Recipe]:
     if not recipe_ids:
         return []
+    if uses_compact_catalog(session.get_bind()):
+        return compact.list_recipes_by_ids(session, recipe_ids)
     return list(
         session.exec(select(Recipe).where(col(Recipe.id).in_(recipe_ids))).all()
     )

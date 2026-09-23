@@ -2,6 +2,7 @@
 
 from sqlmodel import Session, col, select
 
+from app.core.database import uses_compact_catalog
 from app.models.favorite import Favorite
 from app.models.recipe import Recipe
 
@@ -48,6 +49,19 @@ def list_recipes(session: Session, user_id: int) -> list[Recipe]:
        却在 ORDER BY 里引用 favorites.id，SQLite 直接报
        "no such column: favorites.id"。
     """
+    if uses_compact_catalog(session.get_bind()):
+        favorites = session.exec(
+            select(Favorite)
+            .where(Favorite.user_id == user_id)
+            .order_by(col(Favorite.created_at).desc())
+        ).all()
+        # 延迟导入以避免 repositories 包初始化时的循环依赖。
+        from app.repositories import recipe_repository
+
+        return recipe_repository.list_by_ids(
+            session, [item.recipe_id for item in favorites]
+        )
+
     return list(
         session.exec(
             select(Recipe)

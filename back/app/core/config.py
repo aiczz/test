@@ -7,6 +7,7 @@
 """
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -28,6 +29,10 @@ class Settings(BaseSettings):
     # （另外要装 psycopg：pip install "psycopg[binary]"）：
     #   postgresql+psycopg://user:password@localhost:5432/shishi
     database_url: str = "sqlite:///./shishi.db"
+    # auto: 检测到清洗后的六张表就直接读取，否则沿用本地演示表。
+    # compact: 强制使用清洗库（缺表时启动失败，防止误连空库）。
+    # legacy:  强制使用旧版演示表，主要用于测试和开发。
+    content_mode: Literal["auto", "compact", "legacy"] = "auto"
 
     # ---- 认证（说明书 §12）----
     # ⚠️ 换生产环境必须改成随机值：

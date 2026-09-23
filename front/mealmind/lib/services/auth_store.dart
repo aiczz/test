@@ -215,6 +215,17 @@ class AuthStore extends ChangeNotifier {
   Future<void> registerPhone(String phone, String code) async {
     final normalized = _normalizePhone(phone);
     _validatePhoneCode(normalized, code);
+    if (BackendStatus.instance.online) {
+      try {
+        await _dio.post<Map<String, dynamic>>(
+          '/api/auth/sms/register',
+          data: <String, dynamic>{'phone': normalized, 'code': code},
+        );
+        return;
+      } on DioException catch (e) {
+        throw _toAuthException(e);
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     final phones = prefs.getStringList(_kRegisteredPhones) ?? <String>[];
     if (phones.contains(normalized)) {
@@ -234,6 +245,22 @@ class AuthStore extends ChangeNotifier {
   Future<void> loginWithPhone(String phone, String code) async {
     final normalized = _normalizePhone(phone);
     _validatePhoneCode(normalized, code);
+    if (BackendStatus.instance.online) {
+      try {
+        final res = await _dio.post<Map<String, dynamic>>(
+          '/api/auth/sms/login',
+          data: <String, dynamic>{'phone': normalized, 'code': code},
+        );
+        final token = res.data?['access_token'] as String?;
+        if (token == null || token.isEmpty) {
+          throw const AuthException('登录失败：接口没有返回 token');
+        }
+        await _persist(token, await _fetchMe(token));
+        return;
+      } on DioException catch (e) {
+        throw _toAuthException(e);
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     final phones = prefs.getStringList(_kRegisteredPhones) ?? <String>[];
     if (!phones.contains(normalized)) {

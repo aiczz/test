@@ -99,6 +99,28 @@ def test_demo_account_is_seeded_and_usable(client):
     assert me.json()["family_size"] == 3
 
 
+def test_sms_register_then_login_persists_user(client):
+    payload = {"phone": "13800138000", "code": "123456"}
+    registered = client.post("/api/auth/sms/register", json=payload)
+    assert registered.status_code == 201, registered.text
+    assert registered.json()["username"] == payload["phone"]
+
+    logged_in = client.post("/api/auth/sms/login", json=payload)
+    assert logged_in.status_code == 200, logged_in.text
+    token = logged_in.json()["access_token"]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["nickname"] == "用户8000"
+
+
+def test_sms_wrong_code_is_rejected(client):
+    response = client.post(
+        "/api/auth/sms/register",
+        json={"phone": "13900139000", "code": "000000"},
+    )
+    assert response.status_code == 401
+
+
 def test_seed_is_idempotent(session):
     """重复灌种子数据不应该产生重复记录；启动时会反复调用。"""
     from app.data.seed import seed_all

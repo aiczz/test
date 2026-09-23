@@ -6,10 +6,14 @@
 #   -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 fastapi==0.141.1
-uvicorn[standard]==0.53.0
+# 基础版已满足 API 服务；避免 Python 3.14 因可选 websockets 轮子缺失而无法安装。
+uvicorn==0.53.0
 sqlmodel==0.0.42
 pydantic==2.13.5
 pydantic-settings==2.15.0
+
+# 清洗数据库使用 MySQL；SQLite 本地开发不依赖它。
+PyMySQL==1.1.2
 
 # 认证：JWT + 密码哈希
 python-jose[cryptography]==3.5.0

@@ -28,7 +28,7 @@ class ShoppingItem(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     shopping_list_id: int = Field(foreign_key="shopping_lists.id", index=True)
-    food_id: int | None = Field(default=None, foreign_key="foods.id", index=True)
+    food_id: int | None = Field(default=None, index=True)
     # 冗余存名字：食材库改了也不影响历史清单
     name: str = Field(max_length=64)
     amount: float = Field(default=1)

@@ -34,5 +34,5 @@ class MenuPlanItem(SQLModel, table=True):
     # 第几天（0 开始），对应前端的三日菜单
     day_index: int = Field(default=0)
     meal_type: str = Field(default="dinner", max_length=16)
-    recipe_id: int = Field(foreign_key="recipes.id", index=True)
+    recipe_id: int = Field(index=True)
     sort_order: int = Field(default=0)

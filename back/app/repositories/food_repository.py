@@ -2,7 +2,9 @@
 
 from sqlmodel import Session, col, func, select
 
+from app.core.database import uses_compact_catalog
 from app.models.food import Food, FoodSeason
+from app.repositories import compact_catalog_repository as compact
 
 
 def list_foods(
@@ -14,6 +16,14 @@ def list_foods(
     limit: int = 20,
 ) -> tuple[list[Food], int]:
     """返回 (当页数据, 总数)。"""
+    if uses_compact_catalog(session.get_bind()):
+        return compact.list_foods(
+            session,
+            category=category,
+            keyword=keyword,
+            offset=offset,
+            limit=limit,
+        )
     conditions = [col(Food.is_active).is_(True)]
     if category:
         conditions.append(Food.category == category)
@@ -35,10 +45,14 @@ def list_foods(
 
 
 def get(session: Session, food_id: int) -> Food | None:
+    if uses_compact_catalog(session.get_bind()):
+        return compact.get_food(session, food_id)
     return session.get(Food, food_id)
 
 
 def get_season(session: Session, food_id: int) -> FoodSeason | None:
+    if uses_compact_catalog(session.get_bind()):
+        return compact.get_food_season(session, food_id)
     return session.exec(
         select(FoodSeason).where(FoodSeason.food_id == food_id)
     ).first()
@@ -56,6 +70,9 @@ def list_seasonal(
        「11 月到次年 2 月」这种跨年区间需要另外判断（说明书里的数据暂时没有），
        真要支持时在这里补一个 OR 分支即可。
     """
+    if uses_compact_catalog(session.get_bind()):
+        return compact.list_seasonal(session, month=month, limit=limit)
+
     statement = (
         select(Food, FoodSeason)
         .join(FoodSeason, col(FoodSeason.food_id) == col(Food.id))
@@ -69,4 +86,6 @@ def list_seasonal(
 
 
 def list_all(session: Session) -> list[Food]:
+    if uses_compact_catalog(session.get_bind()):
+        return compact.list_all_foods(session)
     return list(session.exec(select(Food).order_by(col(Food.id))).all())

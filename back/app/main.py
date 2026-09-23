@@ -16,7 +16,7 @@ from sqlmodel import Session
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.database import create_db_and_tables, engine
+from app.core.database import create_db_and_tables, engine, uses_compact_catalog
 from app.data.seed import seed_all
 
 
@@ -25,7 +25,8 @@ async def lifespan(app: FastAPI):
     # 建表 + 灌种子数据。两个都是幂等的，反复重启不会重复写。
     create_db_and_tables()
     with Session(engine) as session:
-        seed_all(session)
+        # 清洗库中的食材/菜谱是原始权威数据，不灌演示内容、不覆盖主键。
+        seed_all(session, include_content=not uses_compact_catalog(engine))
     yield
 
 
