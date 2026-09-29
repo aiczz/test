@@ -5,24 +5,13 @@ class FoodPhoto extends StatelessWidget {
   final String asset;
   const FoodPhoto({super.key, required this.asset});
 
-  static const _replacements = <String, String>{
-    'assets/images/ingredient_pork.jpg':
-        'assets/images/ingredient-pork-wide.png',
-    'assets/images/ingredient_onion.jpg':
-        'assets/images/ingredient-onion-wide.png',
-    'assets/images/ingredient_carrot.jpg':
-        'assets/images/ingredient-carrot-wide.png',
-    'assets/images/ingredient_chicken.jpg':
-        'assets/images/ingredient-chicken-wide.png',
-    'assets/images/ingredient-coriander-wide.png':
-        'assets/images/ingredient-coriander-wide.png',
-    'assets/images/ingredient-red-date-wide.png':
-        'assets/images/ingredient-red-date-wide.png',
-    'assets/images/ingredient-celery-wide.png':
-        'assets/images/ingredient-celery-wide.png',
-    'assets/images/ingredient-sweet-potato-wide.png':
-        'assets/images/ingredient-sweet-potato-wide.png',
-  };
+  /// ⚠️ 这里原本有一张 `.jpg → -wide.png` 的替换表，指向一套【从未提交】的
+  ///    高清宽图（清理大文件那次 force push 之后就不在仓库里了，旧历史里
+  ///    用的也是 `.jpg`）。结果是每张食材图都加载失败：
+  ///      Unable to load asset: "assets/images/ingredient-pork-wide.png"
+  ///    测试里这会被当成异常直接判失败，真机上则是整片空白。
+  ///    现在只用仓库里真实存在的文件；等那套宽图补回来，再把映射加回来。
+  static const _replacements = <String, String>{};
 
   @override
   Widget build(BuildContext context) => ClipRect(

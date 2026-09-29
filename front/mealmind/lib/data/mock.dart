@@ -79,7 +79,7 @@ const mockRecipes = <Recipe>[
   Recipe(
     id: 'egg',
     name: '番茄炒蛋',
-    image: 'assets/images/tomato-egg-clean.png',
+    image: 'assets/images/tomato-egg.jpg',
     desc: '酸甜开胃，经典家常',
     time: '15分钟',
     people: '2-3人',
@@ -113,7 +113,7 @@ const mockRecipes = <Recipe>[
   Recipe(
     id: 'chicken',
     name: '香菇炖鸡',
-    image: 'assets/images/mushroom-chicken-clean.png',
+    image: 'assets/images/mushroom-chicken.jpg',
     desc: '滋补养生，香气浓郁',
     time: '40分钟',
     people: '3人',

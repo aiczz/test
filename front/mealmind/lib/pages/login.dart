@@ -87,6 +87,8 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
+      // 一条路走到底：注册 = 手机号 + 验证码 + 设个数字密码，注册成功后
+      // 直接登录（不用再切回登录页）；登录 = 用户名 + 密码。
       if (_registerMode) {
         await AuthStore.instance.registerPhone(
           _phone.text.trim(),
@@ -114,36 +116,6 @@ class _LoginPageState extends State<LoginPage> {
         _busy = false;
       });
     }
-  }
-
-  void _completeRegistration() {
-    _timer?.cancel();
-    _code.clear();
-    _password.clear();
-    setState(() {
-      _registerMode = false;
-      _busy = false;
-      _codeSent = false;
-      _countdown = 0;
-      _error = null;
-    });
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('注册成功，请登录'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: orange900,
-        ),
-      );
-  }
-
-  void _switchLoginMode(bool phoneMode) {
-    if (_busy || _phoneMode == phoneMode) return;
-    setState(() {
-      _phoneMode = phoneMode;
-      _error = null;
-    });
   }
 
   void _sendCode() {
@@ -264,6 +236,9 @@ class _LoginPageState extends State<LoginPage> {
             ),
             const SizedBox(height: 18),
 
+            // 注册用手机验证码，登录用账号密码 —— 两条路各自独立，
+            // 不需要「手机验证码 / 账号密码」那种切换 tab
+            //（widget_test 里也断言了页面上不该出现那两个字样）。
             if (_registerMode) ...[
               _phoneFields(),
               const SizedBox(height: 12),
@@ -345,39 +320,6 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _loginModeTabs() {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: orange50,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: line),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _LoginModeButton(
-              selected: _phoneMode,
-              icon: Icons.phone_android_rounded,
-              label: '手机验证码',
-              onTap: () => _switchLoginMode(true),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: _LoginModeButton(
-              selected: !_phoneMode,
-              icon: Icons.person_outline_rounded,
-              label: '账号密码',
-              onTap: () => _switchLoginMode(false),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -583,47 +525,6 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _LoginModeButton extends StatelessWidget {
-  final bool selected;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _LoginModeButton({
-    required this.selected,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? Colors.white : Colors.transparent,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 16, color: selected ? orange700 : muted),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: selected ? orange700 : muted,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

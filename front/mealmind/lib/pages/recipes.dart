@@ -254,7 +254,7 @@ class _RecipesPageState extends State<RecipesPage> {
                             fit: StackFit.expand,
                             children: [
                               Image.asset(
-                                'assets/images/tomato-egg-clean.png',
+                                'assets/images/tomato-egg.jpg',
                                 fit: BoxFit.cover,
                                 filterQuality: FilterQuality.high,
                               ),
