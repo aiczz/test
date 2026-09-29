@@ -1,0 +1,1643 @@
+from pathlib import Path
+
+content = r"""# 食时 App 前端实现说明（Codex 开发版）
+
+> 项目定位：面向大众用户的时令饮食与智能菜谱 App。  
+> 当前版本重点：**时令食材推荐 + 菜单推荐 + 菜谱 + AI 助手 + 现有食材管理 + 购物清单 + 个人中心**。  
+> 已取消：**实时价格、价格趋势、价格预测、价格雷达** 等功能。
+
+---
+
+## 1. 项目目标
+
+“食时”是一款结合 **AI + 开源** 的手机端饮食助手。
+
+核心闭环：
+
+```text
+当前季节
+  ↓
+推荐当季食材
+  ↓
+推荐适合的菜谱 / 菜单
+  ↓
+用户查看做法
+  ↓
+加入今日菜单
+  ↓
+生成购物清单
+  ↓
+AI助手继续提供个性化推荐
+```
+
+前端的主要任务不是做复杂的数据分析，而是：
+
+1. 清晰展示时令食材。
+2. 清晰展示推荐菜单。
+3. 提供菜谱搜索、详情、收藏。
+4. 支持“家里有什么食材”管理。
+5. 支持 AI 对话和结构化推荐卡片。
+6. 支持今日菜单、多日菜单与购物清单。
+7. 保持整体 UI 风格统一、清新、温暖、有“时令感”。
+
+---
+
+# 2. 当前 UI 视觉方向
+
+## 2.1 整体风格
+
+关键词：
+
+- 清新
+- 自然
+- 温暖
+- 家庭感
+- 时令感
+- 轻量
+- 简洁
+- 不要科技感过重
+
+主色建议：
+
+```text
+深绿色：#166534 / #1B6B3A
+中绿色：#4CAF50
+浅绿色：#EAF6E8
+米白色：#FFFDF8
+暖橙色：#F97316
+浅橙色：#FFF1E6
+正文黑：#222222
+次级灰：#777777
+背景灰白：#F7F8F5
+```
+
+注意：
+
+- 绿色作为主色。
+- 橙色只用于 CTA、强调、季节标签等。
+- 大面积背景保持白色或米白。
+- 卡片使用圆角。
+- 避免复杂渐变和过多阴影。
+
+---
+
+# 3. 底部导航结构
+
+固定 5 个一级入口：
+
+```text
+首页
+食材
+菜谱
+AI助手
+我的
+```
+
+建议路由：
+
+```text
+/home
+/foods
+/recipes
+/ai
+/profile
+```
+
+底部导航建议在这 5 个一级页面常驻。
+
+---
+
+# 4. 页面总结构
+
+```text
+APP
+├── 首页 Home
+│   ├── 顶部品牌区
+│   ├── 地区/季节信息
+│   ├── 今日推荐 Banner
+│   ├── 食材推荐区域
+│   ├── 菜单推荐区域
+│   ├── AI 建议
+│   └── 快捷操作
+│
+├── 食材 Foods
+│   ├── 分类筛选
+│   ├── 时令食材列表
+│   ├── 食材详情
+│   ├── 我的现有食材
+│   └── 现有食材做菜
+│
+├── 菜谱 Recipes
+│   ├── 菜谱分类
+│   ├── 菜谱搜索
+│   ├── 秋季推荐
+│   ├── 快手菜
+│   ├── 汤品
+│   ├── 菜谱详情
+│   └── 收藏
+│
+├── AI助手 AI
+│   ├── AI对话
+│   ├── 今天吃什么
+│   ├── 多人晚餐推荐
+│   ├── 根据现有食材推荐
+│   ├── 多日菜单
+│   └── 结构化菜谱卡片
+│
+├── 菜单 Menu
+│   ├── 今日菜单
+│   ├── 三日菜单
+│   └── 明日菜单
+│
+├── 购物清单 Shopping
+│   ├── 按食材分类
+│   ├── 勾选
+│   └── 完成采购
+│
+└── 我的 Profile
+    ├── 收藏
+    ├── 历史
+    ├── 家庭人数设置
+    ├── 忌口与偏好
+    ├── 我的食材
+    └── 设置
+```
+
+---
+
+# 5. 首页 Home
+
+## 5.1 首页必须包含两个核心推荐区域
+
+首页的推荐必须同时包括：
+
+1. **食材推荐**
+2. **菜单推荐**
+
+这是首页最核心的信息结构。
+
+## 5.2 首页布局
+
+推荐结构：
+
+```text
+顶部品牌区
+├── Logo：食时
+├── Slogan：顺应时令 · 智慧饮食
+├── 地区
+└── 当前季节
+
+Hero Banner
+├── 今日推荐
+├── 时令文案
+├── 时令图片
+└── 标签：应季食材 / 营养均衡 / 家常易做
+
+食材推荐
+├── 标题
+├── 查看全部
+├── 食材卡片 x 3
+│   ├── 图片
+│   ├── 名称
+│   ├── 当季标签
+│   └── 特点标签
+└── 点击进入食材详情
+
+菜单推荐
+├── 标题
+├── 查看更多
+├── 菜单卡片 x 3
+│   ├── 图片
+│   ├── 菜单名
+│   ├── 菜品摘要
+│   ├── 人数
+│   └── 标签
+└── 点击进入菜单/菜谱详情
+
+AI建议卡片
+└── 简短推荐文案
+
+底部快捷按钮
+├── 查看今日菜单
+└── 去选食材
+```
+
+## 5.3 首页建议 Flutter 组件
+
+```text
+HomePage
+├── AppHeader
+├── SeasonHeroBanner
+├── HomeSectionHeader
+├── FoodRecommendSection
+│   └── FoodRecommendCard
+├── MenuRecommendSection
+│   └── MenuRecommendCard
+├── AiSuggestionCard
+└── HomeQuickActions
+```
+
+## 5.4 首页建议使用的 Flutter Widget
+
+```text
+SafeArea
+CustomScrollView
+SliverToBoxAdapter
+SliverList
+Card
+Container
+ClipRRect
+Row
+Column
+SingleChildScrollView(horizontal)
+CachedNetworkImage 或 Image.asset
+```
+
+优先使用 `CustomScrollView`，避免整个首页嵌套大量 ListView。
+
+---
+
+# 6. 食材页 Foods
+
+## 6.1 页面目标
+
+帮助用户：
+
+- 找到当前季节适合的食材。
+- 查看食材特点。
+- 查看适合做什么菜。
+- 管理家里已有食材。
+
+## 6.2 页面结构
+
+```text
+顶部
+├── 标题：时令食材
+├── 季节
+└── 搜索框
+
+分类栏
+├── 全部
+├── 蔬菜
+├── 水果
+├── 肉蛋
+├── 水产
+└── 豆制品
+
+秋季代表食材 Banner
+├── 食材图片
+├── 名称
+├── 当季标签
+├── 应季指数（非价格）
+└── 简介
+
+食材列表
+└── FoodCard
+
+近期饮食灵感
+└── 根据食材推荐做法
+```
+
+## 6.3 食材详情页
+
+建议路由：
+
+```text
+/foods/:id
+```
+
+结构：
+
+```text
+顶部图片
+├── 食材名
+├── 当季标签
+├── 应季指数
+├── 营养标签
+└── 简介
+
+食材特点
+├── 适合人群
+├── 常见做法
+└── 口感特点
+
+AI 食材分析
+└── 一段 AI 推荐说明
+
+适合做这些菜
+└── RecipeCard x N
+```
+
+注意：
+
+**不要出现实时价格、历史价格、涨跌幅、价格预测。**
+
+---
+
+# 7. 我的现有食材页
+
+建议路由：
+
+```text
+/foods/mine
+```
+
+## 7.1 页面目标
+
+用户记录家中现有食材，然后让 AI 根据这些食材生成菜谱。
+
+## 7.2 页面结构
+
+```text
+顶部 Banner
+├── 现有食材
+├── 拍照识别
+└── 手动添加
+
+分类筛选
+├── 全部
+├── 蔬菜
+├── 肉蛋
+├── 水产
+└── 豆制品
+
+我的食材 Grid
+└── MyFoodCard
+    ├── 图片
+    ├── 名称
+    ├── 数量
+    ├── 标签
+    └── 更多操作
+
+提示卡片
+└── 定期更新食材
+
+底部主按钮
+└── 用这些食材做菜
+```
+
+## 7.3 第一版实现建议
+
+P0：
+
+- 手动添加
+- 删除
+- 数量修改
+- 选中食材生成菜谱
+
+P2：
+
+- 拍照识别
+
+如果进度不够，拍照识别先只保留 UI 入口。
+
+---
+
+# 8. 菜谱页 Recipes
+
+建议路由：
+
+```text
+/recipes
+```
+
+## 8.1 页面结构
+
+```text
+顶部 Banner
+├── 家常菜谱
+└── 应季食材 · 简单好做
+
+搜索框
+
+筛选标签
+├── 全部
+├── 快手菜
+├── 汤品
+├── 低脂
+├── 家常
+└── 秋季推荐
+
+秋季推荐
+└── RecipeCard x 3
+
+15分钟快手菜
+└── RecipeCard x 3
+
+家常汤品
+└── RecipeCard x 3
+```
+
+---
+
+# 9. 菜谱详情页
+
+建议路由：
+
+```text
+/recipes/:id
+```
+
+## 9.1 页面结构
+
+```text
+顶部大图
+├── 菜名
+├── 标签
+├── 简介
+└── 收藏按钮
+
+基本信息
+├── 用时
+├── 份量
+└── 难度
+
+所需食材
+└── IngredientItem
+
+做法步骤
+└── RecipeStep
+    ├── 序号
+    ├── 图片
+    ├── 标题
+    └── 描述
+
+小贴士
+
+底部按钮
+├── 加入今日菜单
+└── 加入购物清单
+```
+
+---
+
+# 10. AI 助手页
+
+建议路由：
+
+```text
+/ai
+```
+
+## 10.1 AI 页不是普通聊天页
+
+一定要做成：
+
+```text
+聊天
++
+结构化结果
+```
+
+不要只显示纯文字。
+
+## 10.2 页面结构
+
+```text
+顶部 Banner
+├── AI助手
+├── 简介
+└── 快捷问题
+    ├── 今天吃什么
+    ├── 三人晚餐推荐
+    └── 我家现有食材
+
+聊天消息区
+├── UserMessageBubble
+├── AiMessageBubble
+└── LoadingBubble
+
+工具调用展示
+├── 时令查询
+├── 营养分析
+└── 菜谱检索
+
+AI 推荐菜单卡片
+├── 菜名
+├── 图片
+├── 标签
+├── 用时
+└── 人数
+
+底部输入框
+├── 输入
+├── 发送
+└── 附加按钮
+```
+
+## 10.3 建议 AI 返回数据结构
+
+前端不要只接受：
+
+```json
+{
+  "answer": "..."
+}
+```
+
+建议后端返回：
+
+```json
+{
+  "answer": "根据当前秋季时令，我推荐以下晚餐。",
+  "recipes": [
+    {
+      "id": 1,
+      "name": "莲藕排骨汤",
+      "image": "...",
+      "duration": 60,
+      "servings": "2-3人",
+      "tags": ["秋季时令", "家常"]
+    }
+  ],
+  "tools_used": [
+    "season_search",
+    "recipe_search"
+  ]
+}
+```
+
+前端直接渲染结构化卡片。
+
+---
+
+# 11. 今日菜单页
+
+建议路由：
+
+```text
+/menu/today
+```
+
+结构：
+
+```text
+顶部
+└── 今日菜单
+
+早餐
+└── RecipeMiniCard x N
+
+午餐
+└── RecipeMiniCard x N
+
+晚餐
+└── RecipeMiniCard x N
+
+营养搭配提示
+
+底部
+├── 一键生成明日菜单
+└── 加入购物清单
+```
+
+---
+
+# 12. 三日菜单页
+
+建议路由：
+
+```text
+/menu/plan
+```
+
+结构：
+
+```text
+顶部 Banner
+├── 三日菜单
+├── 人数
+└── 风格标签
+
+周一
+└── 3道菜
+
+周二
+└── 3道菜
+
+周三
+└── 3道菜
+
+总安排
+├── 3天
+├── 菜品数量
+└── 适合人数
+
+购物清单
+└── 入口
+```
+
+---
+
+# 13. 购物清单页
+
+建议路由：
+
+```text
+/shopping-list
+```
+
+结构：
+
+```text
+顶部
+├── 本周准备
+└── 已勾选数量
+
+蔬菜
+├── Checkbox
+├── 图片
+├── 名称
+└── 数量
+
+肉蛋
+└── 同上
+
+调味
+└── 同上
+
+底部
+├── 清空已完成
+└── 完成采购
+```
+
+---
+
+# 14. 我的页面 Profile
+
+建议路由：
+
+```text
+/profile
+```
+
+结构：
+
+```text
+个人信息 Header
+├── 头像
+├── 昵称
+└── Slogan
+
+统计卡片
+├── 收藏菜谱
+├── 历史菜单
+├── 我的食材
+└── 饮食偏好
+
+本周饮食记录
+├── 已安排
+├── 常用食材
+└── 本周评价
+
+功能列表
+├── 我的收藏
+├── 浏览历史
+├── 家庭人数设置
+├── 忌口与偏好
+├── 提醒设置
+└── 意见反馈
+```
+
+---
+
+# 15. 收藏与历史页
+
+建议路由：
+
+```text
+/profile/favorites
+/profile/history
+```
+
+采用 Tab：
+
+```text
+收藏菜谱
+历史菜单
+```
+
+收藏卡片使用统一 `RecipeCard`。
+
+---
+
+# 16. 前端技术栈
+
+## 核心
+
+```text
+Flutter
+Dart
+Riverpod
+Dio
+GoRouter
+SharedPreferences
+```
+
+## 可选
+
+```text
+cached_network_image
+flutter_svg
+image_picker
+json_serializable
+freezed
+```
+
+## 第一版不建议使用
+
+```text
+Bloc
+GetX
+MobX
+复杂 Clean Architecture
+复杂微前端
+复杂动画框架
+```
+
+项目只有一个月，保持简单。
+
+---
+
+# 17. Riverpod 状态设计
+
+建议 Provider：
+
+```text
+authProvider
+seasonProvider
+homeProvider
+foodProvider
+myFoodProvider
+recipeProvider
+favoriteProvider
+todayMenuProvider
+menuPlanProvider
+shoppingListProvider
+aiChatProvider
+profileProvider
+```
+
+## 17.1 示例职责
+
+### seasonProvider
+
+保存：
+
+```text
+currentSeason
+currentMonth
+region
+```
+
+### homeProvider
+
+获取：
+
+```text
+首页 Banner
+推荐食材
+推荐菜单
+AI 建议
+```
+
+### myFoodProvider
+
+管理：
+
+```text
+用户已有食材
+添加
+删除
+修改数量
+选择食材
+```
+
+### aiChatProvider
+
+管理：
+
+```text
+聊天记录
+发送状态
+AI回复
+结构化推荐结果
+```
+
+---
+
+# 18. GoRouter 路由设计
+
+建议：
+
+```text
+/
+├── /home
+├── /foods
+│   ├── /foods/:id
+│   └── /foods/mine
+├── /recipes
+│   └── /recipes/:id
+├── /ai
+├── /menu/today
+├── /menu/plan
+├── /shopping-list
+└── /profile
+    ├── /profile/favorites
+    ├── /profile/history
+    └── /profile/settings
+```
+
+---
+
+# 19. Dio 网络层设计
+
+统一封装：
+
+```text
+ApiClient
+```
+
+建议：
+
+```dart
+class ApiClient {
+  final Dio dio;
+
+  ApiClient(this.dio);
+
+  Future<Response> get(String path) async {
+    return dio.get(path);
+  }
+
+  Future<Response> post(
+    String path, {
+    dynamic data,
+  }) async {
+    return dio.post(path, data: data);
+  }
+}
+```
+
+不要在页面里直接到处写：
+
+```dart
+Dio().get(...)
+```
+
+页面应该：
+
+```text
+Page
+ ↓
+Provider
+ ↓
+Repository / Service
+ ↓
+ApiClient
+ ↓
+FastAPI
+```
+
+---
+
+# 20. 推荐的数据层结构
+
+```text
+models/
+repositories/
+services/
+providers/
+pages/
+widgets/
+```
+
+推荐调用链：
+
+```text
+Page
+ ↓
+Provider
+ ↓
+Repository
+ ↓
+ApiService
+ ↓
+Dio
+ ↓
+FastAPI
+```
+
+---
+
+# 21. 数据模型建议
+
+## Food
+
+```text
+id
+name
+image
+category
+season
+seasonScore
+description
+tags
+recommendedRecipeIds
+```
+
+注意：
+
+`seasonScore` 是“应季程度”，不是价格分数。
+
+---
+
+## Recipe
+
+```text
+id
+name
+image
+description
+duration
+servings
+difficulty
+tags
+ingredients
+steps
+tips
+isFavorite
+```
+
+---
+
+## Ingredient
+
+```text
+id
+name
+amount
+unit
+image
+```
+
+---
+
+## MenuPlan
+
+```text
+id
+title
+days
+servings
+meals
+```
+
+---
+
+## ShoppingItem
+
+```text
+id
+name
+amount
+unit
+category
+checked
+image
+```
+
+---
+
+## AiMessage
+
+```text
+id
+role
+content
+recipes
+toolsUsed
+createdAt
+```
+
+---
+
+# 22. Mock 数据策略
+
+前端第一周不要等待后端。
+
+建立：
+
+```text
+assets/mock/
+```
+
+例如：
+
+```text
+foods.json
+recipes.json
+home.json
+menu_plan.json
+shopping_list.json
+ai_reply.json
+```
+
+第一阶段：
+
+```text
+Flutter
+ ↓
+Mock JSON
+```
+
+第二阶段：
+
+```text
+Flutter
+ ↓
+Dio
+ ↓
+FastAPI
+```
+
+UI 不需要重写。
+
+---
+
+# 23. 图片资源
+
+建议：
+
+```text
+assets/images/
+├── foods/
+├── recipes/
+├── banners/
+├── icons/
+└── avatars/
+```
+
+`pubspec.yaml` 注册资源。
+
+开发阶段可以优先使用本地图片，避免网络图片影响 Demo 稳定性。
+
+---
+
+# 24. 建议目录结构
+
+```text
+lib/
+├── main.dart
+├── app.dart
+│
+├── core/
+│   ├── theme/
+│   │   ├── app_colors.dart
+│   │   ├── app_theme.dart
+│   │   └── app_text_styles.dart
+│   ├── network/
+│   │   └── api_client.dart
+│   ├── constants/
+│   └── utils/
+│
+├── routes/
+│   └── app_router.dart
+│
+├── models/
+│   ├── food.dart
+│   ├── recipe.dart
+│   ├── ingredient.dart
+│   ├── menu_plan.dart
+│   ├── shopping_item.dart
+│   └── ai_message.dart
+│
+├── repositories/
+│   ├── food_repository.dart
+│   ├── recipe_repository.dart
+│   ├── menu_repository.dart
+│   └── ai_repository.dart
+│
+├── providers/
+│   ├── home_provider.dart
+│   ├── food_provider.dart
+│   ├── my_food_provider.dart
+│   ├── recipe_provider.dart
+│   ├── ai_provider.dart
+│   ├── menu_provider.dart
+│   └── shopping_provider.dart
+│
+├── pages/
+│   ├── home/
+│   │   └── home_page.dart
+│   ├── foods/
+│   │   ├── foods_page.dart
+│   │   ├── food_detail_page.dart
+│   │   └── my_foods_page.dart
+│   ├── recipes/
+│   │   ├── recipes_page.dart
+│   │   └── recipe_detail_page.dart
+│   ├── ai/
+│   │   └── ai_page.dart
+│   ├── menu/
+│   │   ├── today_menu_page.dart
+│   │   └── menu_plan_page.dart
+│   ├── shopping/
+│   │   └── shopping_list_page.dart
+│   └── profile/
+│       ├── profile_page.dart
+│       ├── favorites_page.dart
+│       └── history_page.dart
+│
+└── widgets/
+    ├── app_bottom_nav.dart
+    ├── app_header.dart
+    ├── section_header.dart
+    ├── food_card.dart
+    ├── recipe_card.dart
+    ├── menu_card.dart
+    ├── season_tag.dart
+    ├── ingredient_item.dart
+    ├── recipe_step_item.dart
+    ├── ai_message_bubble.dart
+    └── empty_state.dart
+```
+
+---
+
+# 25. 后端接口约定（前端占位）
+
+后端当前技术预计：
+
+```text
+Python 3.12+
+FastAPI
+SQLModel
+Pydantic
+JWT
+Uvicorn
+PostgreSQL
+```
+
+前端按下面接口占位即可。
+
+## 首页
+
+```http
+GET /api/home
+```
+
+返回：
+
+```json
+{
+  "season": "秋季",
+  "recommended_foods": [],
+  "recommended_menus": [],
+  "ai_tip": ""
+}
+```
+
+---
+
+## 食材
+
+```http
+GET /api/foods
+GET /api/foods/{id}
+GET /api/foods/seasonal
+```
+
+---
+
+## 我的食材
+
+```http
+GET    /api/my-foods
+POST   /api/my-foods
+PUT    /api/my-foods/{id}
+DELETE /api/my-foods/{id}
+```
+
+---
+
+## 菜谱
+
+```http
+GET /api/recipes
+GET /api/recipes/{id}
+GET /api/recipes/search?q=
+```
+
+---
+
+## 收藏
+
+```http
+GET    /api/favorites
+POST   /api/favorites/{recipe_id}
+DELETE /api/favorites/{recipe_id}
+```
+
+---
+
+## AI
+
+```http
+POST /api/ai/chat
+```
+
+请求：
+
+```json
+{
+  "message": "三个人今晚吃什么？"
+}
+```
+
+---
+
+## 今日菜单
+
+```http
+GET  /api/menu/today
+POST /api/menu/today/generate
+```
+
+---
+
+## 多日菜单
+
+```http
+POST /api/menu/plan
+```
+
+请求：
+
+```json
+{
+  "days": 3,
+  "people": 3,
+  "preferences": ["家常", "清淡"]
+}
+```
+
+---
+
+## 购物清单
+
+```http
+GET  /api/shopping-list
+POST /api/shopping-list/generate
+PUT  /api/shopping-list/{id}
+```
+
+---
+
+# 26. 开发优先级
+
+## P0：必须完成
+
+```text
+首页
+食材推荐
+菜单推荐
+食材列表
+食材详情
+菜谱列表
+菜谱详情
+AI助手
+我的现有食材
+今日菜单
+购物清单
+```
+
+## P1：有时间完成
+
+```text
+收藏
+历史记录
+三日菜单
+家庭人数
+忌口偏好
+```
+
+## P2：最后再做
+
+```text
+拍照识别食材
+复杂动画
+通知提醒
+饮食统计
+```
+
+---
+
+# 27. 前端一个月开发顺序
+
+## 第 1 周
+
+目标：完成整体 UI 骨架。
+
+```text
+Flutter 项目初始化
+主题配置
+GoRouter
+底部导航
+首页
+食材页
+菜谱页
+Mock 数据
+```
+
+---
+
+## 第 2 周
+
+```text
+食材详情
+菜谱详情
+现有食材
+AI助手 UI
+今日菜单
+购物清单
+我的
+```
+
+全部允许使用 Mock 数据。
+
+---
+
+## 第 3 周
+
+开始联调：
+
+```text
+Dio
+FastAPI API
+Riverpod
+真实接口
+AI接口
+收藏
+购物清单
+菜单生成
+```
+
+---
+
+## 第 4 周
+
+停止扩功能。
+
+重点：
+
+```text
+Bug 修复
+Loading
+Empty State
+Error State
+网络错误
+图片加载失败
+UI统一
+字体统一
+卡片统一
+动画微调
+Android打包
+演示流程
+```
+
+---
+
+# 28. Codex 编码要求
+
+Codex 开发时遵循：
+
+## 28.1 不要随意改变 UI 信息架构
+
+底部导航固定：
+
+```text
+首页 / 食材 / 菜谱 / AI助手 / 我的
+```
+
+首页固定包含：
+
+```text
+食材推荐
+菜单推荐
+```
+
+---
+
+## 28.2 禁止重新加入实时价格功能
+
+禁止加入：
+
+```text
+实时价格
+历史价格曲线
+价格涨跌
+价格预测
+价格雷达
+低价推荐
+```
+
+当前产品不依赖实时价格。
+
+---
+
+## 28.3 页面必须组件化
+
+不要写一个 1000+ 行的页面文件。
+
+重复元素必须抽组件，例如：
+
+```text
+FoodCard
+RecipeCard
+SectionHeader
+TagChip
+PrimaryButton
+```
+
+---
+
+## 28.4 不要过度工程化
+
+当前为 3 人、1 个月比赛项目。
+
+不要主动加入：
+
+```text
+复杂 Clean Architecture
+Bloc + Riverpod 混用
+多个状态管理框架
+微服务前端逻辑
+复杂依赖注入框架
+```
+
+保持简单、稳定。
+
+---
+
+## 28.5 所有异步数据必须处理 4 种状态
+
+```text
+loading
+success
+empty
+error
+```
+
+页面不能因为 API 失败直接崩溃。
+
+---
+
+## 28.6 Demo 优先
+
+为了比赛演示稳定：
+
+- 食材图和菜谱图优先本地缓存。
+- 首页允许提供 Mock fallback。
+- AI接口失败要有友好提示。
+- 网络失败不能白屏。
+- 不要把关键 UI 完全依赖实时网络。
+
+---
+
+# 29. Codex 第一阶段任务建议
+
+建议 Codex 按以下顺序执行：
+
+```text
+Task 1
+创建 Flutter 项目结构
+
+Task 2
+实现 Theme / Colors / Typography
+
+Task 3
+实现 GoRouter
+
+Task 4
+实现 BottomNavigationBar
+
+Task 5
+实现首页
+重点：
+食材推荐 + 菜单推荐
+
+Task 6
+实现 FoodCard / RecipeCard
+
+Task 7
+实现食材页与详情页
+
+Task 8
+实现菜谱页与详情页
+
+Task 9
+实现现有食材页
+
+Task 10
+实现 AI 助手页
+
+Task 11
+实现今日菜单
+
+Task 12
+实现购物清单
+
+Task 13
+实现个人中心
+
+Task 14
+接入 Riverpod
+
+Task 15
+接入 Dio
+
+Task 16
+替换 Mock 为 FastAPI
+```
+
+---
+
+# 30. 最终产品核心流程
+
+最终用户核心路径：
+
+```text
+打开食时
+ ↓
+首页看到当季食材
+ ↓
+首页看到推荐菜单
+ ↓
+查看某个食材
+ ↓
+查看适合菜谱
+ ↓
+进入菜谱详情
+ ↓
+加入今日菜单
+ ↓
+生成购物清单
+```
+
+或者：
+
+```text
+打开 AI 助手
+ ↓
+“三个人今晚吃什么？”
+ ↓
+AI 读取时令
+ ↓
+AI 检索菜谱
+ ↓
+返回结构化菜单
+ ↓
+加入今日菜单
+ ↓
+生成购物清单
+```
+
+或者：
+
+```text
+打开我的食材
+ ↓
+选择鸡蛋 / 番茄 / 土豆
+ ↓
+用这些食材做菜
+ ↓
+AI 推荐菜谱
+ ↓
+查看做法
+```
+
+这三个流程是比赛 Demo 的核心。
+
+---
+
+# 31. 项目开发原则
+
+Codex 在实现时优先级：
+
+```text
+稳定 > 功能数量
+统一 > 花哨
+可演示 > 复杂
+结构清晰 > 过度封装
+真实可用 > 技术堆砌
+```
+
+项目最终目标是：
+
+> 做出一个界面统一、流程完整、AI 功能自然融入、能够真实演示的时令饮食助手 APP。
+"""
+
+path = Path("/mnt/data/食时_App前端实现说明_Codex.md")
+path.write_text(content, encoding="utf-8")
+print(path)

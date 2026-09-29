@@ -1,0 +1,20 @@
+- generic [ref=f1e5]:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - group:
+                - generic [ref=f1e6]: 食时 顺应时令 · 智慧饮食
+                - generic:
+                  - generic:
+                    - generic [ref=f1e8]: 欢迎回来
+                    - generic [ref=f1e9]: 使用用户名和密码登录，继续你的饮食计划
+                    - textbox "用户名" [ref=f1e26]
+                    - generic [ref=f1e27]:
+                      - textbox "密码" [ref=f1e28]
+                      - button "显示密码" [ref=f1e29]
+                    - button "登录" [ref=f1e30]
+                    - button "还没有账号？先注册" [active] [ref=f1e31]
+                - generic [ref=f1e24]: 登录即表示你同意仅将账号用于保存饮食偏好与食材记录
