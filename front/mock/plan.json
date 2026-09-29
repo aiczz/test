@@ -1,0 +1,248 @@
+{
+  "meta": {
+    "generated_at": "2026-09-14T21:30:00",
+    "price_data_date": "2026-09-14",
+    "price_city": "成都",
+    "solve_ms": 1840,
+    "solver": "CP-SAT"
+  },
+  "week": "2026-W38",
+  "budget": 300,
+  "total_cost": 296.0,
+  "nutrition": {
+    "calories_per_person_per_day": 1980,
+    "protein_g_per_person_per_day": 68,
+    "vegetable_g_per_person_per_day": 412,
+    "sodium_mg_per_person_per_day": 1720,
+    "sodium_limit_mg_per_person_per_day": 2000
+  },
+  "days": [
+    {
+      "date": "2026-09-15",
+      "weekday": "周一",
+      "meals": [
+        {
+          "slot": "breakfast",
+          "dishes": [
+            { "id": 2001, "name": "小米粥", "servings": 3,
+              "reason": "温和易消化，适合全家", "tags": ["快手", "清淡"] },
+            { "id": 2002, "name": "水煮蛋", "servings": 3,
+              "reason": "补优质蛋白", "tags": ["快手"] }
+          ]
+        },
+        {
+          "slot": "dinner",
+          "dishes": [
+            { "id": 1042, "name": "番茄炒蛋", "servings": 3,
+              "reason": "孩子爱吃，钠含量低，符合妈妈限钠要求", "tags": ["家常", "快手"] },
+            { "id": 1088, "name": "蒜蓉西兰花", "servings": 3,
+              "reason": "本周蔬菜量偏少，这道补足膳食纤维", "tags": ["清淡", "低钠"] }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-09-16",
+      "weekday": "周二",
+      "meals": [
+        {
+          "slot": "breakfast",
+          "dishes": [
+            { "id": 2003, "name": "牛奶", "servings": 3,
+              "reason": "补钙", "tags": ["快手"] },
+            { "id": 2004, "name": "全麦面包", "servings": 3,
+              "reason": "主食", "tags": ["快手"] }
+          ]
+        },
+        {
+          "slot": "dinner",
+          "dishes": [
+            { "id": 1120, "name": "香菇滑鸡", "servings": 3,
+              "reason": "香菇本周价格较上周低 12%，正是当季", "tags": ["家常"] },
+            { "id": 1095, "name": "清炒菠菜", "servings": 3,
+              "reason": "菠菜后天到期，今天优先消耗可减少浪费", "tags": ["临期优先", "低钠"] }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-09-17",
+      "weekday": "周三",
+      "meals": [
+        {
+          "slot": "breakfast",
+          "dishes": [
+            { "id": 2005, "name": "酸奶", "servings": 3,
+              "reason": "快手", "tags": ["快手"] },
+            { "id": 2006, "name": "香蕉", "servings": 3,
+              "reason": "补钾，对高血压有益", "tags": ["快手"] }
+          ]
+        },
+        {
+          "slot": "dinner",
+          "dishes": [
+            { "id": 1131, "name": "番茄鸡蛋面", "servings": 3,
+              "reason": "周三加班，选 15 分钟内能完成的，且用掉今日到期的番茄", "tags": ["快手", "临期优先"] }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-09-18",
+      "weekday": "周四",
+      "meals": [
+        {
+          "slot": "breakfast",
+          "dishes": [
+            { "id": 2001, "name": "小米粥", "servings": 3,
+              "reason": "温和易消化", "tags": ["快手", "清淡"] },
+            { "id": 2002, "name": "水煮蛋", "servings": 3,
+              "reason": "补优质蛋白", "tags": ["快手"] }
+          ]
+        },
+        {
+          "slot": "dinner",
+          "dishes": [
+            { "id": 1150, "name": "冬瓜排骨汤", "servings": 3,
+              "reason": "冬瓜当季且便宜（比上月低 22%），排骨提供优质蛋白", "tags": ["汤菜", "当季"] },
+            { "id": 1163, "name": "手撕包菜", "servings": 3,
+              "reason": "包菜耐放，成本低", "tags": ["家常", "低钠"] }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-09-19",
+      "weekday": "周五",
+      "meals": [
+        {
+          "slot": "breakfast",
+          "dishes": [
+            { "id": 2003, "name": "牛奶", "servings": 3,
+              "reason": "补钙", "tags": ["快手"] },
+            { "id": 2007, "name": "燕麦", "servings": 3,
+              "reason": "低升糖，适合爸爸的血脂情况", "tags": ["快手", "低升糖"] }
+          ]
+        },
+        {
+          "slot": "dinner",
+          "dishes": [
+            { "id": 1174, "name": "芹菜炒香干", "servings": 3,
+              "reason": "芹菜有助控压，香干补充植物蛋白，整体低钠", "tags": ["低钠", "家常"] },
+            { "id": 1180, "name": "青椒土豆丝", "servings": 3,
+              "reason": "不辣，孩子可接受；土豆是本周性价比最高的主食替代", "tags": ["家常"] }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-09-20",
+      "weekday": "周六",
+      "meals": [
+        {
+          "slot": "breakfast",
+          "dishes": [
+            { "id": 2001, "name": "小米粥", "servings": 3,
+              "reason": "温和易消化", "tags": ["快手", "清淡"] },
+            { "id": 2002, "name": "水煮蛋", "servings": 3,
+              "reason": "补优质蛋白", "tags": ["快手"] }
+          ]
+        },
+        {
+          "slot": "dinner",
+          "dishes": [
+            { "id": 1191, "name": "鸡腿肉炖土豆", "servings": 3,
+              "reason": "周末时间充裕，可做稍费时的菜；用掉本周剩余的土豆", "tags": ["周末菜"] },
+            { "id": 1198, "name": "凉拌黄瓜", "servings": 3,
+              "reason": "黄瓜本周涨价 38%，但因用量小仍保留；已减量采购", "tags": ["凉菜", "低钠"] }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-09-21",
+      "weekday": "周日",
+      "meals": [
+        {
+          "slot": "breakfast",
+          "dishes": [
+            { "id": 2005, "name": "酸奶", "servings": 3,
+              "reason": "快手", "tags": ["快手"] },
+            { "id": 2008, "name": "苹果", "servings": 3,
+              "reason": "补充维生素", "tags": ["快手"] }
+          ]
+        },
+        {
+          "slot": "dinner",
+          "dishes": [
+            { "id": 1205, "name": "山药木耳炒肉片", "servings": 3,
+              "reason": "山药健脾，木耳补铁；本周采购的山药和木耳即将到期，优先消耗", "tags": ["临期优先", "家常"] },
+            { "id": 1210, "name": "清炒时蔬", "servings": 3,
+              "reason": "用掉本周剩余蔬菜，把浪费降到最低", "tags": ["低钠", "清冰箱"] }
+          ]
+        }
+      ]
+    }
+  ],
+  "shopping_list": [
+    {
+      "category": "蔬菜",
+      "items": [
+        { "name": "番茄",     "amount": 500, "unit": "g", "price": 5.2, "price_source": "local" },
+        { "name": "菠菜",     "amount": 300, "unit": "g", "price": 4.8, "price_source": "local" },
+        { "name": "黄瓜",     "amount": 400, "unit": "g", "price": 6.0, "price_source": "nearby" },
+        { "name": "冬瓜",     "amount": 800, "unit": "g", "price": 4.0, "price_source": "local" },
+        { "name": "西兰花",   "amount": 400, "unit": "g", "price": 8.8, "price_source": "local" },
+        { "name": "土豆",     "amount": 600, "unit": "g", "price": 4.2, "price_source": "local" },
+        { "name": "山药",     "amount": 300, "unit": "g", "price": 7.5, "price_source": "nearby" },
+        { "name": "包菜",     "amount": 500, "unit": "g", "price": 3.5, "price_source": "local" },
+        { "name": "芹菜",     "amount": 300, "unit": "g", "price": 4.0, "price_source": "local" },
+        { "name": "香菇",     "amount": 200, "unit": "g", "price": 9.0, "price_source": "local" }
+      ]
+    },
+    {
+      "category": "肉禽蛋",
+      "items": [
+        { "name": "猪里脊",   "amount": 500, "unit": "g", "price": 26.0, "price_source": "local" },
+        { "name": "排骨",     "amount": 600, "unit": "g", "price": 32.0, "price_source": "local" },
+        { "name": "鸡腿肉",   "amount": 500, "unit": "g", "price": 18.0, "price_source": "local" },
+        { "name": "鸡蛋",     "amount": 10,  "unit": "个", "price": 8.5,  "price_source": "local" },
+        { "name": "香干",     "amount": 200, "unit": "g", "price": 6.0,  "price_source": "local" }
+      ]
+    },
+    {
+      "category": "蛋奶水果",
+      "items": [
+        { "name": "牛奶",     "amount": 2,   "unit": "L",  "price": 20.0, "price_source": "local" },
+        { "name": "酸奶",     "amount": 6,   "unit": "盒", "price": 18.0, "price_source": "local" },
+        { "name": "豆腐",     "amount": 2,   "unit": "盒", "price": 7.0,  "price_source": "local" },
+        { "name": "苹果",     "amount": 1.5, "unit": "kg", "price": 15.0, "price_source": "nearby" },
+        { "name": "香蕉",     "amount": 1,   "unit": "kg", "price": 8.0,  "price_source": "nearby" }
+      ]
+    },
+    {
+      "category": "主食",
+      "items": [
+        { "name": "大米",     "amount": 2,   "unit": "kg", "price": 12.0, "price_source": "national" },
+        { "name": "面粉",     "amount": 1,   "unit": "kg", "price": 6.0,  "price_source": "national" },
+        { "name": "挂面",     "amount": 500, "unit": "g",  "price": 5.0,  "price_source": "national" },
+        { "name": "燕麦",     "amount": 500, "unit": "g",  "price": 8.5,  "price_source": "local" }
+      ]
+    },
+    {
+      "category": "干货",
+      "items": [
+        { "name": "木耳",     "amount": 100, "unit": "g", "price": 9.0,  "price_source": "national" },
+        { "name": "紫菜",     "amount": 50,  "unit": "g", "price": 6.2,  "price_source": "national" }
+      ]
+    },
+    {
+      "category": "调味",
+      "items": [
+        { "name": "生抽",     "amount": 1,   "unit": "瓶", "price": 9.9,  "price_source": "local" },
+        { "name": "食用油",   "amount": 1,   "unit": "L",  "price": 15.7, "price_source": "local" },
+        { "name": "葱姜蒜",   "amount": 1,   "unit": "份", "price": 8.2,  "price_source": "local" }
+      ]
+    }
+  ]
+}

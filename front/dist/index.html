@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7faf4" />
+    <meta name="description" content="食时——顺应时令的智能饮食助手" />
+    <title>食时 · 智慧饮食</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23166534'/%3E%3Cpath d='M17 38c16 2 27-7 31-24 4 18-4 33-23 34-6 0-10-4-8-10Z' fill='%23fff'/%3E%3Cpath d='M22 43c7-9 14-15 24-22' stroke='%2393c966' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <aside class="desktop-rail" aria-label="主导航">
+        <a class="brand" href="#home" aria-label="食时首页">
+          <span class="brand-mark">食时<span>◒</span></span>
+          <small>顺应时令 · 智慧饮食</small>
+        </a>
+        <nav class="rail-nav"></nav>
+        <div class="rail-card">
+          <span class="eyebrow">秋季 · 9月</span>
+          <strong>用当季食材<br />认真吃好每一餐</strong>
+          <button data-action="open-shopping">查看购物清单</button>
+        </div>
+      </aside>
+
+      <main class="app">
+        <header class="app-header">
+          <a class="brand mobile-brand" href="#home">
+            <span class="brand-mark">食时<span>◒</span></span>
+            <small>顺应时令 · 智慧饮食</small>
+          </a>
+          <div class="header-controls">
+            <button class="pill" aria-label="选择地区">● 杭州⌄</button>
+            <button class="pill" aria-label="选择季节">◒ 秋季 · 9月⌄</button>
+          </div>
+        </header>
+
+        <div id="view" tabindex="-1"></div>
+
+        <nav class="bottom-nav" aria-label="主导航"></nav>
+      </main>
+    </div>
+
+    <dialog id="detailDialog" class="sheet">
+      <div id="detailContent"></div>
+    </dialog>
+    <dialog id="shoppingDialog" class="sheet shopping-sheet">
+      <div id="shoppingContent"></div>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

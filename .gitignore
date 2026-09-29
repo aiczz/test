@@ -1,0 +1,62 @@
+# =====================================================================
+# 食时 · 仓库忽略规则
+# =====================================================================
+
+# ---- Flutter / Dart ----
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/coverage/
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+
+# ---- Android ----
+android/.gradle/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+
+# ---- iOS / macOS ----
+ios/Pods/
+ios/.symlinks/
+macos/Pods/
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 临时文件 ----
+*.log
+*.tmp
+_fx/
+
+# ---- 图标预览（scripts/make_icons.py 生成，仅用于肉眼检查，不参与打包）----
+icon-preview.png
+icon-sizes.png
+
+# ---- 本地预览 / 托管产物（项目不发布到 GPT Sites）----
+.sites-runtime/
+
+# ---- 图片资源库（文件过大，建议使用 Git LFS 或对象存储）----
+ingredient_image_library/
+dish_image_library/
+*-wide.png
+*-clean.png
+.openai/hosting.json
+
+# ---- 大文件和数据交付包（超过 GitHub 100MB 限制）----
+data_delivery/
+sql/菜谱数据库_交付_20260918 (1)/dishes.csv
+*.zip

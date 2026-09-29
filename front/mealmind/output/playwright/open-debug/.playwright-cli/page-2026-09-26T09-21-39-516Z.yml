@@ -1,0 +1,36 @@
+- generic [active] [ref=f1e5] [cursor=pointer]:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - group:
+                - button "食时 顺应时令 · 智慧饮食 杭州 秋季 · 9月" [ref=f1e33]
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - img "今日推荐 · 杭州 今天吃什么 秋天正是莲藕上市的好时节。来一碗莲藕排骨汤，润燥又养胃。"
+                        - button "查看推荐菜谱 →" [ref=f1e35]
+                  - button [ref=f1e36]
+                  - button [ref=f1e37]
+                  - button [ref=f1e38]
+                - button "3 人 · 预算 ¥300 · 45 分钟 下方推荐已按这些条件筛选 去修改" [ref=f1e40]
+                - generic [ref=f1e42]: 今日推荐食材 应季鲜美 · 营养加分
+                - generic:
+                  - button "猪肉 开胃" [ref=f1e44]
+                  - button "洋葱" [ref=f1e45]
+                  - button "胡萝卜 健脾宽中" [ref=f1e46]
+                - generic [ref=f1e48]: 按你的条件能做 45 分钟内 · 忌辛辣 · 低钠优先
+                - generic:
+                  - button "西红柿肥牛汤 秋天了，西红柿浓汤炖肥牛，满满的番茄味儿，配上金针菇，暖暖的，可以配一大碗米饭，秋日的午后惬意十足。 30分钟 3人份" [ref=f1e50]
+                  - button "紫菜蛋花汤 30分钟 3人份" [ref=f1e51]
+                  - button "水煮鱼 这道菜在我家点单率超高，话不多说，上菜谱😜 30分钟 3人份" [ref=f1e52]
+                - button "小食同学的今日建议 今天昼夜温差较大，晚餐适合搭配一道暖汤和一份清爽时蔬。" [ref=f1e54]
+            - tablist:
+              - tab "首页" [selected] [ref=f1e55]
+              - tab "食材" [ref=f1e56]
+              - tab "菜谱" [ref=f1e57]
+              - tab "AI助手" [ref=f1e58]
+              - tab "我的" [ref=f1e59]
