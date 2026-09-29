@@ -12,8 +12,15 @@
 #      ⚠️ 仓库改名了，这一行必须跟着改。
 #   2. 仓库必须是 public。
 #      免费版组织的私有仓库【不能】用 GitHub Pages。
-#   3. 必须在 Settings → Pages → Source 里选 "GitHub Actions"，
-#      否则 deploy 这一步会报 "Pages site not found"。
+#   3. 必须在 Settings → Pages → Source 里选 "GitHub Actions"。
+#      ⚠️ 选错【不会报错】，而是静默被覆盖 —— 2026-09 真踩过这一次：
+#         Source 是 "Deploy from a branch" 时，GitHub 会额外跑一个
+#         `pages build and deployment`（Jekyll），把 main 分支的
+#         README.md 渲染成网站，和本 workflow 抢同一个站点，
+#         谁后跑完谁生效。
+#         现象：https://aiczz.github.io/test/ 打开是一份 README 文档，
+#         而不是 App；而两个 workflow 的日志全是绿的，很难查。
+#      改回 GitHub Actions 后，那个 Jekyll workflow 就不再出现了。
 # =====================================================================
 
 name: Deploy Web (Flutter → GitHub Pages)

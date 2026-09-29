@@ -1,0 +1,102 @@
+# =====================================================================
+# 构建 Android 安装包（APK），并发布到 GitHub Release
+#
+# 【为什么放在 CI 上而不是本地】
+#   本地构建需要 NDK（flutter.ndkVersion 指定的 28.2.13676358，约 1~2 GB），
+#   而且 Gradle 发行包从 services.gradle.org 下不动（要换国内镜像）。
+#   CI 的 ubuntu runner 有完整的 Android 工具链和好网络，这些都不是问题。
+#
+# 【为什么发 Release 而不是只传 artifact】
+#   workflow artifact 必须登录 GitHub 才能下载；
+#   而 Release 的附件是公开直链，队友和评委点开就能下载安装：
+#     https://github.com/aiczz/test/releases/download/apk-latest/mealmind.apk
+#   每次构建覆盖同一个 tag，所以这个链接是稳定的。
+#
+# 【关于后端地址】
+#   APK 是原生应用，不受浏览器 mixed content 限制，
+#   所以它可以直连 http:// 的公网后端 —— 这是网页版做不到的。
+#   默认连比赛用的那台阿里云服务器；也可以在 Actions 页面手动触发时改。
+#
+# 【怎么手动触发】
+#   GitHub → Actions → Build APK → Run workflow
+# =====================================================================
+
+name: Build APK (Android)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "front/mealmind/**"
+      - ".github/workflows/build-apk.yml"
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "后端地址（留空则用下面的默认值）"
+        required: false
+        default: "http://8.148.69.56:8000"
+
+# 发布 Release 需要写权限
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      # workflow_dispatch 手动触发时用输入的地址，push 触发时用这个默认值
+      API_BASE: ${{ github.event.inputs.api_base || 'http://8.148.69.56:8000' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: front/mealmind
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: front/mealmind
+        # info 级只是风格建议，不该拦住出包
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        working-directory: front/mealmind
+        run: flutter test
+
+      - name: Build APK
+        working-directory: front/mealmind
+        run: flutter build apk --release --dart-define=API_BASE=$API_BASE
+
+      - name: Rename APK
+        run: cp front/mealmind/build/app/outputs/flutter-apk/app-release.apk mealmind.apk
+
+      - name: Publish to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: "食时 · Android 安装包（最新构建）"
+          body: |
+            自动构建的 Android 安装包，直接下载安装即可。
+
+            - 后端地址：`${{ env.API_BASE }}`
+            - 提交：`${{ github.sha }}`
+            - 构建时间：${{ github.event.repository.updated_at }}
+
+            ⚠️ 装的时候系统会提示「未知来源应用」，允许即可
+            （包用的是 debug 签名，比赛演示够用）。
+          files: mealmind.apk
+          make_latest: true
