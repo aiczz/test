@@ -5,12 +5,14 @@ class FoodPhoto extends StatelessWidget {
   final String asset;
   const FoodPhoto({super.key, required this.asset});
 
-  /// ⚠️ 这里原本有一张 `.jpg → -wide.png` 的替换表，指向一套【从未提交】的
-  ///    高清宽图（清理大文件那次 force push 之后就不在仓库里了，旧历史里
-  ///    用的也是 `.jpg`）。结果是每张食材图都加载失败：
-  ///      Unable to load asset: "assets/images/ingredient-pork-wide.png"
-  ///    测试里这会被当成异常直接判失败，真机上则是整片空白。
-  ///    现在只用仓库里真实存在的文件；等那套宽图补回来，再把映射加回来。
+  /// 说明：食材高清宽图原本【从未提交】（清理大文件那次 force push 之后就不在
+  ///    仓库里了），于是 backend_api.dart 里每条命中规则都返回不存在的资源：
+  ///      Unable to load asset: "..." （测试里直接判失败，真机上整片空白）
+  ///    现在这批图已经补回来了：48 张 `ingredient-*-wide.jpg`，由
+  ///      team/front/scripts/map-wide-images.ps1
+  ///    从 ingredient_image_library 的 590 张原图按中文名对上、cover 裁切成
+  ///    480x300 的 jpg（共约 1.3 MB）。映射写在 backend_api.dart 的
+  ///    _foodImageForName 里，所以这里不再需要 .jpg → 宽图 的替换表。
   static const _replacements = <String, String>{};
 
   @override

@@ -367,10 +367,6 @@ class BackendApi {
 
   static String _imageOrFallback(Object? value, String fallback) {
     final image = value?.toString().trim() ?? '';
-    if (image == 'assets/images/tomato-egg.jpg')
-      return 'assets/images/tomato-egg-clean.png';
-    if (image == 'assets/images/mushroom-chicken.jpg')
-      return 'assets/images/mushroom-chicken-clean.png';
     return image.isEmpty ? fallback : image;
   }
 
@@ -382,134 +378,134 @@ class BackendApi {
     const generated = <({List<String> keywords, String asset})>[
       (
         keywords: ['香菜', '芫荽'],
-        asset: 'assets/images/ingredient-coriander-wide.png',
+        asset: 'assets/images/ingredient-coriander-wide.jpg',
       ),
       (
         keywords: ['红枣', '大枣', '枣'],
-        asset: 'assets/images/ingredient-red-date-wide.png',
+        asset: 'assets/images/ingredient-red-date-wide.jpg',
       ),
-      (keywords: ['芹菜'], asset: 'assets/images/ingredient-celery-wide.png'),
+      (keywords: ['芹菜'], asset: 'assets/images/ingredient-celery-wide.jpg'),
       (
         keywords: ['红薯', '地瓜', '甘薯'],
-        asset: 'assets/images/ingredient-sweet-potato-wide.png',
+        asset: 'assets/images/ingredient-sweet-potato-wide.jpg',
       ),
       (
         keywords: ['鸡胸肉', '鸡肉', '鸡腿'],
-        asset: 'assets/images/ingredient-chicken-wide.png',
+        asset: 'assets/images/ingredient-chicken-wide.jpg',
       ),
       (
         keywords: ['白菜', '大白菜'],
-        asset: 'assets/images/ingredient-cabbage-wide.png',
+        asset: 'assets/images/ingredient-cabbage-wide.jpg',
       ),
-      (keywords: ['生菜'], asset: 'assets/images/ingredient-lettuce-wide.png'),
+      (keywords: ['生菜'], asset: 'assets/images/ingredient-lettuce-wide.jpg'),
       (
         keywords: ['木耳', '黑木耳'],
-        asset: 'assets/images/ingredient-wood-ear-wide.png',
+        asset: 'assets/images/ingredient-wood-ear-wide.jpg',
       ),
-      (keywords: ['排骨'], asset: 'assets/images/ingredient-ribs-wide.png'),
+      (keywords: ['排骨'], asset: 'assets/images/ingredient-ribs-wide.jpg'),
       (
         keywords: ['香菇', '冬菇'],
-        asset: 'assets/images/ingredient-mushroom-wide.png',
+        asset: 'assets/images/ingredient-mushroom-wide.jpg',
       ),
-      (keywords: ['茄子'], asset: 'assets/images/ingredient-eggplant-wide.png'),
-      (keywords: ['黄瓜'], asset: 'assets/images/ingredient-cucumber-wide.png'),
-      (keywords: ['玉米'], asset: 'assets/images/ingredient-corn-wide.png'),
+      (keywords: ['茄子'], asset: 'assets/images/ingredient-eggplant-wide.jpg'),
+      (keywords: ['黄瓜'], asset: 'assets/images/ingredient-cucumber-wide.jpg'),
+      (keywords: ['玉米'], asset: 'assets/images/ingredient-corn-wide.jpg'),
       (
         keywords: ['番茄', '西红柿'],
-        asset: 'assets/images/ingredient-tomato-wide.png',
+        asset: 'assets/images/ingredient-tomato-wide.jpg',
       ),
       (
         keywords: ['土豆', '马铃薯'],
-        asset: 'assets/images/ingredient-potato-wide.png',
+        asset: 'assets/images/ingredient-potato-wide.jpg',
       ),
       (
         keywords: ['青椒', '甜椒', '彩椒'],
-        asset: 'assets/images/ingredient-bell-pepper-wide.png',
+        asset: 'assets/images/ingredient-bell-pepper-wide.jpg',
       ),
-      (keywords: ['南瓜'], asset: 'assets/images/ingredient-pumpkin-wide.png'),
-      (keywords: ['苹果'], asset: 'assets/images/ingredient-apple-wide.png'),
-      (keywords: ['香蕉'], asset: 'assets/images/ingredient-banana-wide.png'),
+      (keywords: ['南瓜'], asset: 'assets/images/ingredient-pumpkin-wide.jpg'),
+      // 「苹果」没有可用配图：图库里 food-0056-apple.png 实际装的是蓝莓，
+      // 整库都没有苹果的原图，所以这条规则撤掉，走 _foodFallbackImage 兜底。
+      (keywords: ['香蕉'], asset: 'assets/images/ingredient-banana-wide.jpg'),
       (
         keywords: ['梨', '雪梨', '鸭梨'],
-        asset: 'assets/images/ingredient-pear-wide.png',
+        asset: 'assets/images/ingredient-pear-wide.jpg',
       ),
       (
         keywords: ['橙子', '橙'],
-        asset: 'assets/images/ingredient-orange-wide.png',
+        asset: 'assets/images/ingredient-orange-wide.jpg',
       ),
       (
         keywords: ['鱼', '鲈鱼', '草鱼', '鲫鱼'],
-        asset: 'assets/images/ingredient-fish-wide.png',
+        asset: 'assets/images/ingredient-fish-wide.jpg',
       ),
       (
         keywords: ['虾', '基围虾', '明虾'],
-        asset: 'assets/images/ingredient-shrimp-wide.png',
+        asset: 'assets/images/ingredient-shrimp-wide.jpg',
       ),
-      (keywords: ['豆腐'], asset: 'assets/images/ingredient-tofu-wide.png'),
       (
         keywords: ['牛肉', '牛腩', '牛排'],
-        asset: 'assets/images/ingredient-beef-wide.png',
+        asset: 'assets/images/ingredient-beef-wide.jpg',
       ),
       (
         keywords: ['大米', '稻米', '米饭'],
-        asset: 'assets/images/ingredient-rice-wide.png',
+        asset: 'assets/images/ingredient-rice-wide.jpg',
       ),
-      (keywords: ['花生'], asset: 'assets/images/ingredient-peanut-wide.png'),
-      (keywords: ['柠檬'], asset: 'assets/images/ingredient-lemon-wide.png'),
+      (keywords: ['花生'], asset: 'assets/images/ingredient-peanut-wide.jpg'),
+      (keywords: ['柠檬'], asset: 'assets/images/ingredient-lemon-wide.jpg'),
       (
         keywords: ['鸡蛋', '鸭蛋', '鹌鹑蛋'],
-        asset: 'assets/images/ingredient-egg-wide.png',
+        asset: 'assets/images/ingredient-egg-wide.jpg',
       ),
-      (keywords: ['菠菜'], asset: 'assets/images/ingredient-spinach-wide.png'),
-      (keywords: ['西兰花'], asset: 'assets/images/ingredient-broccoli-wide.png'),
+      (keywords: ['菠菜'], asset: 'assets/images/ingredient-spinach-wide.jpg'),
+      (keywords: ['西兰花'], asset: 'assets/images/ingredient-broccoli-wide.jpg'),
       (
         keywords: ['花菜', '菜花', '白花菜'],
-        asset: 'assets/images/ingredient-cauliflower-wide.png',
+        asset: 'assets/images/ingredient-cauliflower-wide.jpg',
       ),
       (
         keywords: ['白萝卜', '萝卜'],
-        asset: 'assets/images/ingredient-radish-wide.png',
+        asset: 'assets/images/ingredient-radish-wide.jpg',
       ),
-      (keywords: ['葡萄'], asset: 'assets/images/ingredient-grape-wide.png'),
+      (keywords: ['葡萄'], asset: 'assets/images/ingredient-grape-wide.jpg'),
       (
         keywords: ['桃', '水蜜桃'],
-        asset: 'assets/images/ingredient-peach-wide.png',
+        asset: 'assets/images/ingredient-peach-wide.jpg',
       ),
-      (keywords: ['西瓜'], asset: 'assets/images/ingredient-watermelon-wide.png'),
-      (keywords: ['草莓'], asset: 'assets/images/ingredient-strawberry-wide.png'),
+      (keywords: ['西瓜'], asset: 'assets/images/ingredient-watermelon-wide.jpg'),
+      (keywords: ['草莓'], asset: 'assets/images/ingredient-strawberry-wide.jpg'),
       (
         keywords: ['橘子', '桔子', '柑橘'],
-        asset: 'assets/images/ingredient-mandarin-wide.png',
+        asset: 'assets/images/ingredient-mandarin-wide.jpg',
       ),
       (
         keywords: ['猕猴桃', '奇异果'],
-        asset: 'assets/images/ingredient-kiwi-wide.png',
+        asset: 'assets/images/ingredient-kiwi-wide.jpg',
       ),
-      (keywords: ['芒果'], asset: 'assets/images/ingredient-mango-wide.png'),
+      (keywords: ['芒果'], asset: 'assets/images/ingredient-mango-wide.jpg'),
       (
         keywords: ['樱桃', '车厘子'],
-        asset: 'assets/images/ingredient-cherry-wide.png',
+        asset: 'assets/images/ingredient-cherry-wide.jpg',
       ),
       (
         keywords: ['辣椒', '红辣椒', '小米椒'],
-        asset: 'assets/images/ingredient-red-chili-wide.png',
+        asset: 'assets/images/ingredient-red-chili-wide.jpg',
       ),
       (
         keywords: ['卷心菜', '包菜', '圆白菜'],
-        asset: 'assets/images/ingredient-cabbage-round-wide.png',
+        asset: 'assets/images/ingredient-cabbage-round-wide.jpg',
       ),
-      (keywords: ['罗勒'], asset: 'assets/images/ingredient-basil-wide.png'),
-      (keywords: ['小米'], asset: 'assets/images/ingredient-millet-wide.png'),
-      (keywords: ['杏仁'], asset: 'assets/images/ingredient-almond-wide.png'),
+      (keywords: ['罗勒'], asset: 'assets/images/ingredient-basil-wide.jpg'),
+      (keywords: ['小米'], asset: 'assets/images/ingredient-millet-wide.jpg'),
+      (keywords: ['杏仁'], asset: 'assets/images/ingredient-almond-wide.jpg'),
       (
         keywords: ['圣女果', '小番茄', '樱桃番茄'],
-        asset: 'assets/images/ingredient-cherry-tomato-wide.png',
+        asset: 'assets/images/ingredient-cherry-tomato-wide.jpg',
       ),
       (
         keywords: ['燕麦', '燕麦片'],
-        asset: 'assets/images/ingredient-oats-wide.png',
+        asset: 'assets/images/ingredient-oats-wide.jpg',
       ),
-      (keywords: ['蓝莓'], asset: 'assets/images/ingredient-blueberry-wide.png'),
+      (keywords: ['蓝莓'], asset: 'assets/images/ingredient-blueberry-wide.jpg'),
     ];
     for (final rule in generated) {
       if (rule.keywords.any(name.contains)) return rule.asset;
@@ -572,8 +568,8 @@ class BackendApi {
 
   static String _recipeFallbackImage(String id) {
     const images = <String>[
-      'assets/images/tomato-egg-clean.png',
-      'assets/images/mushroom-chicken-clean.png',
+      'assets/images/tomato-egg.jpg',
+      'assets/images/mushroom-chicken.jpg',
       'assets/images/hero-soup.jpg',
     ];
     return images[(int.tryParse(id) ?? 0).abs() % images.length];

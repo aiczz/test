@@ -60,3 +60,5 @@ dish_image_library/
 data_delivery/
 sql/菜谱数据库_交付_20260918 (1)/dishes.csv
 *.zip
+# ---- front-end scratch output (contact sheets, playwright debug) ----
+front/output/
