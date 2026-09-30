@@ -73,7 +73,9 @@ def _compact_engine():
         connection.execute(
             text(
                 "INSERT INTO seasonal_food VALUES "
-                "('sf1', 'm09', '月份', '9月', '秋', 2, NULL, '秋季适宜')"
+                # ingredient_id 必须指向核心食材（is_core_raw = 1）：list_seasonal
+                # 的 SQL 里同样带 i.is_core_raw = 1，指到 variant 上会一条都查不到。
+                "('sf1', 'm09', '月份', '9月', '秋', 1, NULL, '秋季适宜')"
             )
         )
         connection.execute(text("INSERT INTO seasonal_dish_links VALUES ('sf1', 10, 'ingredient')"))
@@ -82,8 +84,12 @@ def _compact_engine():
 
 def test_compact_catalog_food_recipe_and_parent_inference():
     with Session(_compact_engine()) as session:
+        # 注意 total 是 1 而不是 2：compact.list_foods 只展示核心原生食材
+        # （clauses 里写死了 is_core_raw = 1），鸡胸肉是 variant 所以不出现在
+        # 列表里 —— 线上 total = 590 正好等于 main_ingredient.csv 的行数，
+        # 也是这个口径。完整目录仍然参与下面的菜谱推断。
         foods, total = food_repository.list_foods(session, offset=0, limit=20)
-        assert total == 2
+        assert total == 1
         assert foods[0].name == "鸡肉"
         assert foods[0].category == "meat_egg"
 
@@ -110,5 +116,5 @@ def test_compact_catalog_search_and_season():
 
         seasonal = food_repository.list_seasonal(session, month=9, limit=10)
         assert len(seasonal) == 1
-        assert seasonal[0][0].name == "鸡胸肉"
+        assert seasonal[0][0].name == "鸡肉"
         assert seasonal[0][1].season_score == 100
