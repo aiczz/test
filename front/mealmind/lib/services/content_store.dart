@@ -58,7 +58,8 @@ class ContentStore extends ChangeNotifier {
 
     try {
       final foods = await BackendApi.instance.fetchAllFoods();
-      final recipes = await BackendApi.instance.fetchRecipes();
+      // 菜谱要翻页：清洗库有 10000 道，只拉第一页的话「全部菜谱」永远只有 50 道。
+      final recipes = await BackendApi.instance.fetchAllRecipes();
       // 时令要单独拉一次：/api/foods 返回的 FoodBrief 只带 season_score、
       // 不带季节名，光靠它没法判断「这个月」哪些是当季的。
       final seasonalIds = await _fetchSeasonalIds();

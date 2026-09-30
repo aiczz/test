@@ -9,6 +9,7 @@
 // 前端模型用的是自己的字段名（image / time / people）。
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../data/dish_images.dart';
 import '../data/ingredient_images.dart';
@@ -113,6 +114,7 @@ class BackendApi {
     int? maxDuration,
     String? season,
     int pageSize = 50,
+    int page = 1,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/recipes',
@@ -120,6 +122,7 @@ class BackendApi {
         'max_duration': ?maxDuration,
         if (season != null && season.isNotEmpty) 'season': season,
         'page_size': pageSize,
+        'page': page,
       },
     );
     final items = (res.data?['items'] as List?) ?? const <dynamic>[];
@@ -127,6 +130,47 @@ class BackendApi {
         .whereType<Map<String, dynamic>>()
         .map(_recipeFromJson)
         .toList();
+  }
+
+  /// 把全部菜谱一次拿全。
+  ///
+  /// 清洗库有 10000 道菜，而 /api/recipes 的 page_size 上限就是 100，
+  /// 串行翻 100 页要十几秒。这里按 concurrency 路并发分批拉，
+  /// 只要有一页不满就说明到底了，提前收尾。
+  ///
+  /// 单页失败不让整次加载崩掉 —— 否则 ContentStore 会整体降级成本地假数据，
+  /// 那比少几道菜糟得多。
+  Future<List<Recipe>> fetchAllRecipes({
+    int pageSize = 100,
+    int concurrency = 8,
+    int maxPages = 400,
+    int? maxDuration,
+    String? season,
+  }) async {
+    final all = <Recipe>[];
+    for (var start = 1; start <= maxPages; start += concurrency) {
+      final futures = <Future<List<Recipe>>>[
+        for (var p = start; p < start + concurrency && p <= maxPages; p++)
+          fetchRecipes(
+            pageSize: pageSize,
+            page: p,
+            maxDuration: maxDuration,
+            season: season,
+          ).catchError((Object error) {
+            debugPrint('[BackendApi] 菜谱第 $p 页拉取失败：$error');
+            return <Recipe>[];
+          }),
+      ];
+      final batch = await Future.wait(futures);
+
+      var reachedEnd = false;
+      for (final list in batch) {
+        all.addAll(list);
+        if (list.length < pageSize) reachedEnd = true;
+      }
+      if (reachedEnd) break;
+    }
+    return all;
   }
 
   /// GET /api/recipes/{id}（说明书 §11.2）
