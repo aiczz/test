@@ -61,10 +61,45 @@ $ingPairs = foreach ($r in $ingMan) {
         [pscustomobject]@{ Key = $r.name; File = $file }
     }
 }
+# The 590 canonical names alone miss the everyday aliases people actually use --
+# 西红柿 / 葱花 / 姜片 / 蒜末 never hit 番茄 / 葱 / 姜 / 蒜, so those fell back to the
+# old low-res photos. Merge in the cleaned alias table; the strict CJK filter drops
+# the raw_name leftovers like ".你们根据爱好放鸡蛋" that pollute that CSV.
+$aliasPath = Join-Path $root "team\sql\cleaned_v2\ingredient_catalog_aliases.csv"
+$aliasRows = if (Test-Path $aliasPath) { Import-Csv $aliasPath -Encoding UTF8 } else { @() }
+
+$canonical = [System.Collections.Generic.HashSet[string]]::new()
+$fileOf    = @{}
+foreach ($p in $ingPairs) {
+    [void]$canonical.Add($p.Key)
+    $fileOf[$p.Key] = $p.File
+}
+
+$aliasPairs = $aliasRows | Where-Object {
+    $_.alias_name -match '^[\u4e00-\u9fa5]{2,6}$' -and
+    $_.usage_count -match '^\d+$' -and
+    $_.alias_name -ne $_.canonical_name -and
+    $canonical.Contains($_.canonical_name)
+} | Sort-Object { [int]$_.usage_count } -Descending
+
+# Canonical names win; aliases only fill gaps. Every key appears once, because a
+# Dart const map literal forbids duplicate keys.
+$seenIng    = [System.Collections.Generic.HashSet[string]]::new()
+$merged     = [System.Collections.Generic.List[object]]::new()
+$addedAlias = 0
+foreach ($p in $ingPairs) { if ($seenIng.Add($p.Key)) { $merged.Add($p) } }
+foreach ($a in $aliasPairs) {
+    if ($seenIng.Add($a.alias_name)) {
+        $merged.Add([pscustomobject]@{ Key = $a.alias_name; File = $fileOf[$a.canonical_name] })
+        $addedAlias++
+    }
+}
+Write-Host "ingredient map: $($ingPairs.Count) canonical + $addedAlias aliases = $($merged.Count)"
+
 Write-Map -Path (Join-Path $dataDir 'ingredient_images.dart') `
           -ConstName 'kIngredientImageByName' `
-          -Doc 'Chinese ingredient name -> bundled photo.' `
-          -Pairs $ingPairs
+          -Doc 'Chinese ingredient name (and common alias) -> bundled photo.' `
+          -Pairs $merged
 
 # ---------------------------------------------------------------- dishes
 $dishMan = Import-Csv (Join-Path $root "dish_image_library\dish_image_library\manifest.csv") -Encoding UTF8
