@@ -85,7 +85,17 @@ class BackendApi {
   }
 
   /// GET /api/foods/seasonal（说明书 §10.2）
+  ///
+  /// 590 个核心食材，后端 page_size 上限放宽后一次就能拿全（一个请求）。
+  /// 万一对面的后端还是老版本（上限 100，传大会 422），退回按页拉。
   Future<List<Food>> fetchAllFoods() async {
+    try {
+      final all = await fetchFoods(pageSize: 20000, page: 1);
+      if (all.isNotEmpty) return all;
+    } catch (error) {
+      debugPrint('[BackendApi] 食材一次拉全失败，改用翻页：$error');
+    }
+
     const pageSize = 100;
     final result = <Food>[];
     for (var page = 1; ; page++) {
@@ -134,13 +144,35 @@ class BackendApi {
 
   /// 把全部菜谱一次拿全。
   ///
-  /// 清洗库有 10000 道菜，而 /api/recipes 的 page_size 上限就是 100，
-  /// 串行翻 100 页要十几秒。这里按 concurrency 路并发分批拉，
-  /// 只要有一页不满就说明到底了，提前收尾。
+  /// 清洗库有 10000 道菜。原先按 page_size=100 翻 100 页，实测即使 32 路并发
+  /// 也要 7 秒 —— 加并发完全没用，瓶颈是 SQLite 的 OFFSET 要扫过前面所有行
+  /// （第 100 页扫 9900 行）。所以改成优先一次拉完：后端 page_size 上限已放宽到
+  /// 20000，一个请求就够。万一对面的后端还是老版本（上限 100，传大会 422），
+  /// 自动退回并发翻页。
+  Future<List<Recipe>> fetchAllRecipes({
+    int? maxDuration,
+    String? season,
+  }) async {
+    try {
+      final all = await fetchRecipes(
+        pageSize: 20000,
+        page: 1,
+        maxDuration: maxDuration,
+        season: season,
+      );
+      // 没满一页就说明确实全拿到了；正好等于上限才需要继续翻。
+      if (all.isNotEmpty && all.length < 20000) return all;
+    } catch (error) {
+      debugPrint('[BackendApi] 菜谱一次拉全失败，改用并发翻页：$error');
+    }
+    return _fetchRecipesByPaging(maxDuration: maxDuration, season: season);
+  }
+
+  /// fetchAllRecipes 的兜底路径：按页并发拉。
   ///
   /// 单页失败不让整次加载崩掉 —— 否则 ContentStore 会整体降级成本地假数据，
   /// 那比少几道菜糟得多。
-  Future<List<Recipe>> fetchAllRecipes({
+  Future<List<Recipe>> _fetchRecipesByPaging({
     int pageSize = 100,
     int concurrency = 8,
     int maxPages = 400,

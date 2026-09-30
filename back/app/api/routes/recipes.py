@@ -34,7 +34,10 @@ def list_recipes(
     ),
     keyword: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    # 上限从 100 放宽到 20000：清洗库有 10000 道菜，而 SQLite 的 OFFSET 分页
+    # 要扫过前面所有行，第 100 页得扫 9900 行 —— 实测 100 页即使 32 路并发也要
+    # 7 秒（加并发完全没用，瓶颈在扫描）。一次拉完只要一个请求。
+    page_size: int = Query(default=20, ge=1, le=20000),
     session: Session = Depends(get_session),
 ) -> Page[RecipeBrief]:
     items, total = recipe_service.list_recipes(

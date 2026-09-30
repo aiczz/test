@@ -11,6 +11,7 @@
 
 import 'package:flutter/foundation.dart';
 
+import '../data/dish_images.dart';
 import '../data/mock.dart';
 import '../models/content.dart';
 import 'api_config.dart';
@@ -59,7 +60,18 @@ class ContentStore extends ChangeNotifier {
     try {
       final foods = await BackendApi.instance.fetchAllFoods();
       // 菜谱要翻页：清洗库有 10000 道，只拉第一页的话「全部菜谱」永远只有 50 道。
-      final recipes = await BackendApi.instance.fetchAllRecipes();
+      final allRecipes = await BackendApi.instance.fetchAllRecipes();
+
+      // 菜谱图库只覆盖 481 道（清洗库有 10000 道）。没有专属配图的菜会退化成
+      // _recipeFallbackImage 那 3 张兜底图循环，列表里大片重复比菜少更减分，
+      // 所以清洗库这种量级下只保留有真实配图的。
+      // 演示数据（seed 只有 4 道，且自带 image_url）一个都命中不了，
+      // 这时 withPhoto 为空，就原样全留，别把界面清空。
+      final withPhoto = allRecipes
+          .where((recipe) => kDishImageByName.containsKey(recipe.name))
+          .toList();
+      final recipes = withPhoto.isNotEmpty ? withPhoto : allRecipes;
+
       // 时令要单独拉一次：/api/foods 返回的 FoodBrief 只带 season_score、
       // 不带季节名，光靠它没法判断「这个月」哪些是当季的。
       final seasonalIds = await _fetchSeasonalIds();

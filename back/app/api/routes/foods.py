@@ -26,7 +26,8 @@ def list_foods(
     ),
     keyword: str | None = Query(default=None, description="按名称模糊搜"),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    # 同 recipes：上限放宽，让前端一次拿全 590 个核心食材，不必翻 6 页。
+    page_size: int = Query(default=20, ge=1, le=20000),
     session: Session = Depends(get_session),
 ) -> Page[FoodBrief]:
     items, total = food_service.list_foods(
