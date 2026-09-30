@@ -10,6 +10,8 @@
 
 import 'package:dio/dio.dart';
 
+import '../data/dish_images.dart';
+import '../data/ingredient_images.dart';
 import '../models/content.dart';
 import 'auth_store.dart';
 
@@ -335,7 +337,7 @@ class BackendApi {
     name: json['name'] as String? ?? '',
     image: _imageOrFallback(
       json['image'],
-      _recipeFallbackImage('${json['id']}'),
+      _recipeFallbackImage(json['name']?.toString() ?? ''),
     ),
     desc: json['description'] as String? ?? '',
     // 后端给的是分钟数，前端展示用「60分钟」这种文案
@@ -375,143 +377,25 @@ class BackendApi {
     Object? serverImage,
     String? category,
   ) {
-    const generated = <({List<String> keywords, String asset})>[
-      (
-        keywords: ['香菜', '芫荽'],
-        asset: 'assets/images/ingredient-coriander-wide.jpg',
-      ),
-      (
-        keywords: ['红枣', '大枣', '枣'],
-        asset: 'assets/images/ingredient-red-date-wide.jpg',
-      ),
-      (keywords: ['芹菜'], asset: 'assets/images/ingredient-celery-wide.jpg'),
-      (
-        keywords: ['红薯', '地瓜', '甘薯'],
-        asset: 'assets/images/ingredient-sweet-potato-wide.jpg',
-      ),
-      (
-        keywords: ['鸡胸肉', '鸡肉', '鸡腿'],
-        asset: 'assets/images/ingredient-chicken-wide.jpg',
-      ),
-      (
-        keywords: ['白菜', '大白菜'],
-        asset: 'assets/images/ingredient-cabbage-wide.jpg',
-      ),
-      (keywords: ['生菜'], asset: 'assets/images/ingredient-lettuce-wide.jpg'),
-      (
-        keywords: ['木耳', '黑木耳'],
-        asset: 'assets/images/ingredient-wood-ear-wide.jpg',
-      ),
-      (keywords: ['排骨'], asset: 'assets/images/ingredient-ribs-wide.jpg'),
-      (
-        keywords: ['香菇', '冬菇'],
-        asset: 'assets/images/ingredient-mushroom-wide.jpg',
-      ),
-      (keywords: ['茄子'], asset: 'assets/images/ingredient-eggplant-wide.jpg'),
-      (keywords: ['黄瓜'], asset: 'assets/images/ingredient-cucumber-wide.jpg'),
-      (keywords: ['玉米'], asset: 'assets/images/ingredient-corn-wide.jpg'),
-      (
-        keywords: ['番茄', '西红柿'],
-        asset: 'assets/images/ingredient-tomato-wide.jpg',
-      ),
-      (
-        keywords: ['土豆', '马铃薯'],
-        asset: 'assets/images/ingredient-potato-wide.jpg',
-      ),
-      (
-        keywords: ['青椒', '甜椒', '彩椒'],
-        asset: 'assets/images/ingredient-bell-pepper-wide.jpg',
-      ),
-      (keywords: ['南瓜'], asset: 'assets/images/ingredient-pumpkin-wide.jpg'),
-      // 「苹果」没有可用配图：图库里 food-0056-apple.png 实际装的是蓝莓，
-      // 整库都没有苹果的原图，所以这条规则撤掉，走 _foodFallbackImage 兜底。
-      (keywords: ['香蕉'], asset: 'assets/images/ingredient-banana-wide.jpg'),
-      (
-        keywords: ['梨', '雪梨', '鸭梨'],
-        asset: 'assets/images/ingredient-pear-wide.jpg',
-      ),
-      (
-        keywords: ['橙子', '橙'],
-        asset: 'assets/images/ingredient-orange-wide.jpg',
-      ),
-      (
-        keywords: ['鱼', '鲈鱼', '草鱼', '鲫鱼'],
-        asset: 'assets/images/ingredient-fish-wide.jpg',
-      ),
-      (
-        keywords: ['虾', '基围虾', '明虾'],
-        asset: 'assets/images/ingredient-shrimp-wide.jpg',
-      ),
-      (
-        keywords: ['牛肉', '牛腩', '牛排'],
-        asset: 'assets/images/ingredient-beef-wide.jpg',
-      ),
-      (
-        keywords: ['大米', '稻米', '米饭'],
-        asset: 'assets/images/ingredient-rice-wide.jpg',
-      ),
-      (keywords: ['花生'], asset: 'assets/images/ingredient-peanut-wide.jpg'),
-      (keywords: ['柠檬'], asset: 'assets/images/ingredient-lemon-wide.jpg'),
-      (
-        keywords: ['鸡蛋', '鸭蛋', '鹌鹑蛋'],
-        asset: 'assets/images/ingredient-egg-wide.jpg',
-      ),
-      (keywords: ['菠菜'], asset: 'assets/images/ingredient-spinach-wide.jpg'),
-      (keywords: ['西兰花'], asset: 'assets/images/ingredient-broccoli-wide.jpg'),
-      (
-        keywords: ['花菜', '菜花', '白花菜'],
-        asset: 'assets/images/ingredient-cauliflower-wide.jpg',
-      ),
-      (
-        keywords: ['白萝卜', '萝卜'],
-        asset: 'assets/images/ingredient-radish-wide.jpg',
-      ),
-      (keywords: ['葡萄'], asset: 'assets/images/ingredient-grape-wide.jpg'),
-      (
-        keywords: ['桃', '水蜜桃'],
-        asset: 'assets/images/ingredient-peach-wide.jpg',
-      ),
-      (keywords: ['西瓜'], asset: 'assets/images/ingredient-watermelon-wide.jpg'),
-      (keywords: ['草莓'], asset: 'assets/images/ingredient-strawberry-wide.jpg'),
-      (
-        keywords: ['橘子', '桔子', '柑橘'],
-        asset: 'assets/images/ingredient-mandarin-wide.jpg',
-      ),
-      (
-        keywords: ['猕猴桃', '奇异果'],
-        asset: 'assets/images/ingredient-kiwi-wide.jpg',
-      ),
-      (keywords: ['芒果'], asset: 'assets/images/ingredient-mango-wide.jpg'),
-      (
-        keywords: ['樱桃', '车厘子'],
-        asset: 'assets/images/ingredient-cherry-wide.jpg',
-      ),
-      (
-        keywords: ['辣椒', '红辣椒', '小米椒'],
-        asset: 'assets/images/ingredient-red-chili-wide.jpg',
-      ),
-      (
-        keywords: ['卷心菜', '包菜', '圆白菜'],
-        asset: 'assets/images/ingredient-cabbage-round-wide.jpg',
-      ),
-      (keywords: ['罗勒'], asset: 'assets/images/ingredient-basil-wide.jpg'),
-      (keywords: ['小米'], asset: 'assets/images/ingredient-millet-wide.jpg'),
-      (keywords: ['杏仁'], asset: 'assets/images/ingredient-almond-wide.jpg'),
-      (
-        keywords: ['圣女果', '小番茄', '樱桃番茄'],
-        asset: 'assets/images/ingredient-cherry-tomato-wide.jpg',
-      ),
-      (
-        keywords: ['燕麦', '燕麦片'],
-        asset: 'assets/images/ingredient-oats-wide.jpg',
-      ),
-      (keywords: ['蓝莓'], asset: 'assets/images/ingredient-blueberry-wide.jpg'),
-    ];
-    for (final rule in generated) {
-      if (rule.keywords.any(name.contains)) return rule.asset;
+    // 1) 590 个核心食材都有自己的实拍配图，按中文名精确命中。
+    //    这张表是图库逐张核对后生成的，见 lib/data/ingredient_images.dart。
+    final exact = kIngredientImageByName[name];
+    if (exact != null) return exact;
+
+    // 2) 再按「名字里包含某个食材名」匹配。必须长名优先，
+    //    否则「小白菜」会先被「白菜」抢走、命中错的图。
+    for (final entry in _ingredientRulesByLength) {
+      if (name.contains(entry.key)) return entry.value;
     }
+
+    // 3) 剩下的交给后端自带图 / 分类兜底。
     return _imageOrFallback(serverImage, _foodFallbackImage(name, category));
   }
+
+  /// 食材名按长度降序排好，只排一次，供上面的包含匹配使用。
+  static final List<MapEntry<String, String>> _ingredientRulesByLength =
+      (kIngredientImageByName.entries.toList()
+        ..sort((a, b) => b.key.length.compareTo(a.key.length)));
 
   static String _foodFallbackImage(String name, String? category) {
     const rules = <({List<String> keywords, String asset})>[
@@ -566,13 +450,17 @@ class BackendApi {
     };
   }
 
-  static String _recipeFallbackImage(String id) {
+  /// 菜谱配图：先用 500 张实拍图按菜名精确命中（这 500 个菜名与清洗库
+  /// 100% 对得上，逐张核对过），没命中才退回这三张通用图循环。
+  static String _recipeFallbackImage(String name) {
+    final hit = kDishImageByName[name];
+    if (hit != null) return hit;
     const images = <String>[
       'assets/images/tomato-egg.jpg',
       'assets/images/mushroom-chicken.jpg',
       'assets/images/hero-soup.jpg',
     ];
-    return images[(int.tryParse(id) ?? 0).abs() % images.length];
+    return images[name.hashCode.abs() % images.length];
   }
 }
 
