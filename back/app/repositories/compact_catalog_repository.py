@@ -1,4 +1,4 @@
-"""对清洗后六张业务表的只读访问。
+﻿"""对清洗后六张业务表的只读访问。
 
 这里只执行 SELECT。用户收藏、菜单等写操作仍落在各自业务表中。
 """
@@ -62,10 +62,10 @@ _IMAGE_RULES = (
     (("南瓜",), "assets/images/ingredient_pumpkin.jpg"),
     (("莲藕", "藕"), "assets/images/lotus-clean.jpg"),
     (("小白菜", "上海青", "青菜"), "assets/images/bokchoy-clean.jpg"),
-    (("香菜", "芫荽"), "assets/images/ingredient-coriander-wide.png"),
-    (("红枣", "大枣", "枣"), "assets/images/ingredient-red-date-wide.png"),
-    (("芹菜",), "assets/images/ingredient-celery-wide.png"),
-    (("红薯", "地瓜", "甘薯"), "assets/images/ingredient-sweet-potato-wide.png"),
+    (("香菜", "芫荽"), "assets/images/food-0009-cilantro.jpg"),
+    (("红枣", "大枣", "枣"), "assets/images/food-0021-jujube.jpg"),
+    (("芹菜",), "assets/images/food-0027-celery.jpg"),
+    (("红薯", "地瓜", "甘薯"), "assets/images/food-0028-sweet-potato.jpg"),
 )
 
 
