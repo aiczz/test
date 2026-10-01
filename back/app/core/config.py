@@ -41,6 +41,30 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 天，比赛演示期够用
 
+    # ---- 验证码（邮箱 / 手机号通用）----
+    # 机制和下发通道是解耦的：码本身是随机的、有有效期、有重发间隔和次数上限，
+    # 通道只负责把它送出去。换通道不用动业务代码。
+    code_ttl_seconds: int = 300          # 有效期 5 分钟
+    code_resend_interval: int = 60       # 同一目标 60 秒内不许重发
+    code_hourly_limit: int = 5           # 同一目标每小时最多发 5 条
+    code_max_attempts: int = 5           # 一条码最多校验失败 5 次即作废
+    # 演示保险：比赛现场万一邮箱发不出去，把它设为 true 就能用固定码。
+    # 正常情况必须为 False —— 否则验证码又退化成"只认 123456"。
+    allow_demo_code: bool = False
+    demo_code: str = "123456"
+
+    # ---- 邮件通道 ----
+    # console: 把验证码打到服务日志（默认，零配置就能跑，算真机制但不真发信）
+    # smtp:    真发邮件，需要把下面几项配全
+    mail_backend: Literal["console", "smtp"] = "console"
+    smtp_host: str = ""                   # 如 smtp.qq.com
+    smtp_port: int = 465                  # 465 走 SSL；587 走 STARTTLS
+    smtp_user: str = ""                   # 发信邮箱
+    smtp_password: str = ""               # 邮箱的「SMTP 授权码」，不是登录密码
+    smtp_from: str = ""                   # 留空则用 smtp_user
+    smtp_ssl: bool = True
+    smtp_timeout: int = 15
+
     # ---- CORS ----
     # Flutter Web 跑在另一个端口（flutter run -d chrome 每次端口都不同），
     # 必须在后端显式放行，否则浏览器直接拦掉请求。

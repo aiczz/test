@@ -3,15 +3,23 @@
 POST /api/auth/register
 POST /api/auth/login
 GET  /api/auth/me
+
+POST /api/auth/sms/*    手机号 + 固定演示码（仅演示，见 auth_service._verify_demo_sms）
+POST /api/auth/email/*  邮箱 + 真实验证码（随机码、有过期与限流，见 verification_service）
 """
 
 from fastapi import APIRouter, Depends, Request
 from sqlmodel import Session
 
+from app.core.config import settings
 from app.core.database import get_session
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.auth import (
+    CodeSentResponse,
+    EmailAuthRequest,
+    EmailCodeRequest,
+    EmailRegisterRequest,
     LoginRequest,
     RegisterRequest,
     SmsAuthRequest,
@@ -19,7 +27,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserPublic,
 )
-from app.services import auth_service
+from app.services import auth_service, verification_service
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -77,3 +85,65 @@ def login_sms(
 @router.get("/me", response_model=UserPublic, summary="当前登录用户")
 def me(user: User = Depends(get_current_user)) -> User:
     return user
+
+
+# ---------------------------------------------------------------- 邮箱验证码
+
+
+@router.post(
+    "/email/send-code",
+    response_model=CodeSentResponse,
+    summary="发送邮箱验证码",
+)
+def send_email_code(
+    payload: EmailCodeRequest,
+    session: Session = Depends(get_session),
+) -> CodeSentResponse:
+    """给邮箱发一条 6 位验证码。
+
+    限流：同一邮箱 60 秒内不能重发、每小时最多 5 条。
+    响应里【不含】验证码本身 —— 只能从邮箱里拿到。
+    """
+    channel = verification_service.issue_code(
+        session,
+        target=payload.email,
+        purpose=payload.purpose,
+    )
+    minutes = max(settings.code_ttl_seconds // 60, 1)
+    return CodeSentResponse(
+        channel=channel,
+        expires_in=settings.code_ttl_seconds,
+        message=(
+            f"验证码已发送，{minutes} 分钟内有效"
+            if channel == "smtp"
+            else f"服务端未配置邮件通道，验证码只打在了服务日志里（{minutes} 分钟内有效）"
+        ),
+    )
+
+
+@router.post(
+    "/email/register",
+    response_model=UserPublic,
+    status_code=201,
+    summary="邮箱验证码注册",
+)
+def register_email(
+    payload: EmailRegisterRequest,
+    session: Session = Depends(get_session),
+) -> User:
+    return auth_service.register_email(session, payload)
+
+
+@router.post(
+    "/email/login",
+    response_model=TokenResponse,
+    summary="邮箱验证码登录",
+)
+def login_email(
+    payload: EmailAuthRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> TokenResponse:
+    return TokenResponse(
+        access_token=auth_service.login_email(session, payload, request)
+    )

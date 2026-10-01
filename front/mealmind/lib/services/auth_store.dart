@@ -294,6 +294,94 @@ class AuthStore extends ChangeNotifier {
     );
   }
 
+  // ---------------------------------------------------------------- 邮箱验证码
+  //
+  // 这条路是【真的】：验证码由后端随机生成，有 5 分钟有效期、60 秒重发间隔、
+  // 每小时上限，校验失败次数封顶，用掉即作废（防重放）。码通过邮件下发
+  // （后端 mail_backend=smtp 时真发邮件；没配则只打到服务日志）。
+  //
+  // 离线时【不】提供本地闭环 —— 收不到邮件就是收不到，假装能过没有意义。
+
+  static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  bool _isEmail(String email) => _emailPattern.hasMatch(email);
+
+  String _normalizeEmail(String email) => email.trim().toLowerCase();
+
+  void _requireOnlineForEmail() {
+    if (!BackendStatus.instance.online) {
+      throw const AuthException('邮箱验证码需要连接后端，当前是离线演示模式');
+    }
+  }
+
+  /// 请求发送邮箱验证码，返回后端实际用的通道（smtp / console）。
+  Future<String> sendEmailCode(
+    String email, {
+    String purpose = 'register',
+  }) async {
+    final normalized = _normalizeEmail(email);
+    if (!_isEmail(normalized)) {
+      throw const AuthException('请输入正确的邮箱地址');
+    }
+    _requireOnlineForEmail();
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/auth/email/send-code',
+        data: <String, dynamic>{'email': normalized, 'purpose': purpose},
+      );
+      return res.data?['channel']?.toString() ?? 'console';
+    } on DioException catch (e) {
+      throw _toAuthException(e);
+    }
+  }
+
+  /// 邮箱验证码注册。注册成功只建账号，不自动登录。
+  Future<void> registerEmail(
+    String email,
+    String code,
+    String password,
+  ) async {
+    final normalized = _normalizeEmail(email);
+    if (!_isEmail(normalized)) {
+      throw const AuthException('请输入正确的邮箱地址');
+    }
+    _requireOnlineForEmail();
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/api/auth/email/register',
+        data: <String, dynamic>{
+          'email': normalized,
+          'code': code,
+          'password': password,
+        },
+      );
+    } on DioException catch (e) {
+      throw _toAuthException(e);
+    }
+  }
+
+  /// 邮箱验证码登录。
+  Future<void> loginWithEmail(String email, String code) async {
+    final normalized = _normalizeEmail(email);
+    if (!_isEmail(normalized)) {
+      throw const AuthException('请输入正确的邮箱地址');
+    }
+    _requireOnlineForEmail();
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/auth/email/login',
+        data: <String, dynamic>{'email': normalized, 'code': code},
+      );
+      final token = res.data?['access_token'] as String?;
+      if (token == null || token.isEmpty) {
+        throw const AuthException('登录失败：接口没有返回 token');
+      }
+      await _persist(token, await _fetchMe(token));
+    } on DioException catch (e) {
+      throw _toAuthException(e);
+    }
+  }
+
   /// 登录。失败抛 [AuthException]。
   Future<void> login(String username, String password) async {
     if (!BackendStatus.instance.online) {

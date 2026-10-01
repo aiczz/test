@@ -12,6 +12,7 @@ from app.models.my_food import MyFood
 from app.models.recipe import Recipe, RecipeIngredient, RecipeStep
 from app.models.shopping import ShoppingItem, ShoppingList
 from app.models.user import User, UserPreference
+from app.models.verification_code import VerificationCode
 
 __all__ = [
     "Favorite",
@@ -28,4 +29,5 @@ __all__ = [
     "ShoppingList",
     "User",
     "UserPreference",
+    "VerificationCode",
 ]

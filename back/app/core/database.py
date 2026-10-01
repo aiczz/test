@@ -43,6 +43,9 @@ STATE_TABLES = {
     "menu_plan_items",
     "shopping_lists",
     "shopping_items",
+    # 验证码也是用户侧状态表。漏了它的话，compact 模式下 create_all 只建
+    # STATE_TABLES 里的表，这张新表在服务器上根本不会被创建。
+    "verification_codes",
 }
 
 _catalog_mode_cache: WeakKeyDictionary[Engine, bool] = WeakKeyDictionary()

@@ -32,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _username = TextEditingController();
   final TextEditingController _password = TextEditingController();
   final TextEditingController _confirmPassword = TextEditingController();
-  final TextEditingController _phone = TextEditingController();
+  final TextEditingController _email = TextEditingController();
   final TextEditingController _code = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -63,7 +63,7 @@ class _LoginPageState extends State<LoginPage> {
     _username.dispose();
     _password.dispose();
     _confirmPassword.dispose();
-    _phone.dispose();
+    _email.dispose();
     _code.dispose();
     _timer?.cancel();
     super.dispose();
@@ -90,15 +90,13 @@ class _LoginPageState extends State<LoginPage> {
       // 一条路走到底：注册 = 手机号 + 验证码 + 设个数字密码，注册成功后
       // 直接登录（不用再切回登录页）；登录 = 用户名 + 密码。
       if (_registerMode) {
-        await AuthStore.instance.registerPhone(
-          _phone.text.trim(),
-          _code.text.trim(),
-          _password.text,
-        );
-        await AuthStore.instance.loginWithPhone(
-          _phone.text.trim(),
-          _code.text.trim(),
-        );
+        // 注册 = 邮箱 + 验证码 + 设个数字密码。
+        final email = _email.text.trim();
+        final code = _code.text.trim();
+        await AuthStore.instance.registerEmail(email, code, _password.text);
+        // ⚠️ 注册那一步已经把这条验证码消费掉了（一次性，防重放），
+        //    所以不能拿它再登录。后端把 username 设成了邮箱，直接走密码登录。
+        await AuthStore.instance.login(email, _password.text);
         if (!mounted) return;
         _finishLogin();
         return;
@@ -118,20 +116,43 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _sendCode() {
+  Future<void> _sendCode() async {
     if (_busy || _countdown > 0) return;
-    final phone = _phone.text.trim();
-    if (!RegExp(r'^1\d{10}$').hasMatch(phone)) {
-      setState(() => _error = '请输入正确的 11 位手机号');
+
+    final email = _email.text.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      setState(() => _error = '请输入正确的邮箱地址');
       return;
     }
 
-    _timer?.cancel();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    String channel;
+    try {
+      channel = await AuthStore.instance.sendEmailCode(
+        email,
+        purpose: _registerMode ? 'register' : 'login',
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _busy = false;
+      });
+      return;
+    }
+
+    if (!mounted) return;
     setState(() {
       _codeSent = true;
       _countdown = 60;
-      _error = null;
+      _busy = false;
     });
+
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted || _countdown <= 1) {
         timer.cancel();
@@ -142,8 +163,12 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('演示验证码已发送：123456'),
+      SnackBar(
+        content: Text(
+          channel == 'smtp'
+              ? '验证码已发到 $email，请查收（含垃圾箱）'
+              : '后端没配邮件通道，验证码打在了服务日志里',
+        ),
         behavior: SnackBarBehavior.floating,
         backgroundColor: orange900,
       ),
@@ -231,16 +256,16 @@ class _LoginPageState extends State<LoginPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              _registerMode ? '验证手机号并设置数字密码，注册后即可登录' : '使用用户名和密码登录，继续你的饮食计划',
+              _registerMode ? '验证邮箱并设置数字密码，注册后即可登录' : '使用用户名和密码登录，继续你的饮食计划',
               style: const TextStyle(fontSize: 11.5, color: muted),
             ),
             const SizedBox(height: 18),
 
-            // 注册用手机验证码，登录用账号密码 —— 两条路各自独立，
-            // 不需要「手机验证码 / 账号密码」那种切换 tab
-            //（widget_test 里也断言了页面上不该出现那两个字样）。
+            // 注册用邮箱验证码（后端随机生成、5 分钟有效、有限流和防重放），
+            // 登录用账号密码 —— 两条路各自独立，不需要「验证码 / 账号密码」
+            // 那种切换 tab（widget_test 里也断言了页面上不该出现那两个字样）。
             if (_registerMode) ...[
-              _phoneFields(),
+              _emailFields(),
               const SizedBox(height: 12),
               _registrationPasswordFields(),
             ] else ...[
@@ -324,19 +349,20 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _phoneFields() {
+  Widget _emailFields() {
     return Column(
       children: [
         _field(
-          controller: _phone,
-          label: '手机号',
-          icon: Icons.phone_android_rounded,
-          keyboardType: TextInputType.phone,
-          maxLength: 11,
+          controller: _email,
+          label: '邮箱',
+          icon: Icons.alternate_email_rounded,
+          keyboardType: TextInputType.emailAddress,
           validator: (value) {
             final text = (value ?? '').trim();
-            if (text.isEmpty) return '请输入手机号';
-            if (!RegExp(r'^1\d{10}$').hasMatch(text)) return '请输入正确的 11 位手机号';
+            if (text.isEmpty) return '请输入邮箱';
+            if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text)) {
+              return '请输入正确的邮箱地址';
+            }
             return null;
           },
         ),

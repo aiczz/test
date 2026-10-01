@@ -129,45 +129,38 @@ void main() {
     expect(find.text('让 AI 帮我搭配'), findsOneWidget);
   });
 
-  testWidgets('手机号注册成功后自动登录并通过入口门禁', (tester) async {
+  testWidgets('注册页用邮箱验证码，离线时明确拒绝而不是假装通过', (tester) async {
+    // 验证码机制是真的（后端随机生成、有 TTL / 限流 / 防重放，见
+    // back/tests/test_verification.py），所以前端离线时【不能】再给一个
+    // 本地闭环 —— 收不到邮件就是收不到，弹一句"演示验证码 123456"才是骗人。
+    // 这个用例就锁住这个行为。
     SharedPreferences.setMockInitialValues(<String, Object>{});
     BackendStatus.instance.setOfflineForTesting();
     await AuthStore.instance.logout();
-    var authenticated = false;
 
     await tester.pumpWidget(
       MaterialApp(
-        home: LoginPage(
-          gateMode: true,
-          onAuthenticated: () => authenticated = true,
-        ),
+        home: LoginPage(gateMode: true, onAuthenticated: () {}),
       ),
     );
 
     expect(find.text('创建你的账号'), findsOneWidget);
     expect(find.text('手机验证码'), findsNothing);
     expect(find.text('账号密码'), findsNothing);
+    // 第一个字段已经换成邮箱
+    expect(find.text('邮箱'), findsOneWidget);
+    expect(find.text('手机号'), findsNothing);
 
-    await tester.enterText(find.byType(TextFormField).at(0), '13800138000');
+    await tester.enterText(find.byType(TextFormField).at(0), 'cook@example.com');
     await tester.tap(find.text('获取验证码'));
     await tester.pump();
-    expect(find.text('演示验证码已发送：123456'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField).at(1), '123456');
-    await tester.enterText(find.byType(TextFormField).at(2), '246810');
-    await tester.enterText(find.byType(TextFormField).at(3), '246810');
-    await tester.scrollUntilVisible(
-      find.text('完成注册'),
-      220,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('完成注册'));
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(authenticated, isTrue);
-    expect(AuthStore.instance.isLoggedIn, isTrue);
-    await AuthStore.instance.logout();
+    // ★ 离线必须说清楚"需要后端"，且绝不能出现任何形式的假验证码
+    expect(find.textContaining('离线'), findsOneWidget);
+    expect(find.textContaining('123456'), findsNothing);
+    expect(find.text('演示验证码已发送：123456'), findsNothing);
+    // 没有得到码就不该进入"已发送"状态
+    expect(find.text('获取验证码'), findsOneWidget);
   });
 
   testWidgets('管理员演示账号可登录并打开新版控制台', (tester) async {
