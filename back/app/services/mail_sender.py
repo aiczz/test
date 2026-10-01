@@ -14,6 +14,7 @@
 import logging
 import smtplib
 from email.message import EmailMessage
+from email.utils import formataddr
 
 from app.core.config import settings
 
@@ -52,7 +53,12 @@ def _send_smtp(*, target: str, code: str, purpose: str) -> None:
 
     message = EmailMessage()
     message["Subject"] = f"【食时】{action}验证码 {code}"
-    message["From"] = settings.smtp_from or settings.smtp_user
+    # 带显示名的发件人：收件人看到的是「食时」，而不是一串 QQ 号。
+    # formataddr 会把中文名按 RFC 2047 编码（=?utf-8?b?...?=），
+    # 所以 Gmail / QQ / Outlook 都能正常显示。
+    message["From"] = formataddr(
+        (settings.smtp_from_name or "食时", settings.smtp_from or settings.smtp_user)
+    )
     message["To"] = target
     message.set_content(
         f"你的{action}验证码是：{code}\n\n"

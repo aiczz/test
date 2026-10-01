@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     smtp_user: str = ""                   # 发信邮箱
     smtp_password: str = ""               # 邮箱的「SMTP 授权码」，不是登录密码
     smtp_from: str = ""                   # 留空则用 smtp_user
+    # 收件人看到的发件人名字。不设的话 QQ 邮箱会直接显示 QQ 号（1218817158），
+    # 设成「食时」才像一封正经的应用邮件。
+    smtp_from_name: str = "食时"
     smtp_ssl: bool = True
     smtp_timeout: int = 15
 
