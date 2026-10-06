@@ -77,9 +77,21 @@ class Settings(BaseSettings):
     # 所以这里没有 AI 也能跑：候选与兜底理由全部由确定性算法给出，
     # `ai_api_key` 为空时自动降级，接口行为不变。
     ai_enabled: bool = True
+    # ⚠️ 这里要填到「版本前缀」为止：代码是拿它拼 `{ai_base_url}/chat/completions`。
+    #    DeepSeek 两种写法都认（`https://api.deepseek.com` 和 `.../v1`），
+    #    但**多数兼容 OpenAI 的服务必须带 /v1**，不然会 404。
     ai_base_url: str = "https://api.deepseek.com"
     ai_api_key: str = ""                 # ⚠️ 只走环境变量 / .env，绝不写进代码
     ai_model: str = "deepseek-chat"
+    # 要不要发 `response_format: {"type": "json_object"}`。
+    #
+    # ★ 这是换服务商时**唯一**容易翻车的地方：
+    #   `json_object` 是 OpenAI 的扩展，不是所有「兼容 OpenAI」的服务都实现了。
+    #   对方要是不认这个字段，通常会直接 400 —— 而我们的客户端**永不抛异常**，
+    #   于是表现为「AI 悄悄退回算法」，界面照常但少了 AI 味，很难查。
+    #   遇到这种服务商，把 AI_JSON_MODE 设成 false 就行（提示词里已经要求输出
+    #   JSON，客户端的解析也容错 ```json 围栏），不用改代码。
+    ai_json_mode: bool = True
     ai_timeout_seconds: int = 45
     ai_max_tokens: int = 1200
     ai_temperature: float = 0.6

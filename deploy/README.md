@@ -70,12 +70,13 @@ sudo bash deploy/deploy.sh
 #    生成方法：python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 SECRET_KEY=<换成一串随机值>
 
-# ② AI 大模型的 key（DeepSeek）
+# ② AI 大模型的 key（默认用 DeepSeek，也可以换任何兼容 OpenAI 协议的服务）
 #    ⚠️ 这个值不在仓库里，必须单独问项目负责人要，不要提交到 git
+AI_ENABLED=true
+AI_BASE_URL=https://api.deepseek.com
 AI_API_KEY=<向负责人索取>
 AI_MODEL=deepseek-chat
-AI_BASE_URL=https://api.deepseek.com
-AI_ENABLED=true
+AI_JSON_MODE=true
 
 # 天气（Open-Meteo，免费且不需要 key），保持 true 即可
 WEATHER_ENABLED=true
@@ -83,6 +84,37 @@ WEATHER_ENABLED=true
 
 **`AI_API_KEY` 不填也能跑**：首页推荐和 AI 助手会自动退回确定性算法，
 只是没有 AI 润色和候选内的智能挑选。所以「忘了配」不是事故，只是少个亮点。
+
+### 以后要换 AI 服务商：只改 .env 里那三行
+
+```
+AI_BASE_URL   填到「版本前缀」为止（多数服务要带 /v1，不带通常 404）
+AI_API_KEY    对方的 key
+AI_MODEL      对方的模型名（写错通常 400 或 404）
+```
+
+改完**先自检再重启**，别靠「部署上去看看」：
+
+```bash
+cd /opt/test/back
+python3 scripts/check_ai.py          # 真的发一次请求，失败会告诉你该改哪一项
+sudo systemctl restart shishi-backend
+```
+
+> **为什么必须有这个自检**：`app/ai/client.py` 里**永不抛异常** ——
+> AI 挂了只是悄悄退回算法。这是有意的（首页不能因为 AI 500），
+> 但也意味着**配置写错了界面上看不出来**：页面照常开、菜照样有，
+> 只是少了 AI 润色那一段。所以换完一定要跑 `check_ai.py`。
+
+两个容易踩的点：
+
+- **`AI_BASE_URL` 要填到版本前缀**：代码是拿它拼 `{AI_BASE_URL}/chat/completions`。
+  填 `https://api.deepseek.com` 或 `.../v1` 都行（DeepSeek 两种都认），
+  但多数服务只认带 `/v1` 的。
+- **`AI_JSON_MODE`**：开了会发 `response_format={"type":"json_object"}`。
+  这是 OpenAI 的扩展，**不是所有「兼容 OpenAI」的服务都实现了**（本地
+  vLLM / Ollama 常见不支持）。对方不认时会直接 400，而客户端不抛异常
+  → 表现为 AI 悄悄降级。遇到就把 `AI_JSON_MODE` 设成 `false`，**不用改代码**。
 
 ---
 
@@ -166,7 +198,9 @@ cd /opt/test/back && python3 scripts/verify_ai_features.py --base http://127.0.0
 | 打开是白屏，控制台一堆 404 | `/opt/web` 是空的或解压不全。重跑 `deploy.sh`，确认 Release 里有 `web-build.tar.gz` |
 | 页面能开，但数据都是假的 | 前端探测不到后端。`curl http://127.0.0.1/api/health` 确认 nginx 反代生效；再看 `systemctl status shishi-backend` |
 | 登录报 500 | `SECRET_KEY` 没换或认证依赖没装。看 `journalctl -u shishi-backend` |
-| 首页建议里没有 AI 味（都是模板话） | `AI_API_KEY` 没配或调用失败。看 `/api/home` 返回的 `meta.source`：`ai`=真调了，`algorithm`=降级了；以及 `meta.steps` 里「AI 每日建议」那一步的 detail |
+| 首页建议里没有 AI 味（都是模板话） | `AI_API_KEY` 没配或调用失败。先跑 `cd /opt/test/back && python3 scripts/check_ai.py` —— 它会直接告诉你该改哪一项；也可以看 `/api/home` 返回的 `meta.source`：`ai`=真调了，`algorithm`=降级了 |
+| 换完 AI 服务商后报 404 | `AI_BASE_URL` 少了版本前缀。多数服务要 `https://<域名>/v1` |
+| 换完 AI 服务商后报 400 | 对方可能不支持 `response_format=json_object`。把 `AI_JSON_MODE` 设成 `false` 再试 |
 | 推荐菜里出现很长的怪标题 | 那是清洗库里 4.6% 的抓取标题，推荐链路已过滤；若仍出现说明跑的是旧代码 |
 | `database is locked` | 别同时跑多个后端实例（两个 uvicorn 指向同一个 SQLite） |
 | 改了算法但首页没变 | AI 每日结果是**按天缓存**的。等第二天，或 `curl "http://127.0.0.1/api/home?refresh=true"` |

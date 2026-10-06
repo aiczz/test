@@ -409,12 +409,52 @@ AI_ENABLED=true
 AI_BASE_URL=https://api.deepseek.com
 AI_API_KEY=<把 key 单独发给运维同学，不要走 git>
 AI_MODEL=deepseek-chat
+AI_JSON_MODE=true
 AI_DAILY_CACHE_ENABLED=true
 WEATHER_ENABLED=true
 ```
 
 **key 不填也能跑** —— 首页与 AI 助手会自动退回确定性算法，
 只是少了 AI 润色和候选内的智能挑选。所以「忘了配 key」不是一次事故。
+
+### 9.4.1 以后要换 AI 服务商：只改 `.env`，代码一行不用动
+
+`app/ai/client.py` 走的是 **OpenAI Chat Completions 协议**，
+所以任何兼容该协议的服务（通义千问 / 智谱 / Kimi / 本地 Ollama / vLLM…）
+都只是换三行配置：
+
+| 改哪一项 | 注意 |
+|---|---|
+| `AI_BASE_URL` | **填到「版本前缀」为止**。代码是拿它拼 `{AI_BASE_URL}/chat/completions`，所以多数服务要写成 `https://<域名>/v1`，少了通常 404 |
+| `AI_API_KEY` | 对方的 key |
+| `AI_MODEL` | 对方的模型名，写错通常 400 或 404 |
+
+**改完先自检，别靠「部署上去看看」：**
+
+```bash
+cd back && python scripts/check_ai.py
+```
+
+它会真的发一次请求，失败时按 401/404/400/超时分别告诉你该改哪一项；
+也能临时试别的配置而不动 `.env`：
+
+```bash
+python scripts/check_ai.py --base https://dashscope.aliyuncs.com/compatible-mode/v1 \
+                           --model qwen-plus
+```
+
+> **为什么必须有自检**：这个客户端**永不抛异常** —— 任何失败都只是悄悄
+> 退回确定性算法（首页不能因为 AI 挂掉而 500）。代价是**配错了界面上看不出来**：
+> 页面照常开、菜照样有，只是少了 AI 润色那一段。
+
+**唯一一处不是所有「兼容 OpenAI」的服务都实现的东西**是
+`response_format={"type":"json_object"}`（OpenAI 的扩展，本地 vLLM / Ollama
+常见不支持）。对方不认时会直接 400，而客户端不抛异常 → 表现为 AI 悄悄降级。
+遇到就把 `AI_JSON_MODE` 设成 `false`：提示词本来就要求输出 JSON，
+解析那边也容错 ```json 围栏，**不用改代码**。
+
+换模型之后首页的每日缓存会**自动失效** —— 缓存键里带了 `settings.ai_model`
+（见 `ai_daily_service.build_cache_key`），不用手工清。
 
 ### 9.5 排错
 

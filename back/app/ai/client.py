@@ -81,6 +81,38 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     return None
 
 
+def build_payload(
+    messages: list[dict[str, str]],
+    *,
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+) -> dict[str, Any]:
+    """拼一次 Chat Completions 的请求体。
+
+    单独抽出来是为了能测 —— 「换服务商时会不会带上对方不认的字段」
+    是这个模块唯一容易翻车的地方，值得有断言盯着。
+    """
+    payload: dict[str, Any] = {
+        "model": settings.ai_model,
+        "messages": messages,
+        "max_tokens": max_tokens or settings.ai_max_tokens,
+        "temperature": (
+            settings.ai_temperature if temperature is None else temperature
+        ),
+        "stream": False,
+    }
+    # `response_format` 是 OpenAI 的扩展，不是所有「兼容 OpenAI」的服务都实现。
+    # 对方不认时会直接 400，而这里**永不抛异常** → 表现为 AI 悄悄降级，
+    # 界面照常但少了 AI 味，很难查。所以留一个开关，遇到不支持的服务商
+    # 只改 .env（AI_JSON_MODE=false）即可，不用动代码。
+    #
+    # 关掉也没关系：提示词里本来就要求「请输出 JSON」，而 _extract_json
+    # 能容错 ```json 围栏和前后多余的客套话。
+    if settings.ai_json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    return payload
+
+
 def complete_json(
     messages: list[dict[str, str]],
     *,
@@ -96,19 +128,11 @@ def complete_json(
     if not settings.ai_configured:
         return AiResult.skipped("未配置 AI_API_KEY")
 
+    # 注意拼接方式：AI_BASE_URL 要填到「版本前缀」为止（多数服务需要 /v1）
     url = settings.ai_base_url.rstrip("/") + "/chat/completions"
-    payload: dict[str, Any] = {
-        "model": settings.ai_model,
-        "messages": messages,
-        "max_tokens": max_tokens or settings.ai_max_tokens,
-        "temperature": (
-            settings.ai_temperature if temperature is None else temperature
-        ),
-        "stream": False,
-        # DeepSeek 支持 JSON 输出模式。注意：用它时提示词里必须出现 "json" 字样，
-        # 否则服务端会直接报错 —— prompts.py 里的提示词都带了。
-        "response_format": {"type": "json_object"},
-    }
+    payload = build_payload(
+        messages, max_tokens=max_tokens, temperature=temperature
+    )
 
     started = time.perf_counter()
     try:

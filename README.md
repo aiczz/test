@@ -25,7 +25,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `python -m pytest` | 157 passed |
+| 后端 `python -m pytest` | 162 passed |
 | 后端 `ruff --select F821,F811,F401,F841` | 干净 |
 | 前端 `dart analyze lib test` | 干净 |
 | 前端 `flutter test` | 10 passed |
@@ -177,7 +177,7 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
 
 ## 六、当前进度
 
-> 更新于 **v1.0.0**（2026-10-06）。状态：**可交付** —— 后端 157 个测试、
+> 更新于 **v1.0.0**（2026-10-06）。状态：**可交付** —— 后端 162 个测试、
 > 前端 10 个测试、验收脚本 49 项断言全过（见 `CHANGELOG.md`）。
 
 - [x] 环境搭建（Flutter + Android 工具链）
@@ -197,7 +197,7 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
       AI 请求里带的硬约束可以在轨迹的「读取约束」那一步看见）
 - [x] 品牌应用图标（自适应图标，非 Flutter 默认蓝色图标）+ PWA 清单
 - [x] 交互测试接入 CI（`flutter test` 是真实门禁，不是摆设）
-- [x] ★ **后端**：FastAPI + SQLModel，**15 张表、37 个接口、157 个测试**
+- [x] ★ **后端**：FastAPI + SQLModel，**15 张表、37 个接口、162 个测试**
       （SQLite 开箱即跑，改一行 `DATABASE_URL` 即可切 PostgreSQL；
       后端测试在 CI 里真的会跑 —— 见 `backend-tests.yml`）
 - [x] ★ **登录闭环**：注册 / 登录 / 手机验证码 / 演示账号一键登录 / token 持久化；
@@ -341,11 +341,47 @@ AI_ENABLED=true
 AI_BASE_URL=https://api.deepseek.com
 AI_API_KEY=<把 key 单独发给运维同学，不要走 git>
 AI_MODEL=deepseek-chat
+AI_JSON_MODE=true
 WEATHER_ENABLED=true
 ```
 
 **key 不填也能跑** —— 首页与 AI 助手会自动退回确定性算法，
 只是少了 AI 润色和候选内的智能挑选。所以「忘了配 key」不是一次事故。
+
+#### 以后要换 AI 服务商
+
+后端走的是 **OpenAI Chat Completions 协议**，所以通义千问 / 智谱 / Kimi /
+本地 Ollama 这些兼容服务都只是**改 `.env` 三行**（`AI_BASE_URL` /
+`AI_API_KEY` / `AI_MODEL`），代码一行不用动：
+
+| 服务商 | `AI_BASE_URL` | 模型名示例 |
+|---|---|---|
+| DeepSeek（当前） | `https://api.deepseek.com` | `deepseek-chat` |
+| 阿里通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
+| 月之暗面 Kimi | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| 本地 Ollama | `http://127.0.0.1:11434/v1` | `qwen2.5:7b` |
+
+两个坑：
+
+- **`AI_BASE_URL` 要填到「版本前缀」为止** —— 代码是拿它拼
+  `{AI_BASE_URL}/chat/completions`，多数服务少了 `/v1` 会 404。
+- **本地部署的模型一般要把 `AI_JSON_MODE` 设成 `false`** ——
+  `response_format={"type":"json_object"}` 是 OpenAI 的扩展，不是所有
+  「兼容 OpenAI」的实现都支持；对方不认时直接 400，而客户端不抛异常
+  → 表现为「AI 悄悄降级」，很难查。
+
+**改完一定先自检**（会真的发一次请求，失败时直接告诉你该改哪一项）：
+
+```bash
+cd back && python scripts/check_ai.py
+```
+
+> 为什么必须自检：客户端**永不抛异常** —— AI 失败只是悄悄退回算法
+> （首页不能因为 AI 挂掉而 500）。代价是配错了界面上看不出来：
+> 页面照常开、菜照样有，只是少了 AI 润色那一段。
+>
+> 换模型后首页的每日缓存会**自动失效**（缓存键里带了模型名），不用手工清。
 
 ---
 

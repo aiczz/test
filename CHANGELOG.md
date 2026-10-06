@@ -27,6 +27,15 @@
 - AI 推荐链路：综合打分（时令 / 天气 / 营养 / 偏好 / 人气 + 每日轮换因子）、
   每日按 `(地区, 日期, 季节, 天气)` 缓存一次大模型调用、
   幻觉防火墙（模型给的 id 不在候选集内一律丢弃）
+- **AI 服务商可以随时换，只改 `.env` 三行**（`AI_BASE_URL` / `AI_API_KEY` /
+  `AI_MODEL`）：客户端走的是 OpenAI Chat Completions 协议，
+  通义千问 / 智谱 / Kimi / 本地 Ollama 都能直接用。
+  → 新增 `python scripts/check_ai.py` 自检：**换完先跑它，别靠部署上去看**。
+  因为客户端永不抛异常（首页不能因 AI 挂掉而 500），配错了界面上看不出来。
+  → 新增 `AI_JSON_MODE` 开关：`response_format=json_object` 是 OpenAI 的扩展，
+  本地 vLLM / Ollama 常不支持，对方 400 时会表现为「AI 悄悄降级」。
+  关掉即可，不用改代码。
+  → 换模型后首页每日缓存自动失效（缓存键里带了模型名），不用手工清。
 - 家庭档案持久化：`user_preferences` 新增 `low_sodium` / `cook_minutes` /
   `tools` / `diet_preferences` 四列
   → ⚠️ **已存在的数据库由启动时的增量 `ALTER TABLE` 自动补列**，
@@ -56,7 +65,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `pytest` | 157 passed |
+| 后端 `pytest` | 162 passed |
 | 后端 `ruff --select F821,F811,F401,F841` | 干净 |
 | 前端 `dart analyze lib test` | 干净 |
 | 前端 `flutter test` | 10 passed |
