@@ -11,7 +11,6 @@
 
 import 'package:flutter/foundation.dart';
 
-import '../data/dish_images.dart';
 import '../data/mock.dart';
 import '../models/content.dart';
 import 'api_config.dart';
@@ -29,9 +28,17 @@ class ContentStore extends ChangeNotifier {
   /// 当月时令食材的 id。接后端时来自 /api/foods/seasonal。
   Set<String> _seasonalIds = <String>{};
 
+  /// 菜谱页的分类筛选区。接后端时来自 /api/recipes/tags。
+  ///
+  /// 空列表 = 拿不到（离线 / 老后端），界面只显示「全部」。
+  List<RecipeTagGroup> _recipeTagGroups = const <RecipeTagGroup>[];
+
   List<Food> get foods => _foods;
 
   List<Recipe> get recipes => _recipes;
+
+  /// 菜谱页分组分类（含每个分类的菜品数）。
+  List<RecipeTagGroup> get recipeTagGroups => _recipeTagGroups;
 
   /// 数据是否来自真后端。界面上可以如实标注，不夸大。
   bool get fromBackend => _fromBackend;
@@ -62,25 +69,26 @@ class ContentStore extends ChangeNotifier {
       // 菜谱要翻页：清洗库有 10000 道，只拉第一页的话「全部菜谱」永远只有 50 道。
       final allRecipes = await BackendApi.instance.fetchAllRecipes();
 
-      // 菜谱图库只覆盖 481 道（清洗库有 10000 道）。没有专属配图的菜会退化成
-      // _recipeFallbackImage 那 3 张兜底图循环，列表里大片重复比菜少更减分，
-      // 所以清洗库这种量级下只保留有真实配图的。
-      // 演示数据（seed 只有 4 道，且自带 image_url）一个都命中不了，
-      // 这时 withPhoto 为空，就原样全留，别把界面清空。
-      final withPhoto = allRecipes
-          .where((recipe) => kDishImageByName.containsKey(recipe.name))
-          .toList();
-      final recipes = withPhoto.isNotEmpty ? withPhoto : allRecipes;
+      // ⚠️ 这里曾经只保留「有实拍图」的 481 道菜（怕列表里大片重复的兜底图）。
+      //    现在没有配图的菜会显示「暂无配图」占位块，不再盗用别的菜的图，
+      //    所以没有理由再砍掉 95% 的菜 —— 砍掉的直接后果就是分类点进去是空的
+      //    （分类数由全库算，列表却只有 481 道，两边对不上）。
+      final recipes = allRecipes;
 
       // 时令要单独拉一次：/api/foods 返回的 FoodBrief 只带 season_score、
       // 不带季节名，光靠它没法判断「这个月」哪些是当季的。
       final seasonalIds = await _fetchSeasonalIds();
+
+      // 分类和时令一样，拉不到【不】让整次加载失败 ——
+      // 它只决定筛选区有几个 chip，不影响菜谱本身。
+      final tagGroups = await BackendApi.instance.fetchRecipeTags();
 
       // 后端返回空列表时【不】覆盖本地数据 ——
       // 空白界面比假数据更糟，演示时尤其明显。
       _foods = foods.isEmpty ? mockFoods : foods;
       _recipes = recipes.isEmpty ? mockRecipes : recipes;
       _seasonalIds = seasonalIds;
+      _recipeTagGroups = tagGroups;
       _fromBackend = foods.isNotEmpty || recipes.isNotEmpty;
       notifyListeners();
     } catch (error) {
@@ -107,7 +115,30 @@ class ContentStore extends ChangeNotifier {
     _foods = mockFoods;
     _recipes = mockRecipes;
     _seasonalIds = <String>{};
+    _recipeTagGroups = const <RecipeTagGroup>[];
     _fromBackend = false;
+    notifyListeners();
+  }
+
+  /// 仅供测试：不联网直接塞一份内容。
+  ///
+  /// 为什么需要这个口子：`load()` 依赖 [BackendStatus]，而 widget 测试跑在离线
+  /// 环境里，拿不到后端的分类数据 —— 于是「菜谱页分类来自后端、点分类能筛出菜」
+  /// 这条最重要的行为反而没测试能覆盖。这个方法让测试可以像后端那样喂数据。
+  ///
+  /// 测试结束记得调 `ContentStore.instance.load()` 把状态还原，
+  /// 不然会污染后面跑的用例（它是单例）。
+  @visibleForTesting
+  void debugSeed({
+    List<Food>? foods,
+    List<Recipe>? recipes,
+    List<RecipeTagGroup>? tagGroups,
+    bool fromBackend = true,
+  }) {
+    if (foods != null) _foods = foods;
+    if (recipes != null) _recipes = recipes;
+    _recipeTagGroups = tagGroups ?? const <RecipeTagGroup>[];
+    _fromBackend = fromBackend;
     notifyListeners();
   }
 }

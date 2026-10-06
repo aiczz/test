@@ -68,6 +68,33 @@ class Settings(BaseSettings):
     smtp_ssl: bool = True
     smtp_timeout: int = 15
 
+    # ---- AI 大模型（DeepSeek / 任何兼容 OpenAI 协议的服务）----
+    #
+    # 设计原则（说明书 §14/§18 + 本次需求）：
+    #   · 算法负责「选什么」—— 从我们自己的清洗库里按综合打分筛候选；
+    #   · 大模型负责「怎么挑、怎么说」—— 只在候选集内做选择与解释，
+    #     绝不允许它从全库自由生成菜名（会编出不存在的菜）。
+    # 所以这里没有 AI 也能跑：候选与兜底理由全部由确定性算法给出，
+    # `ai_api_key` 为空时自动降级，接口行为不变。
+    ai_enabled: bool = True
+    ai_base_url: str = "https://api.deepseek.com"
+    ai_api_key: str = ""                 # ⚠️ 只走环境变量 / .env，绝不写进代码
+    ai_model: str = "deepseek-chat"
+    ai_timeout_seconds: int = 45
+    ai_max_tokens: int = 1200
+    ai_temperature: float = 0.6
+    # 首页「每天每地区只问一次 AI」的缓存表。关掉它每次请求都会真调模型。
+    ai_daily_cache_enabled: bool = True
+    # 首页留给 AI 的候选数量（算法先筛出这么多，AI 在里面挑最终展示的）
+    ai_home_shortlist: int = 8
+
+    # ---- 天气（首页推荐要考虑「今天什么天气」）----
+    # Open-Meteo 免费且不需要 key。取不到就退回按月份的时令气候估算，
+    # 再不行就当「无天气信息」——任何情况都不能让首页挂掉。
+    weather_enabled: bool = True
+    weather_base_url: str = "https://api.open-meteo.com/v1/forecast"
+    weather_timeout_seconds: int = 6
+
     # ---- CORS ----
     # Flutter Web 跑在另一个端口（flutter run -d chrome 每次端口都不同），
     # 必须在后端显式放行，否则浏览器直接拦掉请求。
@@ -80,6 +107,11 @@ class Settings(BaseSettings):
     # CORS 允许任意来源的正则（覆盖 flutter run -d chrome 的随机端口）。
     # 仅开发期使用；.env 里设成空字符串即可关闭。
     cors_origin_regex: str = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+    @property
+    def ai_configured(self) -> bool:
+        """有没有配好大模型。没配好就走确定性算法，绝不报错。"""
+        return bool(self.ai_enabled and self.ai_api_key.strip() and self.ai_base_url.strip())
 
 
 @lru_cache

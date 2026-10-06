@@ -39,21 +39,32 @@
 │   ├── app/                                  FastAPI 应用
 │   │   ├── main.py                             入口 + CORS + 建表 & 灌种子
 │   │   ├── core/                               配置 / 数据库 / 安全 / 依赖注入
-│   │   ├── api/routes/                         32 个接口，按业务分文件
-│   │   ├── models/                             14 张表（SQLModel）
+│   │   ├── api/routes/                         38 个接口，按业务分文件
+│   │   ├── models/                             16 张表（SQLModel）
 │   │   ├── schemas/ · repositories/ · services/ 响应模型 / 数据访问层 / 业务逻辑层
+│   │   ├── ai/                               ★ 大模型客户端（DeepSeek / OpenAI 兼容）
 │   │   └── data/seed.py                        种子数据（幂等）
-│   ├── tests/                                pytest —— CI 里真的会跑
+│   ├── tests/                                120 个 pytest 用例 —— CI 里真的会跑
+│   ├── scripts/verify_ai_features.py         ★ 验收脚本（29 项断言，给运维自检用）
 │   ├── data_tools/                           数据清洗辅助脚本
 │   ├── requirements.txt · README.md
 │   └── 食时_App后端实现说明_Codex.md            后端实现说明（技术栈 / 表设计 / 接口规范 / 排期）
 │
 ├── sql/                                  菜谱数据库的数据清洗交付（MySQL schema + CSV）
 │
+├── deploy/                                ★ 部署套件（给运维，照着跑就行）
+│   ├── README.md                             部署手册（含排错对照表）
+│   ├── deploy.sh                             一键部署脚本（幂等）
+│   ├── nginx-shishi.conf                     静态站 + /api 反代（同源）
+│   ├── shishi-backend.service                systemd 单元
+│   └── local_preview.py                      本地复刻生产拓扑（验证同源用）
+│
 └── .github/workflows/
     ├── deploy-pages.yml                  CI：构建 Flutter Web 并发布到 GitHub Pages
+    ├── build-web.yml                     CI：构建给自托管用的网页产物（同源，不含 IP）
+    ├── build-apk.yml                     CI：构建安卓安装包（含后端地址）
     └── backend-tests.yml                 CI：跑后端 pytest
-```
+
 
 ---
 
@@ -127,9 +138,11 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
 
 | 文档 | 内容 |
 |---|---|
+| [`deploy/README.md`](deploy/README.md) | **★ 部署手册**（运维照这份做：一键脚本 / nginx / systemd / 排错对照表） |
 | [`front/README.md`](front/README.md) | 前端子目录详细说明（结构 / 启动 / 进度 / 部署） |
 | [`front/goat/front指南.txt`](front/goat/front指南.txt) | 需求与页面结构（原始版，1643 行） |
-| [`back/食时_App后端实现说明_Codex.md`](back/食时_App后端实现说明_Codex.md) | 后端实现说明（13 张表 + 32 节接口规范 + P0/P1 排期） |
+| [`back/README.md`](back/README.md) | 后端说明（接口清单 / 算法 + AI 分工 / 知识库来源 / 排错） |
+| [`back/食时_App后端实现说明_Codex.md`](back/食时_App后端实现说明_Codex.md) | 后端实现说明（表设计 + 接口规范 + 排期） |
 | [`front/docs/项目方案.md`](front/docs/项目方案.md) | 技术方案：架构、算法、评测、排期 |
 | [`front/docs/接口契约.md`](front/docs/接口契约.md) | 前后端接口约定（**待与现有接口合并**） |
 | [`front/docs/环境搭建踩坑记录.md`](front/docs/环境搭建踩坑记录.md) | 新人照这份装环境，含 5 个坑的解法 |
@@ -155,7 +168,7 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
       关掉低钠约束，Critic 就不再否决方案 B）
 - [x] 品牌应用图标（自适应图标，非 Flutter 默认蓝色图标）+ PWA 清单
 - [x] 交互测试接入 CI（`flutter test` 是真实门禁，不是摆设）
-- [x] ★ **后端**：FastAPI + SQLModel，**14 张表、32 个接口、71 个测试**
+- [x] ★ **后端**：FastAPI + SQLModel，**15 张表、37 个接口、117 个测试**
       （SQLite 开箱即跑，改一行 `DATABASE_URL` 即可切 PostgreSQL；
       后端测试在 CI 里真的会跑 —— 见 `backend-tests.yml`）
 - [x] ★ **登录闭环**：注册 / 登录 / 手机验证码 / 演示账号一键登录 / token 持久化；
@@ -166,18 +179,38 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
 - [x] ★ **前端业务数据接入后端，并保留静默降级**
       （后端不在线就用本地演示数据，界面照常能用、不弹错误；
       「我的食材」登录后同步到 `/api/my-foods`）
-- [x] ★ **AI 助手接 `/api/ai/chat`**：回答由后端生成，后端离线时回落本地文案。
-      协作轨迹仍由前端按家庭档案展开 —— 后端目前不返回轨迹，这一点没有假装
+- [x] ★ **AI 助手接 `/api/ai/chat`**：回答由后端生成，后端离线时回落本地文案
+- [x] ★ **首页推荐接「综合打分算法 + AI」**（本次）
+      —— 后端按 **当天时令 + 定位城市天气 + 营养/标签 + 每日轮换因子** 从清洗库
+      打分筛候选，再让大模型**在候选集内**挑选与解释。
+      同地区同一天所有人看到的完全一致，**每天轮换**；
+      AI 结果按 `(地区, 日期, 季节, 天气)` 落库缓存，**一个地区一天只调一次模型**。
+      后端离线时首页自动退回本地规则，界面照常可用。
+- [x] ★ **导航栏 AI 模块接上 AI**（本次）
+      —— 「用我的食材配这一餐」：把你勾选的食材 + 今日菜单里已有的菜 +
+      人数/可用时间/限钠/口味/忌口一起交给后端，
+      后端先按食材召回候选（含硬约束过滤），再让大模型在候选内挑 3 道并写理由，
+      一键加入今日菜单。
+- [x] ★ **知识库就是我们的清洗库**（本次）
+      —— AI 的解释全部建立在 `ingredients`（每 100g 营养 / 功效标签 / 中医宜忌）、
+      `dishes`（整菜营养 / 标签）、`seasonal_calendar`（时令知识原文，
+      如「秋季润肺，这样吃抗病魔！」）之上，不是模型的通用常识。
+- [x] ★ **AI 不能凭空生成**（本次）
+      —— 模型返回的 id 不在候选集里一律丢弃；忌口与可用时间由确定性代码
+      在 AI **之前**硬筛，安全性不依赖模型。
+      没配 `AI_API_KEY` 时全部退回算法，接口结构不变、不会 500。
 - [x] ★ **token 失效自动登出**：任何接口返回 401（token 过期 / 账号被封禁）都会
       清掉本地登录态、回到登录页并说明原因，不会再卡在
       「显示着已登录、却什么都做不了」的状态
-- [ ] 把 `sql/` 里清洗好的菜谱数据导入后端
-      （后端目前仍是种子数据的 6 种食材 / 4 道菜谱，那批 CSV 还没接进来）
+- [x] ★ **清洗数据已导入服务器**：线上 `ingredients` 8087 行（590 个核心食材）、
+      `dishes` 10000 行、`dish_ingredients` 77886 行、时令表 596 行
 - [ ] 真 CP-SAT 求解器（当前由 `lib/services/local_estimator.dart` 本地派生顶上）
 - [ ] 菜单 / 购物清单接 `/api/menu/*`（当前走 `services/api.dart` 的本地分支）
       —— ⚠️ 后端 `/api/menu/plan` 的响应结构与前端 `Plan.fromJson` 并不一致，
       直接改 `useMock = false` 会得到一张**空白菜单页**（字段全部回落到默认值），
       接它需要先写适配层
+- [ ] 价格管道（三级降级 / 城市路由 / 批发→零售折算）—— 后端目前一处都没有，
+      前端购物清单上的价格来源标注都是 mock 写死的
 
 ### 关于「联动」是怎么实现的
 
@@ -210,6 +243,63 @@ profile.dart「保存」
 
 ---
 
+## 六点五、算法 + AI 是怎么分工的
+
+> 详细版（权重表、排错表、知识库来源）在 [`back/README.md` 第九节](back/README.md)。
+
+**一句话：算法负责「选什么」，大模型负责「怎么说」。**
+
+```
+定位城市 ──→ 天气（Open-Meteo，免费无 key）
+                │
+时令（数据库）──┤
+营养 / 标签   ──┼──→ 综合打分算法 ──→ 候选集（各 8 个）
+家庭硬约束    ──┘         ▲                    │
+                          │                    ▼
+                          │         每天每地区【只问一次】大模型
+                          │       （结果按 地区+日期+季节+天气 落库缓存）
+                          └── 忌口/限钠/时间 在这里收口 ──→ 最终 3 + 3
+```
+
+**为什么不让 AI 直接从库里生成**：清洗库有 590 个核心食材、10000 道菜。
+直接让模型「推荐几道」，它一定会编出不存在的菜名，或者推一道要炖三小时、
+而家里只有 45 分钟的菜。现在的做法保证接口返回的每一道菜都真实存在于库里。
+
+**「同地区同一天一样、跨天不一样」怎么做到的**：
+每日轮换因子是 `sha256(地区 + 日期 + 条目名)` —— 确定性函数。
+同地区 + 同日期永远算出同一个值，所以那天所有人看到的顺序完全一致
+（也正因此，那一次 AI 调用可以按地区共享，token 省下来）；
+日期一变，因子全变，排序就换了。
+
+**AI 的知识库就是我们自己的数据**（这是原创性与开源性的落点）：
+
+| 来源 | 内容 |
+|---|---|
+| `ingredients` | 每 100g 营养、功效标签、中医宜忌、适宜人群（8087 行 / 590 个核心食材）|
+| `dishes` | 整菜营养（已按配料克重算好）、标签（10000 行）|
+| `seasonal_calendar` | **时令知识原文**：「秋季（9月-11月）的应季蔬菜共 24 种…」「秋季润肺，这样吃抗病魔！」|
+| `seasonal_food` | 逐条时令食材与推荐理由（544 行）|
+
+### ⚠️ 部署时 AI 的 key 怎么给
+
+**不要把 key 提交进仓库。** 仓库是公开的，提交进去几分钟内就会被爬走盗刷。
+`back/.env` 已在 `.gitignore` 里，这是有意的。
+
+服务器上（`/opt/test/back/.env`）：
+
+```env
+AI_ENABLED=true
+AI_BASE_URL=https://api.deepseek.com
+AI_API_KEY=<把 key 单独发给运维同学，不要走 git>
+AI_MODEL=deepseek-chat
+WEATHER_ENABLED=true
+```
+
+**key 不填也能跑** —— 首页与 AI 助手会自动退回确定性算法，
+只是少了 AI 润色和候选内的智能挑选。所以「忘了配 key」不是一次事故。
+
+---
+
 ## 七、部署到公网（GitHub Pages）
 
 CI 已配好：push 到 `main` 会自动跑 analyze → test → build，并发布到 GitHub Pages。
@@ -239,6 +329,67 @@ GitHub Pages 项目站点发在 `/<仓库名>/` 这个**子路径**下，不是�
 | build 报仓库不可用 | 仓库还是 private |
 | 首次打开白屏较久 | Flutter Web 首次要下约 10MB（`main.dart.js` + `canvaskit.wasm`），之后走缓存 |
 | build 挂在 test 这一步 | `flutter test` 没过。测试是真的门禁，去 Actions 日志看是哪条断言失败 |
+
+> ⚠️ GitHub Pages 那份**没有后端**（Pages 只发静态文件），所以它靠前端的
+> 「静默降级」跑本地演示数据。要真正跑通前后端，用下面这节的自托管部署。
+
+---
+
+## 七点五、部署到自己的服务器（自托管 · 交付给运维）
+
+**完整手册在 [`deploy/README.md`](deploy/README.md)**，这里只给结论。
+
+### 运维要做的就两行
+
+```bash
+cd /opt/test && sudo git pull
+sudo bash deploy/deploy.sh
+```
+
+`deploy.sh` 是幂等的，会自动做完：装依赖 → 建库 → 导入菜谱内容数据 →
+注册 systemd 服务 → 下载前端产物 → 配 nginx → 自检。
+
+### ★ 前端走「同源」，产物里不含任何 IP
+
+这是本次为了让「pull 下来就能用」成立做的关键改动：
+
+```
+浏览器 ─┬─ /       → 前端静态产物
+        └─ /api/   → 后端 uvicorn（nginx 反代）
+```
+
+前端调的是**页面所在来源**的 `/api`，不再把服务器 IP 编进包里。所以：
+
+- 换服务器 / 换 IP / 换域名 / 上 HTTPS —— **都不用重新构建前端**
+- 天然没有 mixed content（页面和接口同源）
+
+> 以前 `build-web.yml` 里写死了 `--dart-define=API_BASE=http://8.148.69.56:8000`，
+> 换个 IP 就得改这行再构建一次，是个很容易忘的坑。现在这行已经删掉了。
+>
+> **APK 不一样**：原生应用没有「页面来源」，必须把绝对地址编进包里，
+> 所以 `build-apk.yml` 里那个 `--dart-define` 是必要的 —— 换服务器时要改。
+
+### 那两个必须人工填的值
+
+| 值 | 怎么来 |
+|---|---|
+| `SECRET_KEY` | `deploy.sh` 会自动换成随机值（默认值能被人伪造管理员登录）|
+| `AI_API_KEY` | **不在仓库里**，必须单独问项目负责人要，填进服务器上的 `back/.env` |
+
+`AI_API_KEY` 不填也能跑，只是首页推荐和 AI 助手会退回确定性算法。
+
+### 本地复刻生产拓扑（改前端时用）
+
+不用装 nginx 也能在本地验证同源这条路：
+
+```bash
+# 终端 1
+cd back && python -m uvicorn app.main:app --port 8000
+# 终端 2
+python deploy/local_preview.py            # 打开 http://127.0.0.1:8080
+```
+
+它做的就是 nginx 那两件事（静态站 + `/api` 反代），行为一致。
 
 ---
 

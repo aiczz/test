@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
 import '../models/content.dart';
+import '../services/api_config.dart';
 import '../services/city.dart';
 import '../services/content_store.dart';
 import '../services/recommender.dart';
 import '../state/app_state.dart';
+import '../state/home_feed.dart';
 import '../theme.dart';
 import '../widgets/city_picker.dart';
+import '../widgets/dish_photo.dart';
 import '../widgets/food_photo.dart';
 import '../widgets/menu_entry_card.dart';
 import 'menu.dart';
@@ -56,15 +59,25 @@ class HomePage extends StatelessWidget {
       body: SafeArea(
         bottom: false,
         // 监听家庭档案：改完约束切回来，这里会自动重算
+        // 同时监听 HomeFeedStore —— 后端「算法 + AI」的结果到了就换上去
         child: ListenableBuilder(
-          listenable: AppState.instance,
+          listenable: Listenable.merge(<Listenable>[
+            AppState.instance,
+            HomeFeedStore.instance,
+          ]),
           builder: (context, _) {
-            final picks = pickForHome(
-              AppState.instance.profile,
-              // 后端在线时用后端数据，否则 ContentStore 里是本地假数据
-              foodPool: ContentStore.instance.foods,
-              recipePool: ContentStore.instance.recipes,
-            );
+            // ★ 有后端推荐就用后端的（算法筛候选 + 每天每地区一次 AI），
+            //   后端离线 / 请求失败时 feed 为 null，自动退回本地规则 ——
+            //   界面上看不出差别，但推荐依据完全不同，所以界面上会如实标注来源。
+            final feed = HomeFeedStore.instance.feed;
+            final picks = feed != null
+                ? HomePicks.fromFeed(feed, AppState.instance.profile)
+                : pickForHome(
+                    AppState.instance.profile,
+                    // 后端在线时用后端数据，否则 ContentStore 里是本地假数据
+                    foodPool: ContentStore.instance.foods,
+                    recipePool: ContentStore.instance.recipes,
+                  );
             return ListView(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 28),
               children: [
@@ -76,7 +89,19 @@ class HomePage extends StatelessWidget {
                   onOpenAi: onOpenAi,
                 ),
                 const SizedBox(height: 18),
-                _ConstraintBar(picks: picks, onOpenProfile: onOpenProfile),
+                _ConstraintBar(
+                  picks: picks,
+                  onOpenProfile: onOpenProfile,
+                  onOpenSource: () => _showSourceSheet(context, picks),
+                ),
+                // ★ 后端没连上时必须说出来。
+                //   以前是「静默降级」——界面照常好看，只是没有 AI、没有天气、
+                //   没有每日轮换。结果就是「我明明更新了代码，怎么看不到 AI 效果」，
+                //   而且完全查不出原因。现在只要不是后端算的，就明确挂一条横幅。
+                if (!picks.fromBackend) ...[
+                  const SizedBox(height: 12),
+                  const _NotConnectedBanner(),
+                ],
                 const SizedBox(height: 24),
                 const _SectionHeader(
                   icon: Icons.eco,
@@ -97,7 +122,11 @@ class HomePage extends StatelessWidget {
                   onOpenRecipes: onOpenRecipes,
                 ),
                 const SizedBox(height: 14),
-                _AiTipBar(onTap: onOpenAi),
+                _AiTipBar(
+                  title: picks.aiTipTitle,
+                  body: picks.aiTipBody,
+                  onTap: onOpenAi,
+                ),
                 const SizedBox(height: 12),
                 MenuEntryCard(onTap: () => _openMenu(context)),
                 const SizedBox(height: 20),
@@ -127,12 +156,26 @@ class HomePage extends StatelessWidget {
 class _ConstraintBar extends StatelessWidget {
   final HomePicks picks;
   final VoidCallback onOpenProfile;
+  final VoidCallback onOpenSource;
 
-  const _ConstraintBar({required this.picks, required this.onOpenProfile});
+  const _ConstraintBar({
+    required this.picks,
+    required this.onOpenProfile,
+    required this.onOpenSource,
+  });
 
   @override
   Widget build(BuildContext context) {
     final p = AppState.instance.profile;
+
+    // 第一行：这份推荐是怎么来的（后端算法 + AI / 本地规则）
+    // 第二行：随家庭约束变化的那句话
+    // 第三行：天气（后端取到时才有）
+    final sourceText = picks.sourceLabel ?? '本地规则（后端未连接）';
+    final constraintText = picks.droppedNames.isEmpty
+        ? '下方推荐已按家庭档案筛选'
+        : '「${picks.droppedNames.first}」等 ${picks.dropped} 道'
+              '超出条件，已从下方推荐排除';
 
     return InkWell(
       borderRadius: BorderRadius.circular(rCard),
@@ -140,53 +183,380 @@ class _ConstraintBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         decoration: cardDeco(),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: orange100,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: const Icon(Icons.tune, size: 18, color: orange700),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${p.people} 人',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                      color: ink,
-                    ),
+            Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: orange100,
+                    borderRadius: BorderRadius.circular(11),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    picks.droppedNames.isEmpty
-                        ? '下方推荐已按家庭档案筛选'
-                        : '「${picks.droppedNames.first}」等 ${picks.dropped} 道'
-                              '超出条件，已从下方推荐排除',
-                    style: const TextStyle(fontSize: 10.5, color: muted),
+                  child: const Icon(Icons.tune, size: 18, color: orange700),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${p.people} 人',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: ink,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        constraintText,
+                        style: const TextStyle(fontSize: 10.5, color: muted),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  '去修改',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: orange700,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 16, color: orange700),
+              ],
+            ),
+            const SizedBox(height: 9),
+            // 「推荐依据」入口：算法怎么筛的、AI 干了什么，点开就能看。
+            // 刻意做成一行而不是一整块 —— 首页布局不动，就不会碰坏既有交互。
+            //
+            // ★ 这一行同时承担「我在看哪个城市的推荐」的职责：
+            //   后端算的是哪个城市，就显示哪个城市；正在重算时显示「正在按 XX 重新计算…」。
+            //   以前这里只写来源、不写城市，切换城市后数据要等几秒才回来，
+            //   中间那几秒看起来就像「切了没反应」。
+            InkWell(
+              onTap: onOpenSource,
+              borderRadius: BorderRadius.circular(9),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                child: ListenableBuilder(
+                  listenable: HomeFeedStore.instance,
+                  builder: (context, _) {
+                    final store = HomeFeedStore.instance;
+                    final text = store.loading
+                        ? '正在按「${store.loadingRegion ?? ''}」重新计算…'
+                        : [
+                            sourceText,
+                            if ((store.region ?? '').isNotEmpty) store.region!,
+                            if (picks.weatherLine != null) picks.weatherLine!,
+                          ].join(' · ');
+
+                    return Row(
+                      children: [
+                        if (store.loading)
+                          const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.6,
+                              color: orange700,
+                            ),
+                          )
+                        else
+                          Icon(
+                            picks.fromBackend
+                                ? Icons.auto_awesome
+                                : Icons.calculate_outlined,
+                            size: 13,
+                            color: picks.fromBackend ? orange700 : muted,
+                          ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            text,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: picks.fromBackend ? orange700 : muted,
+                            ),
+                          ),
+                        ),
+                        const Text(
+                          '推荐依据',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: orange700,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right,
+                          size: 14,
+                          color: orange700,
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            const Text(
-              '去修改',
-              style: TextStyle(
-                fontSize: 11,
-                color: orange700,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const Icon(Icons.chevron_right, size: 16, color: orange700),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// 「推荐依据」弹层 —— 答辩时的加分项
+//
+// 首页不再只是「给你三个菜」，而是能当面说清：
+//   今天什么天气 → 从我们自己的库里按什么权重筛出候选
+//   → AI 在候选里挑了什么 → 最后怎么被你的忌口收口
+// 每一步都是后端真实发生的（meta.steps / trace），不是前端编的。
+// =====================================================================
+
+void _showSourceSheet(BuildContext context, HomePicks picks) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _SourceSheet(picks: picks),
+  );
+}
+
+class _SourceSheet extends StatelessWidget {
+  final HomePicks picks;
+
+  const _SourceSheet({required this.picks});
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewPaddingOf(context).bottom;
+    final reasons = <String, String>{
+      ...picks.foodReasons,
+      ...picks.recipeReasons,
+    };
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
+      padding: EdgeInsets.fromLTRB(18, 12, 18, 18 + bottom),
+      decoration: const BoxDecoration(
+        color: page,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: line,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: orange100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.account_tree_outlined,
+                  size: 19,
+                  color: orange700,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '今天的推荐是怎么算出来的',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        color: ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      picks.sourceLabel ?? '本地规则',
+                      style: const TextStyle(fontSize: 11.5, color: muted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (picks.weather != null) ...[
+            const SizedBox(height: 14),
+            _SourceBlock(
+              title: '今天的天气',
+              lines: [
+                '${picks.weather!.emoji} ${picks.weather!.description}'
+                    '（${picks.weather!.sourceLabel}）',
+                picks.weather!.advice,
+              ],
+            ),
+          ],
+          const SizedBox(height: 14),
+          _SourceBlock(
+            title: '处理链路',
+            lines: picks.steps.isEmpty
+                ? const <String>['后端未连接，本次由本地规则生成']
+                : [
+                    for (final step in picks.steps)
+                      '${step.step}（${step.ms} ms）：${step.detail}',
+                  ],
+          ),
+          if (reasons.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _SourceBlock(
+              title: '每一条的推荐理由',
+              lines: [
+                for (final entry in reasons.entries)
+                  '${entry.key}：${entry.value}',
+              ],
+            ),
+          ],
+          const SizedBox(height: 16),
+          const Text(
+            '说明：推荐先由确定性算法从我们自己的食材库里筛选（时令、天气、营养、'
+            '标签权重），大模型只在候选集内挑选与解释，不会凭空生成菜名。'
+            '同一地区同一天的推荐对所有用户一致，第二天会轮换。',
+            style: TextStyle(fontSize: 11, color: muted, height: 1.6),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SourceBlock extends StatelessWidget {
+  final String title;
+  final List<String> lines;
+
+  const _SourceBlock({required this.title, required this.lines});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: cardDeco(radius: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: orange900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final lineText in lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: Text(
+                lineText,
+                style: const TextStyle(fontSize: 11.5, color: ink, height: 1.55),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// 「后端没连上」横幅
+//
+// 为什么必须有它：这个 App 的后端连不上时会**静默降级**到本地演示数据 ——
+// 界面照常好看、不弹错误。这个设计对演示是优点，但代价是：一旦后端没起来、
+// 或者连到了旧版后端，你看到的就是「界面更新了，但 AI 效果一个都没有」，
+// 而且**没有任何线索**。
+// 所以只要推荐不是后端算的，就在首页正中间挂一条醒目的横幅，把原因说清楚。
+// =====================================================================
+
+class _NotConnectedBanner extends StatelessWidget {
+  const _NotConnectedBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final status = BackendStatus.instance;
+    final detail = status.online
+        // 能连上、但首页没拿到后端结果 —— 说明对面是旧版后端
+        ? '连上了 ${status.apiBase}，但它没有「算法 + AI 推荐」接口（可能是旧版后端）'
+        : '连不上后端（试过：${apiBaseCandidates.join('、')}）'
+              '${status.lastError == null ? '' : '；最后一次错误：${status.lastError}'}';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1E0),
+        border: Border.all(color: orange, width: 1.2),
+        borderRadius: BorderRadius.circular(rCard),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 17, color: orange900),
+              const SizedBox(width: 7),
+              const Expanded(
+                child: Text(
+                  '当前显示的是本地演示数据',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: orange900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'AI 推荐、实时天气、每日轮换都需要后端，现在都不可用。',
+            style: TextStyle(fontSize: 11.5, color: ink, height: 1.5),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            detail,
+            style: const TextStyle(fontSize: 10.5, color: muted, height: 1.5),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '启动后端：cd back && python -m uvicorn app.main:app --port 8000',
+            style: TextStyle(
+              fontSize: 10.5,
+              color: orange900,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+              backgroundColor: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -229,6 +599,23 @@ class _TopBar extends StatelessWidget {
           ],
         ),
         const Spacer(),
+        // 天气 pill —— 后端拿到了实时天气才有，取不到就不显示（不占位、不假装）
+        ListenableBuilder(
+          listenable: HomeFeedStore.instance,
+          builder: (context, _) {
+            final weather = HomeFeedStore.instance.feed?.weather;
+            if (weather == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _Pill(
+                icon: Icons.wb_sunny_outlined,
+                text: weather.temperatureC == null
+                    ? weather.description
+                    : '${weather.temperatureC!.round()}°C',
+              ),
+            );
+          },
+        ),
         // 位置 pill —— 以前是个写死的死标签，现在点了能换城市
         ListenableBuilder(
           listenable: CityStore.instance,
@@ -827,9 +1214,31 @@ class _FoodCard extends StatelessWidget {
 
   const _FoodCard({required this.food, required this.onTap});
 
+  /// 卡片底部那个小标签。
+  ///
+  /// 有功效标签（如「增强人体免疫力」）就用它；没有就退回食材分类
+  /// （蔬菜 / 水果 / 肉蛋 …）。
+  ///
+  /// 为什么必须有兜底：清洗库里 590 个核心食材**只有 124 个（21%）带功效标签**，
+  /// 不做兜底的话 79% 的卡片下面就是一块空白，跟旁边有标签的卡片放在一起很怪。
+  ({String text, Color color}) get _chip {
+    if (food.tags.isNotEmpty) {
+      return (text: food.tags.first, color: orange700);
+    }
+    return (text: food.category, color: muted);
+  }
+
   @override
   Widget build(BuildContext context) {
     // 这张卡片以前点了没反应 —— 现在点开食材详情
+    //
+    // ⚠️ 这里曾经有个 bug：卡片把「名字 + 标签」画了两遍
+    //    （先一个 Expanded 块，下面又一个 Padding 块）。
+    //    卡片高度是固定的，于是两块互相挤压 —— 有标签的卡片被裁得只剩一块，
+    //    看起来"正常"；没标签的卡片（79%）就露出**重复的食材名**。
+    //    现在恢复成原型的设计：图片 → 名字（一次）→ 标签。
+    final chip = _chip;
+
     return _PressCard(
       onTap: onTap,
       borderRadius: BorderRadius.circular(rCard),
@@ -840,52 +1249,6 @@ class _FoodCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AspectRatio(aspectRatio: 1.8, child: FoodPhoto(asset: food.image)),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      food.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: ink,
-                      ),
-                    ),
-                    const Spacer(),
-                    SizedBox(
-                      height: 25,
-                      child: food.tags.isEmpty
-                          ? const SizedBox.shrink()
-                          : Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 4,
-                                ),
-                                decoration: tagDeco(),
-                                child: Text(
-                                  food.tags.first,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: green700,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
@@ -893,14 +1256,16 @@ class _FoodCard extends StatelessWidget {
                 children: [
                   Text(
                     food.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       color: ink,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  if (food.tags.isNotEmpty)
+                  if (chip.text.isNotEmpty) ...[
+                    const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 7,
@@ -908,16 +1273,17 @@ class _FoodCard extends StatelessWidget {
                       ),
                       decoration: tagDeco(),
                       child: Text(
-                        food.tags.first,
+                        chip.text,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
-                          color: orange700,
+                          color: chip.color,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -976,12 +1342,7 @@ class _RecipeCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 1.55,
-              child: Image.asset(
-                recipe.image,
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                filterQuality: FilterQuality.high,
-              ),
+              child: DishPhoto(asset: recipe.image),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
@@ -1041,9 +1402,13 @@ class _RecipeCard extends StatelessWidget {
 // =====================================================================
 
 class _AiTipBar extends StatelessWidget {
+  /// 后端给的标题/正文。为空时退回本地写死的文案 ——
+  /// 保证后端离线时这一块不会变成空白。
+  final String? title;
+  final String? body;
   final VoidCallback onTap;
 
-  const _AiTipBar({required this.onTap});
+  const _AiTipBar({required this.onTap, this.title, this.body});
 
   @override
   Widget build(BuildContext context) {
@@ -1083,7 +1448,7 @@ class _AiTipBar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    mockAiTip.title,
+                    title ?? mockAiTip.title,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
@@ -1092,7 +1457,7 @@ class _AiTipBar extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    mockAiTip.body,
+                    body ?? mockAiTip.body,
                     style: const TextStyle(
                       fontSize: 13,
                       color: muted,
@@ -1321,11 +1686,7 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
                 children: [
                   AspectRatio(
                     aspectRatio: 2.15,
-                    child: Image.asset(
-                      recipe.image,
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                    ),
+                    child: DishPhoto(asset: recipe.image),
                   ),
                   Padding(
                     padding: const EdgeInsets.all(16),

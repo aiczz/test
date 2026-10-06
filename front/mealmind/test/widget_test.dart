@@ -3,10 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mealmind/main.dart';
+import 'package:mealmind/models/content.dart';
 import 'package:mealmind/pages/admin.dart';
+import 'package:mealmind/pages/foods.dart';
 import 'package:mealmind/pages/login.dart';
 import 'package:mealmind/services/api_config.dart';
 import 'package:mealmind/services/auth_store.dart';
+import 'package:mealmind/services/content_store.dart';
 import 'package:mealmind/state/today_menu.dart';
 
 void main() {
@@ -235,10 +238,16 @@ void main() {
       reason: '「加入今日菜单」没有把菜写进 TodayMenuStore',
     );
 
-    // ⚠️ 上面那句 ensureVisible 把列表滚下去过，页头和 tab 已经被 ListView
+    // ⚠️ 上面那句 ensureVisible 把列表滚下去过，页头和 tab 已经被滚动容器
     //    回收掉了，所以先滚回顶部 —— 否则这里失败的原因会是「滚得太靠下」，
     //    而不是「计数没更新」，能白查半天。
-    await tester.drag(find.byType(ListView).first, const Offset(0, 900));
+    //
+    //    这里用 Scrollable（ListView / CustomScrollView 的共同基类）而不是
+    //    写死 ListView：菜谱页为了只建屏幕上看得见的卡片，已经换成了
+    //    CustomScrollView + SliverList.builder（接后端后有 10000 道菜，
+    //    一次性建一万个卡片会卡死浏览器）。写死类型的话，以后每换一次
+    //    滚动组件这个用例就会莫名其妙地红一次。
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 900));
     await tester.pumpAndSettle();
 
     // 详情关掉后回到菜谱页，计数变成 1
@@ -254,6 +263,149 @@ void main() {
     expect(find.textContaining('今日菜单还是空的'), findsOneWidget);
 
     TodayMenuStore.instance.clear();
+  });
+
+  testWidgets('菜谱页分类由后端提供，点分类能真的筛出菜', (tester) async {
+    // 这个用例锁住的问题：菜谱页以前写死一排原型分类
+    // `['全部','快手菜','汤品','低脂','家常','秋季推荐']`，
+    // 而清洗库里的标签是「家常菜」「汤羹」「低脂减重」—— 字符串对不上，
+    // 所以除了「全部」每个分类点进去都是空的。
+    //
+    // 现在分类名 + 分组 + 每个分类的菜品数全部来自后端 /api/recipes/tags。
+    // widget 测试跑在离线环境，所以这里手工喂一份和后端同形状的数据。
+    final store = ContentStore.instance;
+    store.debugSeed(
+      recipes: const <Recipe>[
+        Recipe(
+          id: '1',
+          name: '番茄蛋花汤',
+          image: '',
+          desc: '清爽开胃',
+          time: '10分钟',
+          people: '2人份',
+          tags: <String>['汤羹', '家常菜'],
+        ),
+        Recipe(
+          id: '2',
+          name: '香煎鸡胸肉',
+          image: '',
+          desc: '高蛋白',
+          time: '15分钟',
+          people: '1人份',
+          tags: <String>['快手菜', '鸡肉'],
+        ),
+        Recipe(
+          id: '3',
+          name: '牛肉面',
+          image: '',
+          desc: '一碗顶饱',
+          time: '20分钟',
+          people: '2人份',
+          tags: <String>['面点主食'],
+        ),
+      ],
+      tagGroups: const <RecipeTagGroup>[
+        RecipeTagGroup(
+          group: '家常快手',
+          tags: <RecipeTag>[
+            RecipeTag(name: '家常菜', count: 1),
+            RecipeTag(name: '快手菜', count: 1),
+          ],
+        ),
+        RecipeTagGroup(
+          group: '品类',
+          tags: <RecipeTag>[
+            RecipeTag(name: '汤羹', count: 1),
+            RecipeTag(name: '面点主食', count: 1),
+          ],
+        ),
+      ],
+    );
+    // 单例，跑完必须还原，否则后面的用例会看到这 3 道假菜
+    addTearDown(store.load);
+
+    await tester.pumpWidget(ShishiApp(key: UniqueKey()));
+    await tester.tap(find.text('菜谱'));
+    await tester.pumpAndSettle();
+
+    // 分类用的是后端给的规范名（卡片上也会出现同名标签，所以不限定数量）
+    expect(find.text('汤羹'), findsWidgets);
+    expect(find.text('家常菜'), findsWidgets);
+    expect(find.text('面点主食'), findsWidgets);
+    // 原型里那两个对不上库的旧分类名不该再出现
+    expect(find.text('汤品'), findsNothing);
+    expect(find.text('秋季推荐'), findsNothing);
+
+    // 点「汤羹」只剩汤 —— 这才是「分类点进去有菜」。
+    //
+    // ⚠️ 断言用列表标题上的「N 道」而不是去找卡片：菜谱页现在是
+    //    SliverList.builder，**屏幕外的卡片根本不会被建出来**（这正是换掉
+    //    一次性建 10000 个卡片的原因），所以「找不到香煎鸡胸肉」既可能是被
+    //    筛掉了、也可能只是滚不到，用数量断言才分得清这两件事。
+    await tester.tap(find.text('汤羹').first);
+    await tester.pumpAndSettle();
+    expect(find.text('1 道'), findsOneWidget);
+    expect(find.text('番茄蛋花汤'), findsOneWidget);
+
+    // 再点「全部」三道菜都回来
+    await tester.tap(find.text('全部').first);
+    await tester.pumpAndSettle();
+    expect(find.text('3 道'), findsOneWidget);
+    expect(find.text('番茄蛋花汤'), findsOneWidget);
+  });
+
+  testWidgets('食材详情不编数据：拿不到应季指数和关联菜谱就如实说明', (tester) async {
+    // 这个用例锁住三处「编出来的话」，它们以前都在食材详情弹层里：
+    //   1. 「应季指数 92」是写死的常量 —— 打开哪个食材都是 92；
+    //   2. 「XX 正值当季」对每个食材都说，哪怕是反季的；
+    //   3. 「适合做这些菜」在本地用 recipe.ingredients 反查，而列表接口
+    //      根本不返回 ingredients，于是永远匹配 0 条、静默退化成
+    //      「取前两道菜」—— 点任何食材看到的都是同两道。
+    //
+    // widget 测试跑在离线环境（没有后端），正好是「拿不到真数据」的那条分支：
+    // 这时界面必须**如实说拿不到**，而不是编一个数字、两道菜顶上。
+    await tester.pumpWidget(ShishiApp(key: UniqueKey()));
+
+    await tester.tap(find.text('食材'));
+    await tester.pumpAndSettle();
+
+    // 打开第一个食材的详情。
+    // ⚠️ 必须限定在 FoodsPage 里找 —— 首页也在同一棵树上（IndexedStack），
+    //    不限定的话 find.text('莲藕').first 很可能选中首页那张离屏的卡片，
+    //    点它会「点空」，然后失败在「适合做这些菜」找不到，白查半天。
+    final firstFood = ContentStore.instance.foods.first.name;
+    final foodTile = find.descendant(
+      of: find.byType(FoodsPage),
+      matching: find.text(firstFood),
+    );
+    await tester.ensureVisible(foodTile.first);
+    await tester.pumpAndSettle();
+    await tester.tap(foodTile.first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('适合做这些菜'), findsOneWidget);
+    // 应季指数不显示（本地假数据没有这个分值）
+    expect(find.textContaining('应季指数'), findsNothing);
+
+    // ⚠️ 「适合做这些菜」下面那块在弹层的折叠线以下，**默认的 finder 会跳过
+    //    屏幕外的 widget**（skipOffstage: true）。不先滚下去的话，
+    //    断言会以「找不到」失败，看起来像文案没渲染，其实只是没滚到。
+    final sheetList = find
+        .descendant(
+          of: find.byType(DraggableScrollableSheet),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.drag(sheetList, const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    // 关联菜谱拿不到时给的是说明，不是硬凑的菜；也不能一直转圈
+    expect(find.textContaining('暂时查不到用这个食材做的菜谱'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // 关掉弹层，别影响后面的用例
+    Navigator.of(tester.element(find.text('适合做这些菜'))).pop();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('首页能进本周菜单，也能返回', (tester) async {

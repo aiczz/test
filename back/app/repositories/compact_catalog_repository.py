@@ -1,4 +1,4 @@
-﻿"""对清洗后六张业务表的只读访问。
+"""对清洗后六张业务表的只读访问。
 
 这里只执行 SELECT。用户收藏、菜单等写操作仍落在各自业务表中。
 """
@@ -9,8 +9,9 @@ import json
 import re
 from collections.abc import Mapping
 from typing import Any
+from weakref import WeakKeyDictionary
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlmodel import Session
 
 from app.data.catalog_types import (
@@ -20,6 +21,12 @@ from app.data.catalog_types import (
     RecipeRecord,
     RecipeStepRecord,
 )
+from app.data.dish_tags import (
+    TAG_GROUPS,
+    canonical_dish_tags,
+    canonical_tag,
+)
+from app.data.food_tags import derive_food_tags
 
 
 _CATEGORY_MAP = {
@@ -86,6 +93,57 @@ def _category(value: str | None) -> str:
     return _CATEGORY_MAP.get(value or "", "other")
 
 
+# =====================================================================
+# 食材 SELECT 的列清单（按真实表结构挑）
+#
+# 【为什么要探测列，而不是写死】
+# 标签推导需要维C/钙/钠/纤维/钾/铁/子类这些列。但
+#   · 测试用的是一套「最小六表」（`tests/test_compact_catalog.py`），没有这些列；
+#   · 清洗库的列将来也可能增删。
+# 写死列名的话，最小库上直接 OperationalError。所以按实际存在的列拼 SELECT：
+# 缺哪列就少推一个标签，但接口照常可用。
+#
+# ⚠️ 这个坑真实发生过：`list_seasonal` 原来只查了能量/蛋白/脂肪/碳水，
+#    于是同一个「西兰花」在**首页**只显示「低脂肪/低热量」，
+#    在**食材页**（列更全）却能显示「富含维生素C」—— 同一种食材两个说法。
+# =====================================================================
+
+_BASE_FOOD_COLUMNS = [
+    "id", "name", "category", "is_edible", "reason", "effects_json",
+    "energy_kcal", "protein", "fat", "cho",
+]
+_TAG_FOOD_COLUMNS = [
+    "subcategory", "dietary_fiber", "na", "ca", "vitamin_c", "k", "fe",
+]
+
+_food_select_cache: "WeakKeyDictionary[Any, dict[str, str]]" = WeakKeyDictionary()
+
+
+def _food_select(session: Session, *, prefix: str = "") -> str:
+    """拼出食材 SELECT 的列清单（只包含真实存在的列）。"""
+    bind = session.get_bind()
+    try:
+        per_engine = _food_select_cache.setdefault(bind, {})
+    except TypeError:
+        per_engine = {}
+
+    cached = per_engine.get(prefix)
+    if cached is not None:
+        return cached
+
+    available = {column["name"] for column in inspect(bind).get_columns("ingredients")}
+    columns = [
+        column
+        for column in (_BASE_FOOD_COLUMNS + _TAG_FOOD_COLUMNS)
+        if column in available
+    ]
+    if "id" not in columns:  # 表结构异常时也别拼出非法 SQL
+        columns = _BASE_FOOD_COLUMNS
+    selected = ", ".join(f"{prefix}{column}" for column in columns)
+    per_engine[prefix] = selected
+    return selected
+
+
 def _food_image(name: str, category: str) -> str | None:
     for keywords, asset in _IMAGE_RULES:
         if any(keyword in name for keyword in keywords):
@@ -119,7 +177,12 @@ def _food(row: Mapping[str, Any]) -> FoodRecord:
         image_url=_food_image(name, category),
         description=row.get("reason"),
         nutrition_summary="、".join(nutrition) or None,
-        tags=_json_list(row.get("effects_json")),
+        # ★ 标签走推导：effects_json 只覆盖 124/590（21%）的核心食材，
+        #   直接取它的话 79% 的食材卡片下面会空一块。
+        #   derive_food_tags 会在没有功效标签时，用**真实营养数值**推出
+        #   「富含维生素C」「低热量」这类可核对的标签，最后还有分类兜底 ——
+        #   保证每个食材至少一个标签。
+        tags=derive_food_tags(row),
         is_active=bool(row.get("is_edible", 1)),
     )
 
@@ -163,8 +226,7 @@ def list_foods(
     ).scalar_one()
     rows = session.execute(
         text(
-            "SELECT id, name, category, is_edible, reason, effects_json, "
-            "energy_kcal, protein, fat, cho FROM ingredients "
+            f"SELECT {_food_select(session)} FROM ingredients "
             f"WHERE {where} ORDER BY id LIMIT :limit OFFSET :offset"
         ),
         params,
@@ -175,8 +237,7 @@ def list_foods(
 def get_food(session: Session, food_id: int) -> FoodRecord | None:
     row = session.execute(
         text(
-            "SELECT id, name, category, is_edible, reason, effects_json, "
-            "energy_kcal, protein, fat, cho FROM ingredients "
+            f"SELECT {_food_select(session)} FROM ingredients "
             "WHERE id = :id AND is_core_raw = 1"
         ),
         {"id": food_id},
@@ -229,8 +290,8 @@ def list_seasonal(
     season_name = "春" if 3 <= month <= 5 else "夏" if 6 <= month <= 8 else "秋" if 9 <= month <= 11 else "冬"
     rows = session.execute(
         text(
-            "SELECT i.id, i.name, i.category, i.is_edible, i.reason, i.effects_json, "
-            "i.energy_kcal, i.protein, i.fat, i.cho, sf.ingredient_id, sf.level, "
+            f"SELECT {_food_select(session, prefix='i.')}, "
+            "sf.ingredient_id, sf.level, "
             "sf.time_name, sf.season, sf.note, sf.recommendation_reason "
             "FROM seasonal_food sf "
             "JOIN ingredients i ON i.id = sf.ingredient_id "
@@ -263,15 +324,156 @@ def list_all_foods(session: Session) -> list[FoodRecord]:
 
 
 def _recipe(row: Mapping[str, Any]) -> RecipeRecord:
+    name = str(row["dish_name"])
     return RecipeRecord(
         id=int(row["id"]),
-        name=str(row["dish_name"]),
+        name=name,
         description=row.get("description"),
         category=row.get("cuisine"),
         season_recommendation=row.get("season_recommendation"),
-        tags=_json_list(row.get("tags_json")),
+        # ★ 标签在这里就归一化，而不是留给前端 —— 全站（列表/详情/推荐/搜索）
+        #   都从这一条路出去，所以「汤」「汤羹」「老火汤」到哪儿都是「汤羹」。
+        #   name 是兜底：43 道 tags_json 为空的菜靠菜名也能拿到一个分类。
+        tags=canonical_dish_tags(_json_list(row.get("tags_json")), name),
         instruction_text=row.get("instruction_text"),
     )
+
+
+# =====================================================================
+# 分类筛选索引：规范标签 → 库里真实出现的原始标签
+#
+# 【为什么要有这张表】
+# 库里 985 个原始标签（「汤」「汤羹」「老火汤」…），归一后是 46 个规范标签。
+# 用户点「汤羹」时要能筛出全部 1150 道，但 SQL 没法跑 Python 规则。
+#
+# 【为什么记的是"原始标签"而不是规则关键词】
+# 想省事可以直接把规则关键词拼成 LIKE '%鸡%'，但那样会**多筛**：
+# 规范标签「鸡肉」的规则关键词含「鸡」，而 `"%鸡%"` 也会命中原始标签「鸡蛋」
+# （它其实归到「鸡蛋」）。所以这里先扫一遍库，把每个**真实出现过**的原始标签
+# 归一次类，只 LIKE 这些完整标签。
+#
+# 又因为 tags_json 是 JSON 数组，用 `"家常"`（带引号）做 LIKE 就是**精确元素
+# 匹配**：`"鸡"` 不会命中 `"鸡翅"`，不会出现前缀误伤。
+#
+# 还有 43 道菜 tags_json 是空的，靠菜名兜底拿到分类。这些菜 id 也一并记下来，
+# 拼成 `d.id IN (...)`，否则它们在分类页里一道都点不到。
+#
+# 成本：全表 10000 行扫一次约几十毫秒，按 engine 缓存，进程内只算一次。
+# =====================================================================
+
+
+class _TagIndex:
+    """规范标签 → (原始标签列表, 靠菜名兜底的菜品 id 列表)。"""
+
+    __slots__ = ("raw_tags", "fallback_ids")
+
+    def __init__(self) -> None:
+        self.raw_tags: dict[str, list[str]] = {}
+        self.fallback_ids: dict[str, list[int]] = {}
+
+
+_tag_index_cache: "WeakKeyDictionary[Any, _TagIndex]" = WeakKeyDictionary()
+
+
+def _build_tag_index(session: Session) -> _TagIndex:
+    index = _TagIndex()
+    rows = session.execute(
+        text("SELECT id, dish_name, tags_json FROM dishes")
+    ).mappings()
+    for row in rows:
+        raw_tags = _json_list(row.get("tags_json"))
+        seen: set[str] = set()
+        for raw in raw_tags:
+            canonical = canonical_tag(raw)
+            if canonical is None:
+                continue
+            index.raw_tags.setdefault(canonical, []).append(raw)
+            seen.add(canonical)
+        if not seen:
+            # 兜底：和 canonical_dish_tags 用同一套规则扫菜名
+            fallback = canonical_tag(str(row.get("dish_name") or ""))
+            if fallback is not None:
+                index.fallback_ids.setdefault(fallback, []).append(int(row["id"]))
+    # 原始标签去重（同一规范标签下可能收录几百次同一个原始标签）
+    for canonical, values in index.raw_tags.items():
+        index.raw_tags[canonical] = sorted(set(values))
+    return index
+
+
+def _tag_index(session: Session) -> _TagIndex:
+    bind = session.get_bind()
+    try:
+        cached = _tag_index_cache.get(bind)
+    except TypeError:
+        cached = None
+    if cached is None:
+        cached = _build_tag_index(session)
+        try:
+            _tag_index_cache[bind] = cached
+        except TypeError:
+            pass
+    return cached
+
+
+def _tag_clause(
+    session: Session, tag: str | None
+) -> tuple[str | None, dict[str, Any]]:
+    """把规范标签翻译成一段可执行的 SQL 条件。"""
+    if not tag:
+        return None, {}
+    index = _tag_index(session)
+    raw_tags = index.raw_tags.get(tag)
+    if not raw_tags and tag not in index.fallback_ids:
+        # 库里没有任何菜属于这个标签 —— 返回恒假，而不是悄悄忽略筛选条件
+        return "1 = 0", {}
+
+    params: dict[str, Any] = {}
+    parts: list[str] = []
+    for position, raw in enumerate(raw_tags or ()):
+        key = f"tag_{position}"
+        params[key] = f'%"{raw}"%'
+        parts.append(f"d.tags_json LIKE :{key}")
+    fallback_ids = index.fallback_ids.get(tag)
+    if fallback_ids:
+        parts.append(f"d.id IN ({', '.join(str(int(i)) for i in fallback_ids)})")
+    return "(" + " OR ".join(parts) + ")", params
+
+
+def tag_groups_with_counts(session: Session) -> list[tuple[str, list[tuple[str, int]]]]:
+    """分类筛选区要显示的东西：分组 + 每个规范标签的菜品数。
+
+    只返回**有菜**的标签 —— 点进去是空的分类不该出现在界面上。
+    分组和顺序来自 `dish_tags.TAG_GROUPS`，前后端看到的分类完全一致。
+    """
+    index = _tag_index(session)
+    counts: dict[str, int] = {}
+    for canonical, raw_tags in index.raw_tags.items():
+        if not raw_tags:
+            continue
+        params: dict[str, Any] = {}
+        parts: list[str] = []
+        for position, raw in enumerate(raw_tags):
+            key = f"tag_{position}"
+            params[key] = f'%"{raw}"%'
+            parts.append(f"tags_json LIKE :{key}")
+        total = session.execute(
+            text(
+                "SELECT COUNT(*) FROM dishes d WHERE ("
+                + " OR ".join(parts)
+                + ")"
+            ),
+            params,
+        ).scalar_one()
+        counts[canonical] = int(total)
+    for canonical, ids in index.fallback_ids.items():
+        counts[canonical] = counts.get(canonical, 0) + len(ids)
+
+    result: list[tuple[str, list[tuple[str, int]]]] = []
+    for group, tags in TAG_GROUPS:
+        entries = [(tag, counts.get(tag, 0)) for tag in tags if counts.get(tag, 0) > 0]
+        if entries:
+            result.append((group, entries))
+    return result
 
 
 def _recipe_where(
@@ -312,6 +514,7 @@ def list_recipes(
     difficulty: str | None,
     max_duration: int | None,
     keyword: str | None,
+    tag: str | None = None,
     offset: int,
     limit: int,
 ) -> tuple[list[RecipeRecord], int]:
@@ -322,6 +525,12 @@ def list_recipes(
         max_duration=max_duration,
         keyword=keyword,
     )
+    # 分类筛选走规范化标签（见上面对 _TagIndex 的说明），
+    # 与 category(keyword) 这类旧参数并列生效。
+    tag_where, tag_params = _tag_clause(session, tag)
+    if tag_where:
+        where = f"{where} AND {tag_where}"
+        params.update(tag_params)
     total = session.execute(
         text(f"SELECT COUNT(*) FROM dishes d WHERE {where}"), params
     ).scalar_one()

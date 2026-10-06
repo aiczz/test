@@ -45,6 +45,12 @@ class RecipeRecord:
     tips: str | None = None
     tags: list[str] = field(default_factory=list)
     instruction_text: str | None = None
+    # 这个时长是「估算」还是「有依据」？
+    #
+    # 清洗库的 dishes 表**没有**烹饪时长列，所以时长只能从做法文本里抽
+    # （「小火炖 30 分钟」→ 30）。抽不到就只能按标签数估。
+    # 界面据此显示「约 30 分钟」，不把一个估出来的数字说得像真的。
+    duration_estimated: bool = True
 
 
 @dataclass(slots=True)

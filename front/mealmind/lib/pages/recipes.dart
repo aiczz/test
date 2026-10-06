@@ -9,14 +9,22 @@ import '../services/backend_api.dart';
 import '../services/content_store.dart';
 import '../state/today_menu.dart';
 import '../theme.dart';
+import '../widgets/dish_photo.dart';
 
 /// =====================================================================
 /// 菜谱页 —— 对应队友原型 `recipesPage()`
 ///
 /// 搜索 + 分类筛选 + 收藏 + 菜谱详情弹层
+///
+/// ⚠️ 这里以前有一行 `const _categories = ['全部','快手菜','汤品','低脂','家常','秋季推荐']`。
+///    那是原型手写的分类，和清洗库里的标签**对不上** —— 库里叫「家常菜」「汤羹」
+///    「低脂减重」，所以除了「全部」每个分类点进去都是空的。
+///    现在分类数组由后端 `/api/recipes/tags` 提供（见 `_CategoryIndex`），
+///    前端一个分类名都不写死。
 /// =====================================================================
 
-const _categories = <String>['全部', '快手菜', '汤品', '低脂', '家常', '秋季推荐'];
+/// 收起状态显示几个分类。45 个分类全摊开会把菜谱列表挤到屏幕外。
+const _collapsedCategoryCount = 8;
 
 class RecipesPage extends StatefulWidget {
   const RecipesPage({super.key});
@@ -51,6 +59,10 @@ class _RecipesPageState extends State<RecipesPage> {
     // 详情弹层和 AI 助手都可能往今日菜单里加菜，
     // 加完切回这一页要立刻看到，所以直接监听。
     TodayMenuStore.instance.addListener(_onTodayMenuChanged);
+    // 菜谱和分类是异步从后端拉的（10000 道菜 + 45 个分类）。
+    // 如果用户在加载完成前就切到了这一页，不监听的话分类区会一直停在
+    // 「只有全部」的状态 —— 看起来就像分类又坏了。
+    ContentStore.instance.addListener(_onTodayMenuChanged);
   }
 
   void _onTodayMenuChanged() {
@@ -76,6 +88,7 @@ class _RecipesPageState extends State<RecipesPage> {
   @override
   void dispose() {
     TodayMenuStore.instance.removeListener(_onTodayMenuChanged);
+    ContentStore.instance.removeListener(_onTodayMenuChanged);
     _search.dispose();
     super.dispose();
   }
@@ -84,11 +97,9 @@ class _RecipesPageState extends State<RecipesPage> {
     Iterable<Recipe> list = ContentStore.instance.recipes;
 
     if (_category != '全部') {
-      // 「汤品」不是标签，用 id 兜一下（与原型逻辑一致）
-      list = list.where(
-        (r) =>
-            r.tags.contains(_category) || (_category == '汤品' && r.id == 'soup'),
-      );
+      // 分类名和后端返回的规范标签是同一个字符串（后端已经把「家常」「家常菜」
+      // 归一成「家常菜」了），所以这里是干净的等值匹配。
+      list = list.where((r) => r.tags.contains(_category));
     }
 
     if (_query.isNotEmpty) {
@@ -136,156 +147,191 @@ class _RecipesPageState extends State<RecipesPage> {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-          children: [
-            // ---- 标题区 ----
-            Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [orange50, Color(0xFFFFF3DF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(rBlock),
-                boxShadow: cardShadow,
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: -35,
-                    bottom: -55,
-                    child: Container(
-                      width: 130,
-                      height: 130,
-                      decoration: const BoxDecoration(
-                        color: Color(0x26FFFFFF),
-                        shape: BoxShape.circle,
+        // ⚠️ 这里必须是 CustomScrollView + SliverList.builder，不能是
+        //    `ListView(children: [... for (final r in list) card])`。
+        //    后者会把**每一道菜都建一遍 widget**：接后端后有 10000 道菜，
+        //    一次性建一万个卡片会让浏览器直接卡死（以前只留 481 道有图的，
+        //    问题被掩盖了）。builder 只建屏幕上看得见的那几个。
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              sliver: SliverList.list(children: _headerSlivers(today, list)),
+            ),
+            if (list.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                sliver: SliverToBoxAdapter(child: _emptyState()),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                sliver: SliverList.builder(
+                  itemCount: list.length,
+                  itemBuilder: (context, index) {
+                    final r = list[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _RecipeListCard(
+                        recipe: r,
+                        favorite: _favorites.contains(r.id),
+                        onFavorite: () => unawaited(_toggleFavorite(r.id)),
+                        onOpen: () => openRecipeDetail(context, r),
                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 18),
-                    child: Row(
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 列表标题以上的所有固定内容（标题卡 / tab / 搜索 / 分类 / 列表头）。
+  List<Widget> _headerSlivers(List<Recipe> today, List<Recipe> list) {
+    return [
+      // ---- 标题区 ----
+      Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [orange50, Color(0xFFFFF3DF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(rBlock),
+          boxShadow: cardShadow,
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              left: -35,
+              bottom: -55,
+              child: Container(
+                width: 130,
+                height: 130,
+                decoration: const BoxDecoration(
+                  color: Color(0x26FFFFFF),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 18),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.local_dining_rounded,
-                                    size: 15,
-                                    color: orange700,
-                                  ),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    '时令菜谱',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: orange700,
-                                      letterSpacing: .4,
-                                    ),
-                                  ),
-                                ],
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.local_dining_rounded,
+                              size: 15,
+                              color: orange700,
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              '时令菜谱',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: orange700,
+                                letterSpacing: .4,
                               ),
-                              SizedBox(height: 9),
-                              Text(
-                                '家常菜谱',
-                                style: TextStyle(
-                                  fontSize: 29,
-                                  fontWeight: FontWeight.w900,
-                                  color: orange900,
-                                  height: 1.05,
-                                  letterSpacing: -1,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                '应季食材，简单好做\n把每一餐吃得温暖。',
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: muted,
-                                  height: 1.55,
-                                ),
-                              ),
-                              SizedBox(height: 12),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: [
-                                  _RecipeHeaderTag(
-                                    icon: Icons.eco_outlined,
-                                    text: '当季',
-                                  ),
-                                  _RecipeHeaderTag(
-                                    icon: Icons.schedule_outlined,
-                                    text: '好做',
-                                  ),
-                                ],
-                              ),
-                            ],
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 9),
+                        Text(
+                          '家常菜谱',
+                          style: TextStyle(
+                            fontSize: 29,
+                            fontWeight: FontWeight.w900,
+                            color: orange900,
+                            height: 1.05,
+                            letterSpacing: -1,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Container(
-                          width: 126,
-                          height: 150,
-                          clipBehavior: Clip.antiAlias,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: .9),
-                              width: 3,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x2A6A5A36),
-                                blurRadius: 16,
-                                offset: Offset(0, 7),
-                              ),
-                            ],
+                        SizedBox(height: 8),
+                        Text(
+                          '应季食材，简单好做\n把每一餐吃得温暖。',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: muted,
+                            height: 1.55,
                           ),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Image.asset(
-                                'assets/images/tomato-egg.jpg',
-                                fit: BoxFit.cover,
-                                filterQuality: FilterQuality.high,
-                              ),
-                              const DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.transparent,
-                                      Color(0xB8122F20),
-                                    ],
-                                    stops: [.5, 1],
-                                  ),
-                                ),
-                              ),
-                              const Positioned(
-                                left: 10,
-                                right: 10,
-                                bottom: 10,
-                                child: Text(
-                                  '今天也要\n好好吃饭',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12.5,
-                                    height: 1.25,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ),
-                            ],
+                        ),
+                        SizedBox(height: 12),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _RecipeHeaderTag(
+                              icon: Icons.eco_outlined,
+                              text: '当季',
+                            ),
+                            _RecipeHeaderTag(
+                              icon: Icons.schedule_outlined,
+                              text: '好做',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    width: 126,
+                    height: 150,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: .9),
+                        width: 3,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x2A6A5A36),
+                          blurRadius: 16,
+                          offset: Offset(0, 7),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.asset(
+                          'assets/images/tomato-egg.jpg',
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.high,
+                        ),
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Color(0xB8122F20)],
+                              stops: [.5, 1],
+                            ),
+                          ),
+                        ),
+                        const Positioned(
+                          left: 10,
+                          right: 10,
+                          bottom: 10,
+                          child: Text(
+                            '今天也要\n好好吃饭',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.5,
+                              height: 1.25,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
                       ],
@@ -294,202 +340,178 @@ class _RecipesPageState extends State<RecipesPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-
-            // ---- 两个 tab：全部菜谱 / 今日菜单 ----
-            _RecipeTabBar(
-              showTodayMenu: _showTodayMenu,
-              todayCount: today.length,
-              onChanged: (value) => setState(() => _showTodayMenu = value),
-            ),
-            const SizedBox(height: 16),
-
-            // ---- 搜索框 + 分类：只在「全部菜谱」里有 ----
-            // 今日菜单是自己一道道挑出来的，数量有限，
-            // 再加一层分类索引只会挡路，所以那一侧不显示这两样。
-            if (!_showTodayMenu) ...[
-              TextField(
-                controller: _search,
-                onChanged: (v) => setState(() => _query = v.trim()),
-                decoration: InputDecoration(
-                  hintText: '搜索菜名或食材',
-                  hintStyle: const TextStyle(fontSize: 14, color: muted),
-                  prefixIcon: const Icon(Icons.search, size: 20, color: muted),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: line),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: line),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: orange700, width: 1.5),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // ---- 分类 chips ----
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final c in _categories) ...[
-                      _CategoryChip(
-                        label: c,
-                        active: _category == c,
-                        onTap: () => setState(() => _category = c),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-
-            // ---- 列表标题 ----
-            Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: orange100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    _showTodayMenu
-                        ? Icons.playlist_add_check_rounded
-                        : Icons.eco,
-                    size: 18,
-                    color: orange700,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _showTodayMenu
-                          ? '今日菜单'
-                          : (_category == '全部' ? '全部菜谱' : _category),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _showTodayMenu ? '你挑的菜 · 想好了就去做' : '时令鲜味 · 家常好做',
-                      style: const TextStyle(fontSize: 12, color: muted),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                if (_showTodayMenu && list.isNotEmpty)
-                  TextButton(
-                    onPressed: () => TodayMenuStore.instance.clear(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: muted,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    child: const Text('清空'),
-                  ),
-                Text(
-                  '${list.length} 道',
-                  style: const TextStyle(fontSize: 12, color: muted),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // ---- 菜谱列表 ----
-            if (list.isEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 38),
-                alignment: Alignment.center,
-                child: Column(
-                  children: [
-                    Icon(
-                      _showTodayMenu ? Icons.playlist_add : Icons.search_off,
-                      size: 36,
-                      color: muted,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _showTodayMenu
-                          ? '今日菜单还是空的\n去「全部菜谱」点开一道菜，选「加入今日菜单」'
-                          : (_query.isEmpty
-                                ? '「$_category」下面还没有菜谱'
-                                : '没有找到和「$_query」匹配的菜谱'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: muted,
-                        height: 1.7,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    // 有筛选条件时给一个「一键回到全部」——
-                    // 比以前只说一句「没有找到」强，用户不用自己猜怎么退出去
-                    if (_showTodayMenu)
-                      TextButton.icon(
-                        onPressed: () => setState(() => _showTodayMenu = false),
-                        icon: const Icon(Icons.menu_book_rounded, size: 16),
-                        label: const Text('去全部菜谱挑几道'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: orange700,
-                          textStyle: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      )
-                    else
-                      TextButton.icon(
-                        onPressed: () => setState(() {
-                          _category = '全部';
-                          _query = '';
-                          _search.clear();
-                        }),
-                        icon: const Icon(Icons.refresh, size: 16),
-                        label: const Text('清空筛选，看全部菜谱'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: orange700,
-                          textStyle: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              )
-            else
-              for (final r in list) ...[
-                _RecipeListCard(
-                  recipe: r,
-                  favorite: _favorites.contains(r.id),
-                  onFavorite: () => unawaited(_toggleFavorite(r.id)),
-                  onOpen: () => openRecipeDetail(context, r),
-                ),
-                const SizedBox(height: 12),
-              ],
           ],
         ),
+      ),
+      const SizedBox(height: 16),
+
+      // ---- 两个 tab：全部菜谱 / 今日菜单 ----
+      _RecipeTabBar(
+        showTodayMenu: _showTodayMenu,
+        todayCount: today.length,
+        onChanged: (value) => setState(() => _showTodayMenu = value),
+      ),
+      const SizedBox(height: 16),
+
+      // ---- 搜索框 + 分类：只在「全部菜谱」里有 ----
+      // 今日菜单是自己一道道挑出来的，数量有限，
+      // 再加一层分类索引只会挡路，所以那一侧不显示这两样。
+      if (!_showTodayMenu) ...[
+        TextField(
+          controller: _search,
+          onChanged: (v) => setState(() => _query = v.trim()),
+          decoration: InputDecoration(
+            hintText: '搜索菜名或食材',
+            hintStyle: const TextStyle(fontSize: 14, color: muted),
+            prefixIcon: const Icon(Icons.search, size: 20, color: muted),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: line),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: line),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: orange700, width: 1.5),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // ---- 分类索引 ----
+        _CategoryIndex(
+          groups: ContentStore.instance.recipeTagGroups,
+          selected: _category,
+          total: ContentStore.instance.recipes.length,
+          onSelect: (value) => setState(() => _category = value),
+        ),
+        const SizedBox(height: 20),
+      ],
+
+      // ---- 列表标题 ----
+      Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: orange100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              _showTodayMenu ? Icons.playlist_add_check_rounded : Icons.eco,
+              size: 18,
+              color: orange700,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _showTodayMenu
+                    ? '今日菜单'
+                    : (_category == '全部' ? '全部菜谱' : _category),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: ink,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _showTodayMenu ? '你挑的菜 · 想好了就去做' : '时令鲜味 · 家常好做',
+                style: const TextStyle(fontSize: 12, color: muted),
+              ),
+            ],
+          ),
+          const Spacer(),
+          if (_showTodayMenu && list.isNotEmpty)
+            TextButton(
+              onPressed: () => TodayMenuStore.instance.clear(),
+              style: TextButton.styleFrom(
+                foregroundColor: muted,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              child: const Text('清空'),
+            ),
+          Text(
+            '${list.length} 道',
+            style: const TextStyle(fontSize: 12, color: muted),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+    ];
+  }
+
+  /// 列表为空时的提示块（搬出 build 是为了让 build 只剩下滚动结构）。
+  Widget _emptyState() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 38),
+      alignment: Alignment.center,
+      child: Column(
+        children: [
+          Icon(
+            _showTodayMenu ? Icons.playlist_add : Icons.search_off,
+            size: 36,
+            color: muted,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _showTodayMenu
+                ? '今日菜单还是空的\n去「全部菜谱」点开一道菜，选「加入今日菜单」'
+                : (_query.isEmpty
+                      ? '「$_category」下面还没有菜谱'
+                      : '没有找到和「$_query」匹配的菜谱'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: muted, height: 1.7),
+          ),
+          const SizedBox(height: 10),
+          // 有筛选条件时给一个「一键回到全部」——
+          // 比以前只说一句「没有找到」强，用户不用自己猜怎么退出去
+          if (_showTodayMenu)
+            TextButton.icon(
+              onPressed: () => setState(() => _showTodayMenu = false),
+              icon: const Icon(Icons.menu_book_rounded, size: 16),
+              label: const Text('去全部菜谱挑几道'),
+              style: TextButton.styleFrom(
+                foregroundColor: orange700,
+                textStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            )
+          else
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _category = '全部';
+                _query = '';
+                _search.clear();
+              }),
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('清空筛选，看全部菜谱'),
+              style: TextButton.styleFrom(
+                foregroundColor: orange700,
+                textStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -637,15 +659,160 @@ class _RecipeTab extends StatelessWidget {
 // 分类 chip
 // =====================================================================
 
+/// 菜谱分类索引。
+///
+/// 分类**全部来自后端**（`/api/recipes/tags`）：后端把清洗库里 985 个零散写法
+/// （「汤」「汤羹」「老火汤」…）归一成 45 个规范分类，并且只返回有菜的分类。
+/// 所以这里每个 chip 点进去都真的有菜 —— 不会再出现「点分类是空的」。
+///
+/// 分组（家常快手 / 品类 / 做法 / 主要食材 / 口味 / 人群·目标 / 菜系）和顺序
+/// 也由后端定，前端不自己编 —— 前端一旦自己编分类，就又会和库里的标签对不上。
+///
+/// 默认只显示前 8 个最常用的，其余收在「展开全部分类」里：
+/// 45 个 chip 全摊开会把下面的菜谱列表挤到屏幕外面去。
+class _CategoryIndex extends StatefulWidget {
+  final List<RecipeTagGroup> groups;
+  final String selected;
+  final int total;
+  final ValueChanged<String> onSelect;
+
+  const _CategoryIndex({
+    required this.groups,
+    required this.selected,
+    required this.total,
+    required this.onSelect,
+  });
+
+  @override
+  State<_CategoryIndex> createState() => _CategoryIndexState();
+}
+
+class _CategoryIndexState extends State<_CategoryIndex> {
+  bool _expanded = false;
+
+  /// 所有分类按后端给的顺序摊平 —— 顺序本身就是「哪个更常用」。
+  List<RecipeTag> get _flat => [
+    for (final group in widget.groups) ...group.tags,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = widget.groups;
+    // 拿不到分类（离线 / 老后端）时只留「全部」，界面照常能用。
+    if (groups.isEmpty) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _CategoryChip(
+            label: '全部',
+            count: widget.total,
+            active: true,
+            onTap: () {},
+          ),
+        ],
+      );
+    }
+
+    final flat = _flat;
+    final visible = _expanded
+        ? flat
+        : flat.take(_collapsedCategoryCount).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _CategoryChip(
+              label: '全部',
+              count: widget.total,
+              active: widget.selected == '全部',
+              onTap: () => widget.onSelect('全部'),
+            ),
+            for (final tag in visible)
+              _CategoryChip(
+                label: tag.name,
+                count: tag.count,
+                active: widget.selected == tag.name,
+                onTap: () => widget.onSelect(tag.name),
+              ),
+          ],
+        ),
+
+        // 展开后按后端给的分组补上分组标题，让 45 个分类读起来像个目录
+        if (_expanded) ...[
+          const SizedBox(height: 12),
+          for (final group in groups) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 6),
+              child: Text(
+                group.group,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: muted,
+                  letterSpacing: .4,
+                ),
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final tag in group.tags)
+                  _CategoryChip(
+                    label: tag.name,
+                    count: tag.count,
+                    active: widget.selected == tag.name,
+                    onTap: () => widget.onSelect(tag.name),
+                  ),
+              ],
+            ),
+          ],
+        ],
+
+        if (flat.length > _collapsedCategoryCount)
+          TextButton.icon(
+            onPressed: () => setState(() => _expanded = !_expanded),
+            icon: Icon(
+              _expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 18,
+            ),
+            label: Text(_expanded ? '收起分类' : '展开全部分类（共 ${flat.length} 个）'),
+            style: TextButton.styleFrom(
+              foregroundColor: orange700,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              textStyle: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _CategoryChip extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
 
+  /// 这个分类下的菜品数，来自后端。显示出来用户点之前就知道有没有菜。
+  final int? count;
+
   const _CategoryChip({
     required this.label,
     required this.active,
     required this.onTap,
+    this.count,
   });
 
   @override
@@ -659,13 +826,29 @@ class _CategoryChip extends StatelessWidget {
           border: Border.all(color: active ? orange700 : line),
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            color: active ? Colors.white : ink,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                color: active ? Colors.white : ink,
+              ),
+            ),
+            if (count != null) ...[
+              const SizedBox(width: 5),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white.withValues(alpha: .75) : muted,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -707,11 +890,7 @@ class _RecipeListCard extends StatelessWidget {
               // ⚠️ tag 必须和 _RecipeDetailSheet 那边完全一致，否则不会有动画。
               child: Hero(
                 tag: 'recipe-image-${recipe.id}',
-                child: Image.asset(
-                  recipe.image,
-                  fit: BoxFit.cover,
-                  filterQuality: FilterQuality.high,
-                ),
+                child: DishPhoto(asset: recipe.image),
               ),
             ),
             Expanded(
@@ -942,11 +1121,7 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                   child: Hero(
                     // 和列表卡片那张缩略图配对（tag 必须一模一样）
                     tag: 'recipe-image-${recipe.id}',
-                    child: Image.asset(
-                      recipe.image,
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                    ),
+                    child: DishPhoto(asset: recipe.image),
                   ),
                 ),
                 Positioned(

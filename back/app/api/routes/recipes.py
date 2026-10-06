@@ -1,6 +1,7 @@
 """菜谱接口（说明书 §11）。
 
 GET /api/recipes
+GET /api/recipes/tags
 GET /api/recipes/search?q=莲藕
 GET /api/recipes/{recipe_id}
 """
@@ -16,7 +17,12 @@ from app.schemas.my_food import (
     RecommendByFoodsRequest,
     RecommendByFoodsResponse,
 )
-from app.schemas.recipe import RecipeBrief, RecipeDetail
+from app.schemas.recipe import (
+    RecipeBrief,
+    RecipeDetail,
+    RecipeTag,
+    RecipeTagGroup,
+)
 from app.services import my_food_service, recipe_service
 
 router = APIRouter(prefix="/recipes", tags=["菜谱"])
@@ -25,6 +31,10 @@ router = APIRouter(prefix="/recipes", tags=["菜谱"])
 @router.get("", response_model=Page[RecipeBrief], summary="菜谱列表")
 def list_recipes(
     category: str | None = Query(default=None),
+    tag: str | None = Query(
+        default=None,
+        description="归一化后的分类标签（见 /api/recipes/tags），如 快手菜 / 汤羹",
+    ),
     season: str | None = Query(default=None, description="如 秋季"),
     difficulty: str | None = Query(default=None, description="简单 / 中等"),
     max_duration: int | None = Query(
@@ -43,6 +53,7 @@ def list_recipes(
     items, total = recipe_service.list_recipes(
         session,
         category=category,
+        tag=tag,
         season=season,
         difficulty=difficulty,
         max_duration=max_duration,
@@ -53,6 +64,25 @@ def list_recipes(
     return Page[RecipeBrief](
         items=items, total=total, page=page, page_size=page_size
     )
+
+
+# ⚠️ /tags 也必须在 /{recipe_id} 之前注册，否则会被当成 recipe_id 解析
+@router.get("/tags", response_model=list[RecipeTagGroup], summary="菜谱分类")
+def list_recipe_tags(
+    session: Session = Depends(get_session),
+) -> list[RecipeTagGroup]:
+    """分类筛选区的数据源。
+
+    分类来自清洗库标签的归一化结果（985 个零散写法 → 46 个规范分类），
+    并且只返回**有菜**的分类 —— 界面上点进去是空的分类不会出现。
+    """
+    return [
+        RecipeTagGroup(
+            group=group,
+            tags=[RecipeTag(name=name, count=count) for name, count in tags],
+        )
+        for group, tags in recipe_service.tag_groups(session)
+    ]
 
 
 # ⚠️ /search 必须声明在 /{recipe_id} 之前

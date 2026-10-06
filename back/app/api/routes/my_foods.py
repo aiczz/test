@@ -8,7 +8,7 @@ DELETE /api/my-foods/{item_id}
 ★ 这一组【全部需要登录】—— 说明书 §12 把「现有食材」列在需要登录的接口里。
 """
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Response
 from sqlmodel import Session
 
 from app.core.database import get_session

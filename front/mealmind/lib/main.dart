@@ -10,6 +10,7 @@ import 'pages/recipes.dart';
 import 'services/api_config.dart';
 import 'services/auth_store.dart';
 import 'services/content_store.dart';
+import 'state/home_feed.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -49,6 +50,14 @@ class _BootstrapState extends State<_Bootstrap> {
     }
 
     await ContentStore.instance.load();
+
+    // ★ 首页推荐流：后端按「时令 + 天气 + 营养」打分筛候选，
+    //   再每天每地区问一次大模型。拿到就用，拿不到首页自动退回本地规则。
+    //
+    // 换城市 / 改家庭档案后会自动重算 —— 这件事由 HomeFeedStore 自己挂监听
+    // （见它的 _wire()）。**不要在这里再挂一次**：那样一旦启动流程有意外，
+    // 监听会静默失效，表现为「换了城市推荐一动不动」，而且完全不报错。
+    await HomeFeedStore.instance.load();
   }
 
   @override

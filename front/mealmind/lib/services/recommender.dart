@@ -14,6 +14,7 @@
 //   它不是 AI，也不假装是 —— 就是规则，和 local_estimator.dart 一个性质。
 
 import '../data/mock.dart';
+import '../models/ai_feed.dart';
 import '../models/content.dart';
 import '../state/app_state.dart';
 
@@ -33,16 +34,109 @@ class HomePicks {
   /// 不点名说明的话，两者看起来会自相矛盾。
   final List<String> droppedNames;
 
+  // ---- 以下来自后端推荐流（后端离线时为 null / 空）----
+
+  /// 这次推荐是谁算的：'ai' / 'cached' / 'algorithm' / null（本地规则）
+  final String? source;
+
+  /// 给用户看的来源说明，全部来自后端如实标注
+  final String? sourceLabel;
+
+  /// 后端返回的天气行（如「🍂 阴 19°C · 秋燥当令，润肺生津的食材优先」）
+  final String? weatherLine;
+
+  /// 菜名 → 推荐理由（后端算法/大模型给的）
+  final Map<String, String> foodReasons;
+  final Map<String, String> recipeReasons;
+
+  /// 今天的 AI 建议（后端给的，比本地写死的更有依据）
+  final String? aiTipTitle;
+  final String? aiTipBody;
+
+  /// 算法/AI 的执行轨迹 —— 答辩时展开给评委看
+  final List<HomeAlgoStep> steps;
+  final HomeWeather? weather;
+
   const HomePicks({
     required this.foods,
     required this.recipes,
     required this.notes,
     required this.dropped,
     required this.droppedNames,
+    this.source,
+    this.sourceLabel,
+    this.weatherLine,
+    this.foodReasons = const <String, String>{},
+    this.recipeReasons = const <String, String>{},
+    this.aiTipTitle,
+    this.aiTipBody,
+    this.steps = const <HomeAlgoStep>[],
+    this.weather,
   });
 
   /// 菜谱区块的副标题
   String get subtitle => notes.isEmpty ? '应季食材 · 简单好做' : notes.join(' · ');
+
+  /// 这一份推荐是不是后端算的
+  bool get fromBackend => source != null;
+
+  /// ★ 用后端「算法 + AI」的结果构造。
+  ///
+  /// 为什么菜谱的展示文案直接换成推荐理由：
+  ///   卡片本来就有一行小字在显示 `recipe.desc`（菜谱简介）。
+  ///   把理由放进这一行，**不用改任何布局**就能让用户看到
+  ///   「为什么今天推这道菜」—— 而布局不动，就不会碰坏既有的交互测试。
+  factory HomePicks.fromFeed(HomeFeed feed, FamilyProfile profile) {
+    final notes = <String>[
+      '${profile.cookMinutes.round()} 分钟内',
+      if (profile.avoid.isNotEmpty) '忌${profile.avoid.join('、')}',
+      if (profile.lowSodium) '低钠优先',
+      if (feed.weather != null) feed.weather!.emoji,
+    ];
+
+    final recipes = feed.recipes
+        .map(
+          (pick) => pick.reason.isEmpty
+              ? pick.item
+              : Recipe(
+                  id: pick.item.id,
+                  name: pick.item.name,
+                  image: pick.item.image,
+                  // 理由比原始简介有用得多，直接顶上去（布局不变）
+                  desc: pick.reason,
+                  time: pick.item.time,
+                  people: pick.item.people,
+                  tags: pick.item.tags,
+                  ingredients: pick.item.ingredients,
+                  steps: pick.item.steps,
+                  difficulty: pick.item.difficulty,
+                ),
+        )
+        .toList();
+
+    return HomePicks(
+      foods: feed.foods.map((pick) => pick.item).toList(),
+      recipes: recipes,
+      notes: notes,
+      // 硬约束是后端执行的，前端不再重复统计「筛掉几道」，
+      // 免得两边口径不一致反而对不上。
+      dropped: 0,
+      droppedNames: const <String>[],
+      source: feed.source,
+      sourceLabel: feed.sourceLabel,
+      weatherLine: feed.weatherLine.isEmpty ? null : feed.weatherLine,
+      foodReasons: {
+        for (final pick in feed.foods) pick.item.name: pick.reason,
+      },
+      recipeReasons: {
+        for (final pick in feed.recipes) pick.item.name: pick.reason,
+      },
+      aiTipTitle: feed.aiTipTitle.isEmpty ? null : feed.aiTipTitle,
+      aiTipBody: feed.aiTip.isEmpty ? null : feed.aiTip,
+      steps: feed.steps,
+      weather: feed.weather,
+    );
+  }
 }
 
 /// 按家庭档案给首页挑推荐内容。[limit] 是每个区块最多几张卡片。
@@ -147,63 +241,45 @@ final _digits = RegExp(r'(\d+)');
 const _lightTags = <String>{'清淡', '低脂', '少油', '低卡', '轻食'};
 
 // ---------------------------------------------------------------------
-// 多智能体协作轨迹
+// 处理流程（本地兜底版）
+//
+// ⚠️ 这里以前叫 agentTraceFor，输出的是「多智能体协作」轨迹 —— 内容是**编的**：
+//      Planner Agent: 「CP-SAT 求解完成，生成 3 个 Pareto 方案」← CP-SAT 根本没做
+//      Critic Agent:  「否决方案 B（钠 2180 mg 超标）」        ← 那几个数字是编的
+//      Inventory Agent:「菠菜周四到期，需优先消耗」            ← 也是编的
+//    这在比赛里是硬伤：把没有的东西说成有。项目里从来没有多智能体 ——
+//    后端只是一串顺序执行的函数（外加一次大模型调用），不存在 agent 自主决策。
+//
+//    现在改成**如实描述本地规则到底做了什么**：只有三步，都是这个文件里
+//    真实发生的确定性规则，没有 AI、也没有求解器。
+//    后端在线时界面用的是后端返回的真实轨迹（见 BackendApi.chat 的 trace），
+//    这一份只在后端离线、走本地演示数据时使用。
 // ---------------------------------------------------------------------
 
-/// 按真实家庭档案生成协作轨迹。
-///
-/// 轨迹的**流程**仍是本地按设计展开的（后端好了由接口返回），
-/// 但「读到的档案」必须是真的 —— 否则用户把人数改成 5 人，
-/// 轨迹第一步还写着「3 人 · 周预算 300 元」，一眼就露馅。
-///
-/// 这里还有一个直接看得见的因果：
-///   开低钠 → 钠 1720 / 2000 mg，Critic 否决方案 B（橙色 veto）
-///   关低钠 → 钠 2180 / 2400 mg，Critic 不再否决
-/// 「约束改变多智能体的决策结果」在演示里是能亲眼看出来的。
-List<AgentStep> agentTraceFor(FamilyProfile p) {
+/// 本地规则实际做的事（诚实版：没有 AI、没有求解器）
+List<AgentStep> localTraceFor(FamilyProfile p) {
   final avoidText = p.avoid.isEmpty ? '无忌口' : p.avoid.join('、');
   final prefText = p.preferences.isEmpty ? '无特别偏好' : p.preferences.join('、');
-  final sodium = p.lowSodium ? 1720 : 2180;
-
   return <AgentStep>[
     AgentStep(
-      agent: 'Profile Agent',
+      agent: '读取家庭档案',
       summary:
-          '读取家庭档案：${p.people} 人 · 周预算 ¥${p.budget.toStringAsFixed(0)} · '
-          '每日 ${p.cookMinutes.round()} 分钟 · 忌口 $avoidText',
-      ms: 12,
-    ),
-    AgentStep(
-      agent: 'Retrieval Agent',
-      summary: '候选召回 42 道 → 按「$prefText」与忌口过滤后剩 31 道',
-      ms: 86,
-    ),
-    AgentStep(
-      agent: 'Inventory Agent',
-      summary: '库存与保质期检查：菠菜周四到期，需优先消耗',
+          '${p.people} 人 · 每日 ${p.cookMinutes.round()} 分钟 · 忌口 $avoidText · '
+          '${p.lowSodium ? '限钠' : '不限钠'}',
       status: 'info',
-      ms: 9,
+      ms: 1,
     ),
     AgentStep(
-      agent: 'Nutrition Agent',
-      summary:
-          '营养校验：钠 $sodium / ${p.sodiumLimitMg} mg '
-          '${sodium > p.sodiumLimitMg ? '超标' : '✓'} · 蔬菜量达标 ✓',
-      ms: 24,
+      agent: '本地规则筛选',
+      summary: '按烹饪时间筛掉超时的菜，按忌口过滤命中项（口味偏好：$prefText）',
+      ms: 2,
     ),
     AgentStep(
-      agent: 'Planner Agent',
-      summary: 'CP-SAT 求解完成，生成 3 个 Pareto 方案',
-      ms: 1840,
-    ),
-    AgentStep(
-      agent: 'Critic Agent',
+      agent: '本地规则排序',
       summary: p.lowSodium
-          ? '否决方案 B（钠 2180 mg 超标），回灌 Planner 重解'
-          : '方案 B 通过 —— 未开启低钠约束，钠 2180 mg 在 ${p.sodiumLimitMg} mg 上限内',
-      status: p.lowSodium ? 'veto' : 'ok',
-      ms: 31,
+          ? '口味偏好命中优先，低钠（清淡 / 低脂）加分'
+          : '口味偏好命中优先',
+      ms: 1,
     ),
-    AgentStep(agent: 'Explainer Agent', summary: '生成推荐理由与约束松紧说明', ms: 402),
   ];
 }

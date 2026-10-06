@@ -42,6 +42,9 @@ desktop.ini
 *.tmp
 _fx/
 
+# ---- check_web_ui.py 用的 headless 浏览器 profile（几百 MB）----
+.shots/
+
 # ---- 图标预览（scripts/make_icons.py 生成，仅用于肉眼检查，不参与打包）----
 icon-preview.png
 icon-sizes.png

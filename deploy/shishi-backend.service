@@ -1,0 +1,36 @@
+[Unit]
+Description=Shishi FastAPI backend (食时)
+Documentation=file:/opt/test/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# ⚠️ WorkingDirectory 必须是 back/ —— 否则 .env 里的
+#    DATABASE_URL=sqlite:///./shishi.db 会落到别处，
+#    表现为「每次重启数据都空了」。
+WorkingDirectory=/opt/test/back
+
+# .env 由 backend 自己读（pydantic-settings），这里再喂一份给进程环境，
+# 方便在 journalctl 里对照。两个来源的值是一致的。
+EnvironmentFile=-/opt/test/back/.env
+
+# 优先用项目自带的虚拟环境；没有就退回系统 python3。
+# deploy.sh 会自动把这一行改成实际可用的解释器。
+ExecStart=/opt/test/back/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# 只监听 127.0.0.1：对外统一由 nginx 的 80/443 提供，
+# 后端端口不直接暴露到公网。
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=shishi-backend
+
+# 轻量服务器上给点基本的保护
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

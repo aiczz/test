@@ -46,6 +46,9 @@ STATE_TABLES = {
     # 验证码也是用户侧状态表。漏了它的话，compact 模式下 create_all 只建
     # STATE_TABLES 里的表，这张新表在服务器上根本不会被创建。
     "verification_codes",
+    # 首页每日 AI 结果缓存。同上 —— 漏了它，服务器（compact 模式）上不会建表，
+    # 于是每天每地区都要重新问一次大模型，token 白烧。
+    "ai_daily_cache",
 }
 
 _catalog_mode_cache: WeakKeyDictionary[Engine, bool] = WeakKeyDictionary()

@@ -37,6 +37,13 @@ class Food {
   ///    没有这个标注「时令」分类就会是空的。
   final String? season;
 
+  /// 后端算出来的应季指数（0~100）。
+  ///
+  /// ⚠️ 以前详情弹层里写死了一句 `应季指数 92` —— 不管打开的是哪个食材、
+  ///    是不是当季，都是 92。那是编的。现在用后端给的真实分值，
+  ///    拿不到（离线 / 本地假数据）就**不显示这个标签**。
+  final int? seasonScore;
+
   const Food({
     required this.id,
     required this.name,
@@ -44,6 +51,7 @@ class Food {
     required this.category,
     required this.tags,
     this.season,
+    this.seasonScore,
   });
 
   factory Food.fromJson(Map<String, dynamic> j) => Food(
@@ -53,6 +61,7 @@ class Food {
     category: j['category'] as String? ?? '',
     tags: _strList(j['tags']),
     season: j['season'] as String?,
+    seasonScore: (j['season_score'] as num?)?.toInt(),
   );
 
   /// 在【当前季节】是不是时令。
@@ -104,6 +113,42 @@ class Recipe {
     ingredients: _strList(j['ingredients']),
     steps: _strList(j['steps']),
     difficulty: j['difficulty'] as String? ?? '简单',
+  );
+}
+
+/// 菜谱分类筛选区里的一个分类。
+///
+/// `count` 是这个分类下的菜品数，由后端 `/api/recipes/tags` 给。
+/// 界面上直接显示出来 —— 用户点之前就知道这个分类里有没有菜，
+/// 不会再出现「点进去是空的」。
+class RecipeTag {
+  final String name;
+  final int count;
+
+  const RecipeTag({required this.name, required this.count});
+
+  factory RecipeTag.fromJson(Map<String, dynamic> j) => RecipeTag(
+    name: j['name'] as String? ?? '',
+    count: (j['count'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// 分类的一个分组（「做法」「主要食材」…）。
+///
+/// 分组名和顺序都由后端定（`app/data/dish_tags.py` 的 TAG_GROUPS），
+/// 前端不自己编分类 —— 否则又会出现「前端写死的分类和库里的标签对不上」。
+class RecipeTagGroup {
+  final String group;
+  final List<RecipeTag> tags;
+
+  const RecipeTagGroup({required this.group, required this.tags});
+
+  factory RecipeTagGroup.fromJson(Map<String, dynamic> j) => RecipeTagGroup(
+    group: j['group'] as String? ?? '',
+    tags: ((j['tags'] as List?) ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .map(RecipeTag.fromJson)
+        .toList(),
   );
 }
 

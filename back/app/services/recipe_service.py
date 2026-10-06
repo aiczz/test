@@ -2,8 +2,13 @@
 
 from sqlmodel import Session
 
+from app.core.database import uses_compact_catalog
 from app.models.recipe import Recipe
-from app.repositories import favorite_repository, recipe_repository
+from app.repositories import (
+    compact_catalog_repository,
+    favorite_repository,
+    recipe_repository,
+)
 from app.schemas.recipe import (
     IngredientPublic,
     RecipeBrief,
@@ -27,6 +32,9 @@ def to_brief(recipe: Recipe) -> RecipeBrief:
         image=recipe.image_url,
         description=recipe.description,
         duration_minutes=recipe.duration_minutes,
+        # 旧演示表（recipes）真的有时长列 → False（有依据）；
+        # 清洗库（dishes）没有时长列 → 由评分层按「做法文本里抽没抽到」回填
+        duration_estimated=bool(getattr(recipe, "duration_estimated", False)),
         servings=f"{recipe.servings}人份",
         difficulty=recipe.difficulty,
         tags=list(recipe.tags or []),
@@ -41,6 +49,7 @@ def list_recipes(
     difficulty: str | None = None,
     max_duration: int | None = None,
     keyword: str | None = None,
+    tag: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[RecipeBrief], int]:
@@ -51,10 +60,24 @@ def list_recipes(
         difficulty=difficulty,
         max_duration=max_duration,
         keyword=keyword,
+        tag=tag,
         offset=(page - 1) * page_size,
         limit=page_size,
     )
     return [to_brief(r) for r in rows], total
+
+
+def tag_groups(
+    session: Session,
+) -> list[tuple[str, list[tuple[str, int]]]]:
+    """菜谱分类筛选区（分组 + 每个分类的菜品数）。
+
+    分类名和 `app.data.dish_tags` 里归一化用的是同一套常量，
+    所以「点分类能筛到菜」和「卡片上显示的标签」天然一致。
+    """
+    if uses_compact_catalog(session.get_bind()):
+        return compact_catalog_repository.tag_groups_with_counts(session)
+    return []
 
 
 def search(

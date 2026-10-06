@@ -196,8 +196,9 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
 
                 const SizedBox(height: 16),
                 const Text(
-                  '说明：时令数据目前是全国级的，城市只影响顶部显示 —— '
-                  '接入城市级农时数据后，这里会真的改变推荐结果。',
+                  '说明：换城市会真的重算推荐 —— 后端会取该城市的实时天气，'
+                  '再结合当天时令重新打分；不同城市、不同日期看到的结果都不一样。'
+                  '（时令食材本身目前是全国级的，地区差异主要来自天气与每日轮换。）',
                   style: TextStyle(fontSize: 10, color: muted, height: 1.5),
                 ),
               ],

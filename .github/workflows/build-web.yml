@@ -53,11 +53,19 @@ jobs:
 
       # base-href 用 "/"：这份是挂在自己服务器的根路径下，
       # 和 GitHub Pages 那份（/test/）不是同一个部署目标。
+      #
+      # ⚠️ 刻意【不】注入 --dart-define=API_BASE：
+      #    网页版走【同源】—— 页面从哪来就调哪的 /api，由服务器上的 nginx
+      #    反代到后端（配置见 deploy/nginx-shishi.conf）。
+      #    好处：换服务器 / 换 IP / 换域名 / 上 HTTPS 都不需要重新构建这份产物，
+      #    运维 pull 下来直接就能用；也天然没有 mixed content 问题。
+      #    以前这里写死了 http://8.148.69.56:8000，换个 IP 就得改这一行再构建 ——
+      #    是个很容易忘的坑。
+      #    （APK 不一样：原生应用没有「页面来源」，必须把绝对地址编进包里，
+      #      所以 build-apk.yml 里那个 --dart-define 是必要的。）
       - name: Build web
         working-directory: front/mealmind
-        run: >
-          flutter build web --release --base-href "/"
-          --dart-define=API_BASE=http://8.148.69.56:8000
+        run: flutter build web --release --base-href "/"
 
       - name: Package
         run: tar -czf web-build.tar.gz -C front/mealmind/build/web .

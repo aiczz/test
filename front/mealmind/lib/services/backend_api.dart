@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/dish_images.dart';
 import '../data/ingredient_images.dart';
+import '../models/ai_feed.dart';
 import '../models/content.dart';
 import 'auth_store.dart';
 
@@ -51,9 +52,23 @@ class BackendApi {
 
   // 统一走 createApiDio：它会挂上 401 拦截器（token 失效 / 账号被封禁）。
   // 自己 new 一个 Dio 就会漏掉这一步。
+  //
+  // 两种超时，按接口特性分开：
   Dio get _dio => createApiDio(
     connectTimeout: const Duration(seconds: 6),
     receiveTimeout: const Duration(seconds: 10),
+  );
+
+  /// 会真的调用大模型的接口用这个 —— 给足时间。
+  ///
+  /// ⚠️ 为什么必须区分：`/api/home` 首次生成当天推荐、`/api/ai/chat`、
+  ///   `/api/ai/recommend` 都会真的等一次 DeepSeek（实测 2~4.5s，高峰期更久）。
+  ///   用 10s 的话，模型稍微慢一点前端就自己掐断，然后**报「后端未连接」** ——
+  ///   明明是后端在算、只是算得慢，用户却被误导成「连不上」。
+  ///   现在给 60s，并让界面显示真实原因（超时 / 500 / 连不上）。
+  Dio get _aiDio => createApiDio(
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 60),
   );
 
   Options get _auth => Options(
@@ -115,6 +130,31 @@ class BackendApi {
         .whereType<Map<String, dynamic>>()
         .map(_foodFromJson)
         .toList();
+  }
+
+  /// GET /api/foods/{id} —— 食材详情。
+  ///
+  /// ★ 「适合做这些菜」必须走这个接口。
+  ///   列表接口 `/api/recipes` 只给摘要，**不含 ingredients**，
+  ///   所以想在本地用 `recipe.ingredients.contains(food.name)` 反查是做不成的
+  ///   —— 那条路会永远匹配到 0 条，然后静默退化成「取前两道菜」，
+  ///   结果就是不管点什么食材，下面推荐的永远是同两道菜。
+  ///   后端已经按 `dish_ingredients` 关联算好了，直接用。
+  ///
+  /// 拿不到就返回空，界面显示「暂时查不到」，而不是编两道菜出来。
+  Future<List<Recipe>> fetchFoodRecipes(String foodId) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>('/api/foods/$foodId');
+      final items =
+          (res.data?['recommended_recipes'] as List?) ?? const <dynamic>[];
+      return items
+          .whereType<Map<String, dynamic>>()
+          .map(_recipeFromJson)
+          .toList();
+    } catch (error) {
+      debugPrint('[BackendApi] 食材「$foodId」的推荐菜谱加载失败：$error');
+      return const <Recipe>[];
+    }
   }
 
   // ---------------------------------------------------------------- 菜谱
@@ -226,6 +266,30 @@ class BackendApi {
     return _recipeFromJson(data);
   }
 
+  /// GET /api/recipes/tags —— 分类筛选区的数据源。
+  ///
+  /// 后端把库里 985 个零散标签（「汤」「汤羹」「老火汤」…）归一成 46 个
+  /// 规范分类，并且**只返回有菜的分类**，所以这里拿到的每个分类点进去都有菜，
+  /// 旁边还能显示「这个分类有几道」。
+  ///
+  /// 分类名必须由后端给：前端以前写死 `['快手菜','汤品','低脂','家常']`，
+  /// 库里却是「家常菜」「汤羹」，字符串对不上 —— 点分类一道菜都筛不出来。
+  ///
+  /// 老后端没有这个接口时返回空列表，界面自动退回「全部」一个分类。
+  Future<List<RecipeTagGroup>> fetchRecipeTags() async {
+    try {
+      final res = await _dio.get<List<dynamic>>('/api/recipes/tags');
+      return (res.data ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(RecipeTagGroup.fromJson)
+          .where((group) => group.tags.isNotEmpty)
+          .toList();
+    } catch (error) {
+      debugPrint('[BackendApi] 菜谱分类加载失败：$error');
+      return const <RecipeTagGroup>[];
+    }
+  }
+
   Future<Set<String>> fetchFavoriteIds() async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/favorites',
@@ -309,10 +373,39 @@ class BackendApi {
   // ---------------------------------------------------------------- AI
 
   /// POST /api/ai/chat（说明书 §20）。登录可选。
-  Future<AiChatResult> chat(String message) async {
-    final res = await _dio.post<Map<String, dynamic>>(
+  ///
+  /// 本次新增：把家庭硬约束一起发上去，后端才能按「忌口 / 限钠 / 可用时间」
+  /// 真的筛候选；返回里也多了 trace（后端真实发生的协作轨迹）与 source。
+  Future<AiChatResult> chat(
+    String message, {
+    String? city,
+    int people = 3,
+    double cookMinutes = 45,
+    bool lowSodium = false,
+    List<String> preferences = const <String>[],
+    List<String> avoid = const <String>[],
+    // ---- 会话上下文 ----
+    // 追问（「换一批呢」「还有别的吗」）本身不含推荐关键词，
+    // 不带上下文就会被判成闲聊 → 没有菜、没有卡片。
+    // 所以把上一轮的意图和已经展示过的菜带上：
+    //   lastIntent       —— 追问时继承
+    //   recentRecipeIds  —— 「换一批」要避开这些
+    String? lastIntent,
+    List<int> recentRecipeIds = const <int>[],
+  }) async {
+    final res = await _aiDio.post<Map<String, dynamic>>(
       '/api/ai/chat',
-      data: <String, dynamic>{'message': message},
+      data: <String, dynamic>{
+        'message': message,
+        if (city != null && city.isNotEmpty) 'city': city,
+        'people': people,
+        'cook_minutes': cookMinutes,
+        'low_sodium': lowSodium,
+        'preferences': preferences,
+        'avoid': avoid,
+        'last_intent': ?lastIntent,
+        if (recentRecipeIds.isNotEmpty) 'recent_recipe_ids': recentRecipeIds,
+      },
       options: _auth,
     );
     final data = res.data ?? const <String, dynamic>{};
@@ -326,6 +419,154 @@ class BackendApi {
       recipes: recipes
           .whereType<Map<String, dynamic>>()
           .map(_recipeFromJson)
+          .toList(),
+      trace: _traceFromJson(data['trace']),
+      source: data['source'] as String? ?? 'algorithm',
+      model: data['model'] as String?,
+    );
+  }
+
+  /// POST /api/ai/recommend —— 导航栏 AI 配菜。
+  ///
+  /// 把「用户选好的食材」和「今日菜单里已有的菜」交给后端：
+  /// 后端先按综合打分从我们自己的库里筛候选（含忌口/时间硬约束），
+  /// 再让大模型**在候选集内**挑选与解释。返回值里的菜一定真实存在于库中。
+  Future<AiComposeResult> recommendRecipes({
+    List<int> foodIds = const <int>[],
+    List<int> menuRecipeIds = const <int>[],
+    String meal = 'dinner',
+    int count = 3,
+    String? message,
+    String? city,
+    int people = 3,
+    double cookMinutes = 45,
+    bool lowSodium = false,
+    List<String> preferences = const <String>[],
+    List<String> avoid = const <String>[],
+  }) async {
+    final res = await _aiDio.post<Map<String, dynamic>>(
+      '/api/ai/recommend',
+      data: <String, dynamic>{
+        'food_ids': foodIds,
+        'menu_recipe_ids': menuRecipeIds,
+        'meal': meal,
+        'count': count,
+        if (message != null && message.trim().isNotEmpty)
+          'message': message.trim(),
+        if (city != null && city.isNotEmpty) 'city': city,
+        'people': people,
+        'cook_minutes': cookMinutes,
+        'low_sodium': lowSodium,
+        'preferences': preferences,
+        'avoid': avoid,
+      },
+      options: _auth,
+    );
+    final data = res.data ?? const <String, dynamic>{};
+    final picks = (data['recommendations'] as List?) ?? const <dynamic>[];
+    return AiComposeResult(
+      answer: data['answer'] as String? ?? '',
+      recommendations: picks
+          .whereType<Map<String, dynamic>>()
+          .map(_recommendationFromJson)
+          .where((item) => item.recipe.id.isNotEmpty)
+          .toList(),
+      trace: _traceFromJson(data['trace']),
+      source: data['source'] as String? ?? 'algorithm',
+      model: data['model'] as String?,
+      usedFoods: ((data['used_foods'] as List?) ?? const <dynamic>[])
+          .map((e) => e.toString())
+          .toList(),
+      filteredOut: ((data['filtered_out'] as List?) ?? const <dynamic>[])
+          .map((e) => e.toString())
+          .toList(),
+    );
+  }
+
+  /// 首页推荐流：GET /api/home
+  ///
+  /// 后端会做三件事：按时令+天气+营养打分筛候选 → 每天每地区问一次大模型 →
+  /// 用用户自己的硬约束收口。任何一个环节失败都会降级，不会抛给调用方。
+  Future<HomeFeed> fetchHomeFeed({
+    String? city,
+    double? lat,
+    double? lon,
+    String? date,
+    int people = 3,
+    double cookMinutes = 45,
+    bool lowSodium = false,
+    List<String> preferences = const <String>[],
+    List<String> avoid = const <String>[],
+  }) async {
+    final res = await _aiDio.get<Map<String, dynamic>>(
+      '/api/home',
+      queryParameters: <String, dynamic>{
+        if (city != null && city.isNotEmpty) 'city': city,
+        'lat': ?lat,
+        'lon': ?lon,
+        if (date != null && date.isNotEmpty) 'date': date,
+        'people': people,
+        'cook_minutes': cookMinutes,
+        'low_sodium': lowSodium,
+        if (preferences.isNotEmpty) 'preferences': preferences,
+        if (avoid.isNotEmpty) 'avoid': avoid,
+      },
+    );
+    final data = res.data ?? const <String, dynamic>{};
+    final foodItems = (data['recommended_foods'] as List?) ?? const <dynamic>[];
+    final recipeItems =
+        (data['recommended_recipes'] as List?) ?? const <dynamic>[];
+    final weather = data['weather'];
+    final meta =
+        (data['meta'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final season =
+        (data['season'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+
+    return HomeFeed(
+      seasonName: season['name'] as String? ?? '',
+      month: (season['month'] as num?)?.toInt() ?? DateTime.now().month,
+      region: season['region'] as String? ?? city ?? '',
+      date:
+          (weather is Map<String, dynamic>
+              ? weather['date'] as String?
+              : null) ??
+          (date ?? ''),
+      foods: foodItems
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (json) => HomePick<Food>(
+              item: _foodFromJson(json),
+              reason: json['reason'] as String? ?? '',
+              highlights: _strListFrom(json['highlights']),
+              score: (json['score'] as num?)?.toDouble(),
+            ),
+          )
+          .toList(),
+      recipes: recipeItems
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (json) => HomePick<Recipe>(
+              item: _recipeFromJson(json),
+              reason: json['reason'] as String? ?? '',
+              highlights: _strListFrom(json['highlights']),
+              score: (json['score'] as num?)?.toDouble(),
+            ),
+          )
+          .toList(),
+      aiTipTitle: data['ai_tip_title'] as String? ?? '',
+      aiTip: data['ai_tip'] as String? ?? '',
+      weather: weather is Map<String, dynamic>
+          ? HomeWeather.fromJson(weather)
+          : null,
+      source: meta['source'] as String? ?? 'algorithm',
+      model: meta['model'] as String?,
+      aiMs: (meta['ai_ms'] as num?)?.toInt() ?? 0,
+      cacheKey: meta['cache_key'] as String?,
+      shortlistFoods: (meta['shortlist_foods'] as num?)?.toInt() ?? 0,
+      shortlistDishes: (meta['shortlist_dishes'] as num?)?.toInt() ?? 0,
+      steps: ((meta['steps'] as List?) ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(HomeAlgoStep.fromJson)
           .toList(),
     );
   }
@@ -403,6 +644,7 @@ class BackendApi {
       json['category'] as String?,
     ),
     category: fromBackendCategory(json['category'] as String?),
+    seasonScore: (json['season_score'] as num?)?.toInt(),
     tags: ((json['tags'] as List?) ?? const <dynamic>[])
         .map((e) => e.toString())
         .toList(),
@@ -411,13 +653,13 @@ class BackendApi {
   static Recipe _recipeFromJson(Map<String, dynamic> json) => Recipe(
     id: '${json['id']}',
     name: json['name'] as String? ?? '',
-    image: _imageOrFallback(
-      json['image'],
-      _recipeFallbackImage(json['name']?.toString() ?? ''),
-    ),
+    image: _recipeImageFor(json['name']?.toString() ?? '', json['image']),
     desc: json['description'] as String? ?? '',
-    // 后端给的是分钟数，前端展示用「60分钟」这种文案
-    time: '${json['duration_minutes'] ?? 0}分钟',
+    // 后端给的是分钟数；清洗库的 dishes 没有时长列，抽不到做法里的时间时
+    // 那个数字是估的 —— 这种情况加「约」字，不把估值说得像真的。
+    time: json['duration_estimated'] == true
+        ? '约${json['duration_minutes'] ?? 0}分钟'
+        : '${json['duration_minutes'] ?? 0}分钟',
     people: json['servings'] as String? ?? '',
     tags: ((json['tags'] as List?) ?? const <dynamic>[])
         .map((e) => e.toString())
@@ -526,17 +768,20 @@ class BackendApi {
     };
   }
 
-  /// 菜谱配图：先用 500 张实拍图按菜名精确命中（这 500 个菜名与清洗库
-  /// 100% 对得上，逐张核对过），没命中才退回这三张通用图循环。
-  static String _recipeFallbackImage(String name) {
-    final hit = kDishImageByName[name];
-    if (hit != null) return hit;
-    const images = <String>[
-      'assets/images/tomato-egg.jpg',
-      'assets/images/mushroom-chicken.jpg',
-      'assets/images/hero-soup.jpg',
-    ];
-    return images[name.hashCode.abs() % images.length];
+  /// 菜品配图。三级来源，**没有就老老实实返回空字符串**：
+  ///
+  ///   1. 后端给的 image（旧演示表会带 image_url）
+  ///   2. 图库里按菜名精确命中（约 500 道，逐张核对过）
+  ///   3. 空字符串 —— 由 `DishPhoto` 渲染成「暂无配图」占位图
+  ///
+  /// ⚠️ 这里以前是「没命中就从三张通用图里按菜名 hash 挑一张」，
+  ///    等于给一道菜配**别的菜的照片**。清洗库 10000 道菜里 9500 道没图，
+  ///    所以绝大多数卡片都在显示错误的菜 —— 那不是凑合，是错误信息。
+  ///    宁可显示「暂无配图」，也不拿别的菜冒充。
+  static String _recipeImageFor(String name, Object? serverImage) {
+    final server = serverImage?.toString().trim() ?? '';
+    if (server.isNotEmpty) return server;
+    return kDishImageByName[name] ?? '';
   }
 }
 
@@ -566,12 +811,93 @@ class AiChatResult {
   final List<String> toolsUsed;
   final List<Recipe> recipes;
 
+  /// ★ 后端真实发生的协作轨迹。
+  ///
+  /// 之前这份轨迹是前端按家庭档案自己「演」出来的（recommender.dart 的
+  /// agentTraceFor）。现在后端会返回它真的做了什么 —— 召回了多少候选、
+  /// 哪些菜被硬约束否决了、模型花了多少毫秒。
+  /// 为空时前端才退回本地那份演出（保证老后端也不会白屏）。
+  final List<AgentStep> trace;
+
+  /// ai = 真的调了模型；algorithm = 规则兜底
+  final String source;
+  final String? model;
+
   const AiChatResult({
     required this.answer,
     required this.intent,
     this.toolsUsed = const <String>[],
     this.recipes = const <Recipe>[],
+    this.trace = const <AgentStep>[],
+    this.source = 'algorithm',
+    this.model,
   });
+
+  bool get fromAi => source == 'ai';
+  bool get hasBackendTrace => trace.isNotEmpty;
+}
+
+/// 把后端的 trace 数组转成前端统一的 AgentStep
+List<AgentStep> _traceFromJson(Object? raw) {
+  if (raw is! List) return const <AgentStep>[];
+  return raw
+      .whereType<Map<String, dynamic>>()
+      .map(
+        (json) => AgentStep(
+          agent: json['agent'] as String? ?? '',
+          summary: json['summary'] as String? ?? '',
+          status: json['status'] as String? ?? 'ok',
+          ms: (json['ms'] as num?)?.toInt() ?? 0,
+        ),
+      )
+      .where((step) => step.agent.isNotEmpty)
+      .toList();
+}
+
+List<String> _strListFrom(Object? raw) =>
+    ((raw as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
+
+/// 后端配菜结果里的一条
+RecipeRecommendation _recommendationFromJson(Map<String, dynamic> json) {
+  final recipe = json['recipe'];
+  return RecipeRecommendation(
+    recipe: recipe is Map<String, dynamic>
+        ? BackendApi._recipeFromJson(recipe)
+        : const Recipe(
+            id: '',
+            name: '',
+            image: '',
+            desc: '',
+            time: '',
+            people: '',
+            tags: <String>[],
+          ),
+    reason: json['reason'] as String? ?? '',
+    highlights: _strListFrom(json['highlights']),
+    score: (json['score'] as num?)?.toDouble(),
+    matchedFoods: _strListFrom(json['matched_foods']),
+  );
+}
+
+// =====================================================================
+// 网络错误 → 人话
+//
+// 界面需要知道「为什么失败」，但界面层不该直接依赖 Dio 的类型。
+// 放这里统一翻译，避免每个页面各写一套 —— 也避免再出现
+// 「不管是超时还是 500，一律显示『后端未连接』」这种误导性文案。
+// =====================================================================
+
+String describeNetworkError(Object error) {
+  if (error is! DioException) return '$error';
+  return switch (error.type) {
+    DioExceptionType.connectionTimeout ||
+    DioExceptionType.sendTimeout ||
+    DioExceptionType.receiveTimeout => '等待后端超时（模型这一问比较慢，可以直接重试）',
+    DioExceptionType.badResponse => '后端返回 ${error.response?.statusCode}',
+    DioExceptionType.connectionError => '连不上后端',
+    DioExceptionType.cancel => '请求被取消',
+    _ => error.message ?? '请求失败',
+  };
 }
 
 // =====================================================================

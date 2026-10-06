@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/content.dart';
+import '../services/api_config.dart';
 import '../services/auth_store.dart';
 import '../services/backend_api.dart';
 import '../services/content_store.dart';
 import '../theme.dart';
+import '../widgets/dish_photo.dart';
 import '../widgets/food_photo.dart';
 
 /// 食材页：时令浏览 + 家中库存 + 选中食材交给 AI。
@@ -274,13 +276,16 @@ class FoodsPageState extends State<FoodsPage> {
   /// 打开食材详情弹层（时令、能做的菜、加入我的食材）。
   ///
   /// 公开方法 —— 首页的食材卡片也走这里，保证两处详情一致。
+  ///
+  /// ⚠️ 这个弹层以前有三处「编出来的话」，都改掉了：
+  ///   1. 「应季指数 92」是写死的常量，不管打开哪个食材都是 92；
+  ///   2. 「XX 正值当季，口感更鲜」对**每个**食材都说，哪怕是反季的；
+  ///   3. 「适合做这些菜」在本地用 `recipe.ingredients` 反查 ——
+  ///      可列表接口根本不返回 ingredients，于是永远匹配 0 条，
+  ///      静默退化成「取前两道菜」，点任何食材看到的都是同两道。
+  ///   现在指数用后端的 season_score，「能做的菜」走后端关联，
+  ///   两样都拿不到时如实说明，不编。
   void openFoodDetail(Food food) {
-    final matched = ContentStore.instance.recipes.where(
-      (recipe) => recipe.ingredients.any((item) => item.contains(food.name)),
-    );
-    final suggestions = matched.isEmpty
-        ? ContentStore.instance.recipes.take(2)
-        : matched;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -330,12 +335,14 @@ class FoodsPageState extends State<FoodsPage> {
                       ),
                     ),
                   ),
-                  const _DetailSeasonBadge(),
+                  // 「当季推荐」只在**确实是当季**时才挂，不是每个食材都挂
+                  if (ContentStore.instance.isSeasonal(food))
+                    const _DetailSeasonBadge(),
                 ],
               ),
               const SizedBox(height: 10),
               Text(
-                '${food.name}正值当季，口感更鲜、运输距离更短。适合安排进本周菜单，也可以优先消耗家中库存。',
+                _seasonBlurb(food),
                 style: const TextStyle(fontSize: 14, color: muted, height: 1.7),
               ),
               const SizedBox(height: 14),
@@ -344,7 +351,9 @@ class FoodsPageState extends State<FoodsPage> {
                 runSpacing: 8,
                 children: [
                   for (final tag in food.tags) _Tag(text: tag),
-                  const _Tag(text: '应季指数 92'),
+                  // 应季指数用后端算出来的真实分值；拿不到就不显示
+                  if (food.seasonScore != null)
+                    _Tag(text: '应季指数 ${food.seasonScore}'),
                 ],
               ),
               const SizedBox(height: 24),
@@ -353,52 +362,28 @@ class FoodsPageState extends State<FoodsPage> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 12),
-              for (final recipe in suggestions)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(10),
-                  decoration: cardDeco(),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.asset(
-                          recipe.image,
-                          width: 82,
-                          height: 64,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              recipe.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${recipe.time} · ${recipe.people}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: muted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _FoodRecipeSuggestions(food: food),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// 食材详情里那句介绍。
+  ///
+  /// 当季 / 不当季说的话不一样 —— 以前不管三七二十一都说「正值当季」。
+  String _seasonBlurb(Food food) {
+    if (ContentStore.instance.isSeasonal(food)) {
+      return '${food.name}正值当季，口感更鲜、运输距离更短。'
+          '适合安排进本周菜单，也可以优先消耗家中库存。';
+    }
+    if (food.season != null && food.season!.isNotEmpty) {
+      return '${food.name}的时令是${food.season}，现在不是它最好的时候 —— '
+          '反季的也能吃，但风味和价格通常不如当季。';
+    }
+    // 后端不返回季节名（只返回应季指数），这时不硬说当季还是反季
+    return '${food.name}的营养数据、可做菜谱都来自清洗后的食材库。';
   }
 
   /// 从“我的”页统计卡进入时，直接展示库存，而不是仍停留在推荐列表。
@@ -1124,9 +1109,7 @@ class _AddFoodButton extends StatelessWidget {
             decoration: BoxDecoration(
               color: added ? orange700 : Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(
-                color: added ? orange700 : line,
-              ),
+              border: Border.all(color: added ? orange700 : line),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x22D2601F),
@@ -1223,6 +1206,121 @@ class _AmountButton extends StatelessWidget {
         ),
         child: Icon(icon, size: 16, color: orange700),
       ),
+    );
+  }
+}
+
+/// 食材详情里的「适合做这些菜」。
+///
+/// 为什么是一个自己拉数据的 StatefulWidget：
+///   列表接口 `/api/recipes` 不返回 ingredients，本地反查一定是 0 条
+///   （见 [FoodsPageState.openFoodDetail] 的注释）。真正算好的关联在
+///   `/api/foods/{id}` 的 `recommended_recipes` 里，所以要单独拉一次。
+///
+/// 三种状态都要说实话：
+///   加载中 → 转圈；拿到了 → 列出来；没拿到 → 说明「暂时查不到」，
+///   **不**拿两道不相干的菜来充数（以前就是这么干的）。
+class _FoodRecipeSuggestions extends StatefulWidget {
+  final Food food;
+
+  const _FoodRecipeSuggestions({required this.food});
+
+  @override
+  State<_FoodRecipeSuggestions> createState() => _FoodRecipeSuggestionsState();
+}
+
+class _FoodRecipeSuggestionsState extends State<_FoodRecipeSuggestions> {
+  List<Recipe>? _recipes;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    // 后端不在线时不要发请求，直接说查不到 —— 本地假数据里没有这种关联
+    if (!BackendStatus.instance.online) {
+      if (mounted) setState(() => _failed = true);
+      return;
+    }
+    try {
+      final recipes = await BackendApi.instance.fetchFoodRecipes(
+        widget.food.id,
+      );
+      if (!mounted) return;
+      setState(() => _recipes = recipes);
+    } catch (error) {
+      debugPrint('[FoodsPage] 食材推荐菜谱加载失败：$error');
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recipes = _recipes;
+    if (recipes == null && !_failed) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 18),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    if (recipes == null || recipes.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 14),
+        child: Text(
+          '暂时查不到用这个食材做的菜谱。可以去「菜谱」页按分类找找，'
+          '或者把食材加到「我的食材」再让 AI 助手帮你配。',
+          style: TextStyle(fontSize: 13, color: muted, height: 1.7),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final recipe in recipes)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: cardDeco(),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 82,
+                    height: 64,
+                    child: DishPhoto(asset: recipe.image),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        recipe.name,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${recipe.time} · ${recipe.people}',
+                        style: const TextStyle(fontSize: 12, color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

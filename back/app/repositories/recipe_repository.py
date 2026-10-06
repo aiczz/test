@@ -38,6 +38,7 @@ def list_recipes(
     difficulty: str | None = None,
     max_duration: int | None = None,
     keyword: str | None = None,
+    tag: str | None = None,
     offset: int = 0,
     limit: int = 20,
 ) -> tuple[list[Recipe], int]:
@@ -49,6 +50,7 @@ def list_recipes(
             difficulty=difficulty,
             max_duration=max_duration,
             keyword=keyword,
+            tag=tag,
             offset=offset,
             limit=limit,
         )
@@ -59,6 +61,10 @@ def list_recipes(
         max_duration=max_duration,
         keyword=keyword,
     )
+    # 旧演示表的标签是手写的（「秋日暖汤」这种），量少且干净，直接用等值匹配。
+    # 这里不做归一化 —— 归一化是清洗库的需求，改了会让旧演示数据对不上。
+    if tag:
+        conditions.append(col(Recipe.tags).like(f'%"{tag}"%'))
 
     total = session.exec(
         select(func.count()).select_from(Recipe).where(*conditions)

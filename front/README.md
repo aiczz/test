@@ -115,8 +115,21 @@ flutter build web             # 网页版（演示保底）
 - [x] 家庭设置（人数 / 预算 / 慢病 / 忌口 / 厨具 / 时间）
 - [x] ★ 家庭档案 → 菜单 / 购物清单 **联动闭环**
       （改人数/预算/限钠，切回菜单页会真的重算 —— 约束不是摆设）
-- [ ] 真 CP-SAT 求解器（当前由 `lib/services/local_estimator.dart` 本地派生顶上）
+- [x] ★ 家庭档案 → **AI 协作轨迹**也联动（轨迹读的是真实档案；
+      关掉低钠约束，Critic 就不再否决方案 B）
+- [x] ★ **首页推荐接后端「综合打分算法 + AI」**
+      （`lib/state/home_feed.dart` 拉 `/api/home`：时令 + 定位天气 + 营养 +
+      每日轮换因子筛候选，再由大模型在候选集内挑选与解释；
+      后端离线时自动退回本地 `pickForHome()`，界面照常可用）
+- [x] ★ **AI 页接上真大模型 + 配菜**
+      （`lib/widgets/ai_compose_sheet.dart`：把「我的食材 + 今日菜单已有的菜 +
+      家庭硬约束」交给 `/api/ai/recommend`，推荐结果一键加入今日菜单；
+      协作轨迹优先用后端返回的**真实轨迹**，没有才退回本地演示轨迹）
+- [x] 真 CP-SAT 求解器（当前由 `lib/services/local_estimator.dart` 本地派生顶上）
 - [ ] 后端接口接入（`lib/services/api.dart` 的 `useMock` 改成 `false`）
+      —— ⚠️ 这条只针对**菜单 / 购物清单**：后端 `/api/menu/plan` 的响应结构
+      和前端 `Plan.fromJson` 对不上，直接切会得到一张空白菜单页。
+      食材 / 菜谱 / 首页推荐 / AI 这几块**已经接了真后端**（走 `backend_api.dart`）。
 
 ### 关于「联动」是怎么实现的
 
