@@ -38,7 +38,11 @@ class RecipeRecord:
     image_url: str | None = None
     description: str | None = None
     duration_minutes: int = 30
-    servings: int = 3
+    # ⚠️ 清洗库的 dishes 表**没有份量列**，所以这里默认 None（= 不知道），
+    #    而不是随手写个 3。以前默认 3，于是每一道菜的卡片上都是「3人份」——
+    #    用户改了家庭人数，这个数字一动不动（因为它从来就是个常量）。
+    #    旧演示表 recipes 有真实的 servings 列，那条路径照常有值。
+    servings: int | None = None
     difficulty: str = "简单"
     category: str | None = None
     season_recommendation: str | None = None
@@ -49,7 +53,7 @@ class RecipeRecord:
     #
     # 清洗库的 dishes 表**没有**烹饪时长列，所以时长只能从做法文本里抽
     # （「小火炖 30 分钟」→ 30）。抽不到就只能按标签数估。
-    # 界面据此显示「约 30 分钟」，不把一个估出来的数字说得像真的。
+    # 界面据此决定显不显示数字：有依据才显示「约 N 分钟」。
     duration_estimated: bool = True
 
 

@@ -455,7 +455,14 @@ def test_family_constraints_are_bounds_checked(client):
     )
 
 
-def test_constraints_reach_the_ai_trace(client):
+def test_recipe_servings_kept_when_data_exists(client):
+    """旧演示表（recipes）真的有 servings 列 → 照常给值，不能被一起砍掉。
+
+    （清洗库那条路径的「没有数据就不编」在 tests/test_dish_tags.py 里测，
+      因为那需要一套清洗库的表结构。）
+    """
+    detail = client.get("/api/recipes/1").json()
+    assert detail["servings"] == "3人份", detail.get("servings")
     """约束不只是存下来，还要真的进到推荐链路里（轨迹里能看见）。
 
     轨迹上那行「读取约束」是给人看的证据：写了 2 人就不该显示 3 人。

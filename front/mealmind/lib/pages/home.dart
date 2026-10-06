@@ -1384,10 +1384,13 @@ class _RecipeCard extends StatelessWidget {
                       ),
                       const Icon(Icons.people_outline, size: 11, color: muted),
                       const SizedBox(width: 2),
-                      Text(
-                        recipe.people,
-                        style: const TextStyle(fontSize: 9, color: muted),
-                      ),
+                      // 份量：清洗库没有这个数据时后端给空串，这时整段不显示
+                      // （不能拿常量「3人份」顶上 —— 那会让用户以为改了人数没生效）
+                      if (recipe.people.isNotEmpty)
+                        Text(
+                          recipe.people,
+                          style: const TextStyle(fontSize: 9, color: muted),
+                        ),
                     ],
                   ),
                 ],
@@ -1724,10 +1727,13 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
                               icon: Icons.schedule_rounded,
                               text: recipe.time,
                             ),
-                            _MealMeta(
-                              icon: Icons.people_outline_rounded,
-                              text: recipe.people,
-                            ),
+                            // 份量可能没有数据（清洗库没有份量列），
+                            // 空的时候整块不显示，而不是显示一个编的「3人份」
+                            if (recipe.people.isNotEmpty)
+                              _MealMeta(
+                                icon: Icons.people_outline_rounded,
+                                text: recipe.people,
+                              ),
                             _MealMeta(
                               icon: Icons.local_dining_outlined,
                               text: recipe.difficulty,

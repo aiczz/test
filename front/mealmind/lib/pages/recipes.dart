@@ -978,7 +978,7 @@ class _RecipeListCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 3),
                         Text(
-                          recipe.people,
+                          recipe.metaLine,
                           style: const TextStyle(fontSize: 11, color: muted),
                         ),
                       ],
@@ -1211,8 +1211,10 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                   Row(
                     children: [
                       _Fact(icon: Icons.schedule, label: recipe.time),
-                      const SizedBox(width: 8),
-                      _Fact(icon: Icons.people_outline, label: recipe.people),
+                      if (recipe.people.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        _Fact(icon: Icons.people_outline, label: recipe.people),
+                      ],
                       const SizedBox(width: 8),
                       _Fact(
                         icon: Icons.local_fire_department,

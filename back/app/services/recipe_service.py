@@ -26,6 +26,11 @@ def _fmt_amount(value: float | None) -> str | None:
 
 
 def to_brief(recipe: Recipe) -> RecipeBrief:
+    # 份量：只有数据源真的有这个字段时才给。
+    # 清洗库的 dishes 没有份量列 —— 以前这里会拿到一个默认的 3，
+    # 于是每道菜都显示「3人份」，用户改了家庭人数它也不动。
+    # 宁可不显示，也不编一个。
+    servings = getattr(recipe, "servings", None)
     return RecipeBrief(
         id=recipe.id,
         name=recipe.name,
@@ -35,7 +40,7 @@ def to_brief(recipe: Recipe) -> RecipeBrief:
         # 旧演示表（recipes）真的有时长列 → False（有依据）；
         # 清洗库（dishes）没有时长列 → 由评分层按「做法文本里抽没抽到」回填
         duration_estimated=bool(getattr(recipe, "duration_estimated", False)),
-        servings=f"{recipe.servings}人份",
+        servings=f"{servings}人份" if servings else None,
         difficulty=recipe.difficulty,
         tags=list(recipe.tags or []),
     )

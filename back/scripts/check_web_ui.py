@@ -73,12 +73,20 @@ ENABLE_SEMANTICS = """
 """
 
 
-def _api(base: str, path: str, body: dict | None = None, token: str | None = None):
+def _api(
+    base: str,
+    path: str,
+    body: dict | None = None,
+    token: str | None = None,
+    method: str | None = None,
+):
     data = json.dumps(body).encode() if body is not None else None
     headers = {"Content-Type": "application/json"} if data else {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(f"{base}{path}", data=data, headers=headers)
+    request = urllib.request.Request(
+        f"{base}{path}", data=data, headers=headers, method=method
+    )
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.loads(response.read().decode())
 
@@ -225,6 +233,11 @@ async def main() -> int:
         origin = args.url.rstrip("/")
         token, user_json = _demo_session(args.api)
 
+        # 先把演示账号的家庭人数设成 5 —— 后面要验证「界面跟着档案走」
+        _api(args.api, "/api/profile", {"family_size": 5},
+             token=token, method="PUT")
+        print("已把演示账号的家庭人数设为 5")
+
         async with websockets.connect(
             target["webSocketDebuggerUrl"], max_size=64 * 1024 * 1024
         ) as ws:
@@ -312,6 +325,50 @@ async def main() -> int:
             # 由 widget_test 的「改了家庭人数并保存后」那个用例覆盖。
             print("  [--] 「保存家庭档案」在折叠线以下，浏览器这层读不到"
                   "（已由 widget 测试覆盖）")
+
+            # ---- AI 页：家庭人数必须跟着档案走 ----
+            #
+            # 用户报过：「改了家庭人数之后，AI 那一页所有人数相关的还是没变化」。
+            # 这一段的用途就是把「AI 页上到底有哪些人数」全部读出来 ——
+            # 不是猜，是看。
+            if not await driver.click_label("AI"):
+                print("\n[x] 没找到「AI」入口")
+                return 1
+            await asyncio.sleep(3)
+
+            # 问一句，让轨迹长出来（轨迹里会写「N 人用餐」）
+            typed = await driver.eval("""
+            (() => {
+              const input = document.querySelector('input, textarea');
+              if (!input) return false;
+              input.focus();
+              return true;
+            })()
+            """)
+            await driver.send("Input.insertText", {"text": "今晚吃什么"})
+            await asyncio.sleep(0.5)
+            await driver.send("Input.dispatchKeyEvent", {
+                "type": "keyDown", "key": "Enter", "code": "Enter",
+                "windowsVirtualKeyCode": 13,
+            })
+            await driver.send("Input.dispatchKeyEvent", {
+                "type": "keyUp", "key": "Enter", "code": "Enter",
+                "windowsVirtualKeyCode": 13,
+            })
+            await asyncio.sleep(12)
+
+            labels = await driver.labels()
+            joined = " ".join(labels)
+            print(f"\n===== AI 页（家庭人数 5 人）=====")
+            print(f"  输入框聚焦：{typed}")
+            for token in ("5 人用餐", "4 人用餐", "3 人用餐", "5 人", "3人份",
+                          "5人份", "人份"):
+                present = token in joined
+                print(f"  {'[ok]' if present else '  '} 出现「{token}」：{present}")
+            people_bits = [t for t in labels if "人" in t]
+            print("  所有含「人」的文本：")
+            for bit in people_bits[:10]:
+                print(f"    · {bit[:120]}")
 
             # ---- 食材详情：应季指数和「适合做这些菜」都必须是真的 ----
             if not await driver.click_label("食材"):

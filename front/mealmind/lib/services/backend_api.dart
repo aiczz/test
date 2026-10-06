@@ -718,6 +718,8 @@ class BackendApi {
     time: json['duration_estimated'] == true
         ? '时长不详'
         : '约${json['duration_minutes'] ?? 0}分钟',
+    // 份量：后端在清洗库上会返回 null（dishes 表没有份量列）——
+    // 这时留空串，界面按「没有这一项」处理，不编一个「3人份」出来。
     people: json['servings'] as String? ?? '',
     tags: ((json['tags'] as List?) ?? const <dynamic>[])
         .map((e) => e.toString())

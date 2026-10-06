@@ -255,3 +255,36 @@ def test_unknown_tag_filters_everything_out():
     with Session(_compact_engine()) as session:
         _, total = recipe_service.list_recipes(session, tag="不存在的分类", page=1, page_size=50)
         assert total == 0
+
+
+def test_servings_are_not_fabricated_on_the_compact_catalog():
+    """★ 清洗库的菜谱不能报一个编出来的「份量」。
+
+    用户报过：「改了家庭人数之后，AI 那一页所有人数相关的还是没变化」。
+    查下来就是这里 —— `dishes` 表**没有份量列**，而
+    `RecipeRecord.servings` 默认写死 3，于是每一道菜的卡片上都是「3人份」。
+    那个 3 是个常量，改家庭人数它当然一动不动。
+
+    现在没有数据就不给值（null），前端按「没有这一项」处理。
+    """
+    with Session(_compact_engine()) as session:
+        items, total = recipe_service.list_recipes(session, page=1, page_size=50)
+        assert total > 0
+        assert {item.servings for item in items} == {None}, (
+            "清洗库没有份量列，就不该报一个数字"
+        )
+
+
+def test_duration_flag_is_not_a_fabricated_number():
+    """清洗库没有时长列：有依据的才给数字，没依据的必须标成估算。
+
+    `_compact_engine` 里三道菜的做法都写了时间（「煮 10 分钟」这种），
+    所以这里应该都是「有依据」；关键是**这个标记要真的传出来**，
+    前端才能决定显不显示数字。
+    """
+    with Session(_compact_engine()) as session:
+        items, _ = recipe_service.list_recipes(session, page=1, page_size=50)
+        for item in items:
+            if item.duration_estimated:
+                # 估算的一律是兜底的 30 分钟 —— 前端据此显示「时长不详」
+                assert item.duration_minutes == 30, item.name

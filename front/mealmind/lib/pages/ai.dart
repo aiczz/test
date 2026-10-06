@@ -578,7 +578,10 @@ class _MiniRecipeCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${recipe.desc} · ${recipe.time} · ${recipe.people}',
+                  [
+                    recipe.desc,
+                    recipe.metaLine,
+                  ].where((part) => part.isNotEmpty).join(' · '),
                   style: const TextStyle(fontSize: 11.5, color: muted),
                 ),
                 const SizedBox(height: 10),

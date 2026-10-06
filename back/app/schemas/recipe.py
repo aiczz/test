@@ -31,8 +31,10 @@ class RecipeBrief(BaseModel):
     # （「小火炖 30 分钟」）；抽不到就只能估。界面据此显示「约 30 分钟」，
     # 不把一个估出来的数字说得像真的。
     duration_estimated: bool = False
-    # 响应里是文案（"3人份"），不是数字
-    servings: str
+    # 响应里是文案（"3人份"），不是数字。
+    # ⚠️ 可能是 null：清洗库的 dishes 没有份量列，这时前端不要显示这一项，
+    #    而不是拿一个默认的「3人份」顶上（那会让用户以为改了人数没生效）。
+    servings: str | None = None
     difficulty: str
     tags: list[str] = []
 

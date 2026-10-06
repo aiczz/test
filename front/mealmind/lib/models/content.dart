@@ -80,8 +80,17 @@ class Recipe {
   final String name;
   final String image;
   final String desc;
-  final String time; // 如「60分钟」
-  final String people; // 如「2-3人」
+
+  /// 烹饪时长文案。后端在**没有依据**时给「时长不详」而不是一个编的数字。
+  final String time;
+
+  /// 份量，如「3人份」。
+  ///
+  /// ⚠️ 可能是**空字符串**：清洗库的 `dishes` 表没有份量列，后端这时返回 null。
+  ///    空的时候界面必须整项不显示，不能留一个「·」或者拿「3人份」顶上 ——
+  ///    那正是用户报的「改了家庭人数，AI 页的人份还是 3」的来源
+  ///    （那个 3 是个常量，永远不变）。
+  final String people;
   final List<String> tags;
 
   // ---- 详情页字段（列表接口可能不返回，所以给了默认值）----
@@ -114,6 +123,13 @@ class Recipe {
     steps: _strList(j['steps']),
     difficulty: j['difficulty'] as String? ?? '简单',
   );
+
+  /// 一行元信息：「时长 · 份量」。
+  ///
+  /// 拼接时**丢掉空的那一项**，否则会留下一个孤零零的「· 」，
+  /// 或者更难看的「约15分钟 · 」（份量没有数据时）。
+  String get metaLine =>
+      [time, people].where((part) => part.isNotEmpty).join(' · ');
 }
 
 /// 菜谱分类筛选区里的一个分类。

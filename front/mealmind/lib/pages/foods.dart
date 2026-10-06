@@ -1311,7 +1311,7 @@ class _FoodRecipeSuggestionsState extends State<_FoodRecipeSuggestions> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${recipe.time} · ${recipe.people}',
+                        recipe.metaLine,
                         style: const TextStyle(fontSize: 12, color: muted),
                       ),
                     ],
