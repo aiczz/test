@@ -153,7 +153,7 @@ curl -s http://127.0.0.1:8000/api/health          # {"status":"ok"}
 # 自检：接口通不通（走 nginx）
 curl -s http://127.0.0.1/api/health
 
-# 自检：算法 + AI 是否达到设计要求（29 项断言）
+# 自检：算法 + AI 是否达到设计要求（49 项断言）
 cd /opt/test/back && python3 scripts/verify_ai_features.py --base http://127.0.0.1
 ```
 
@@ -183,3 +183,7 @@ cd /opt/test/back && python3 scripts/verify_ai_features.py --base http://127.0.0
 - **`WorkingDirectory` 必须设对** → 否则 `sqlite:///./shishi.db` 会落到别处，
   表现为「每次重启数据都空」
 - **前端产物必须是 same-origin 构建** → CI 里已去掉 `--dart-define=API_BASE`
+- **给已存在的表加列，`create_all` 是不管的** → 数据库建好之后再给模型加字段，
+  新列永远不会出现（表现是「保存了偏好，一查就报 `no such column`」）。
+  现在启动时按 `back/app/core/database.py` 的 `_ADDED_COLUMNS` 增量
+  `ALTER TABLE` 补上（幂等，不丢数据）。**以后再加列，记得也写进那张表。**

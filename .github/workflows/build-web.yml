@@ -76,14 +76,20 @@ jobs:
           tag_name: web-latest
           name: "食时 · 网页版产物（自托管用）"
           body: |
-            给自托管（阿里云服务器）用的静态站产物，已内置后端地址
-            `http://8.148.69.56:8000`，且以根路径 `/` 为 base-href。
+            给自托管（阿里云服务器）用的静态站产物。
+
+            **不含任何后端 IP**：接口走同源，由服务器上的 nginx 把 `/api/`
+            反代到后端（见 `deploy/nginx-shishi.conf`）。所以换 IP、换域名、
+            上 HTTPS 都不需要重新构建这份产物。
+            以根路径 `/` 为 base-href。
 
             服务器上解压：
             ```
             mkdir -p /opt/web && cd /opt/web
             curl -L https://github.com/aiczz/test/releases/download/web-latest/web-build.tar.gz | tar xz
             ```
+            （正常不用手动做 —— `deploy/deploy.sh` 会自动下载。）
+
             提交：`${{ github.sha }}`
           files: web-build.tar.gz
           # 不要设成 latest —— 那会和 APK 那个 release 抢「最新」标记
