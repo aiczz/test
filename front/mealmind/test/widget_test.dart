@@ -6,10 +6,13 @@ import 'package:mealmind/main.dart';
 import 'package:mealmind/models/content.dart';
 import 'package:mealmind/pages/admin.dart';
 import 'package:mealmind/pages/foods.dart';
+import 'package:mealmind/pages/home.dart';
 import 'package:mealmind/pages/login.dart';
+import 'package:mealmind/pages/profile.dart';
 import 'package:mealmind/services/api_config.dart';
 import 'package:mealmind/services/auth_store.dart';
 import 'package:mealmind/services/content_store.dart';
+import 'package:mealmind/state/app_state.dart';
 import 'package:mealmind/state/today_menu.dart';
 
 void main() {
@@ -142,9 +145,7 @@ void main() {
     await AuthStore.instance.logout();
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: LoginPage(gateMode: true, onAuthenticated: () {}),
-      ),
+      MaterialApp(home: LoginPage(gateMode: true, onAuthenticated: () {})),
     );
 
     expect(find.text('创建你的账号'), findsOneWidget);
@@ -154,7 +155,10 @@ void main() {
     expect(find.text('邮箱'), findsOneWidget);
     expect(find.text('手机号'), findsNothing);
 
-    await tester.enterText(find.byType(TextFormField).at(0), 'cook@example.com');
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'cook@example.com',
+    );
     await tester.tap(find.text('获取验证码'));
     await tester.pump();
 
@@ -433,5 +437,129 @@ void main() {
     // （此刻首页停在底部，页头「今天吃什么」已经滚出视口了）
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('本周菜单'), findsOneWidget);
+  });
+
+  testWidgets('改了家庭人数并保存后，首页和 AI 页都跟着变，而且真的存住了', (tester) async {
+    // 这个用例锁的是用户报的问题：
+    //   「家庭人数改了之后，其他界面的家庭人数还是停留在原来的 3 人，
+    //     包括 AI 那一页做菜的」
+    //
+    // 根因是家庭档案**只活在前端内存里** —— 前端从来没调过 /api/profile，
+    // 也没有本机缓存，刷新一下连「我的」页自己都变回 3 人。
+    // 现在三层都写：内存（页面之间立刻同步）+ 本机缓存 + 账号。
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await AppState.instance.resetProfile();
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(ShishiApp(key: UniqueKey()));
+
+    // ---- 在「我的」页把人数从 3 改成 5 ----
+    await tester.tap(find.text('我的'));
+    await tester.pumpAndSettle();
+
+    // ⚠️ 「家庭人数」那一行在页面下半部分，而 ListView 是惰性建的 ——
+    //    不先滚下去，finder 连元素都找不到（不是「找不到按钮」，
+    //    是「根本没建出来」）。用 scrollUntilVisible 边滚边找。
+    //
+    // ⚠️ 传给 scrollUntilVisible 的 finder **不能带 .first**：
+    //    它在循环里会去 evaluate()，而 `.first` 在没匹配时是直接抛
+    //    「Bad state: No element」，会盖掉真正的报错。
+    final plusButton = find.descendant(
+      of: find.byType(ProfilePage),
+      matching: find.widgetWithIcon(IconButton, Icons.add),
+    );
+    final profileScroll = find
+        .descendant(
+          of: find.byType(ProfilePage),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(plusButton, 300, scrollable: profileScroll);
+    await tester.pumpAndSettle();
+    expect(plusButton, findsWidgets, reason: '「我的」页里没找到家庭人数的 + 按钮');
+    await tester.tap(plusButton.first);
+    await tester.pumpAndSettle();
+    await tester.tap(plusButton.first);
+    await tester.pumpAndSettle();
+    expect(find.text('5 人'), findsWidgets, reason: '点了两次 +，应该显示 5 人');
+
+    // ---- 保存 ----
+    final saveButton = find.text('保存家庭档案');
+    await tester.scrollUntilVisible(saveButton, 300, scrollable: profileScroll);
+    await tester.pumpAndSettle();
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+
+    // 存下来了。离线环境下后端调不通，所以如实说「保存在本机」，
+    // 而不是假装「已同步到账号」。
+    expect(AppState.instance.profile.people, 5);
+    expect(find.textContaining('已保存在本机'), findsOneWidget);
+
+    // ⚠️ 等这条 SnackBar 自己消失再做别的。
+    //    它是 floating 的，浮在屏幕底部 —— 后面的步骤要点 AI 页底部的
+    //    发送按钮，SnackBar 还挂在那里就会把点击吃掉，表现成
+    //    「发了消息但什么也没发生」，很难查。
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    // ---- 首页跟着变 ----
+    await tester.tap(find.text('首页'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byType(HomePage), matching: find.text('5 人')),
+      findsWidgets,
+      reason: '首页的家庭约束条没跟着档案更新',
+    );
+
+    // ---- AI 页做菜时用的也是新人数 ----
+    //
+    // ⚠️ AI 页**平时不显示**家庭人数（它只在提问时把约束带进请求），
+    //    所以这里不能直接 find.text('5 人')。改成真的问一句，
+    //    再看它走的那条本地轨迹 —— 那条轨迹是 `localTraceFor(profile)`
+    //    用同一份 AppState 生成的，人数不对这里就会露出来。
+    await tester.tap(find.text('AI'));
+    await tester.pumpAndSettle();
+
+    final input = find.byType(TextField).last;
+    await tester.enterText(input, '今晚吃什么');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    // 轨迹是一步一步「长」出来的（每步 380ms），而且还要等一次网络失败。
+    // 只 pumpAndSettle 会在轨迹还没画完时就返回，断言自然是空的。
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    final aiText = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((t) => t.data ?? '')
+        .join(' | ');
+    expect(
+      aiText.contains('5 人'),
+      isTrue,
+      reason: 'AI 页用的还是旧的家庭人数（轨迹里应出现「5 人」）',
+    );
+
+    // ---- 真的存住了：本机缓存里有，重开 App 也能恢复 ----
+    final prefs = await SharedPreferences.getInstance();
+    final cached = prefs.getString('family_profile');
+    expect(cached, isNotNull, reason: '家庭档案没有写进本机缓存，刷新就丢');
+    expect(cached, contains('"people":5'));
+
+    // 模拟「重启 App」：只清内存（缓存保留），再从缓存恢复。
+    // ⚠️ 这里不能用 resetProfile() —— 它会把默认值**写进缓存**，
+    //    等于测试自己把证据销毁了。
+    AppState.instance.debugResetMemory();
+    await tester.pumpAndSettle();
+    expect(AppState.instance.profile.people, 3, reason: '内存应该被清成默认值');
+    await AppState.instance.load();
+    expect(
+      AppState.instance.profile.people,
+      5,
+      reason: '重启后没能从本机缓存恢复，用户会以为设置丢了',
+    );
+
+    // 收尾：别把这份档案留给后面的用例
+    AppState.instance.debugResetMemory();
+    await tester.pumpAndSettle();
   });
 }

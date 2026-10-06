@@ -58,15 +58,13 @@ const cardShadow = <BoxShadow>[
 
 /// 白卡片：白底 + 1px 边线 + 20 圆角 + 柔和阴影
 BoxDecoration cardDeco({double radius = rCard}) => BoxDecoration(
-      color: Colors.white,
-      border: Border.all(color: line),
-      borderRadius: BorderRadius.circular(radius),
-      boxShadow: cardShadow,
-    );
+  color: Colors.white,
+  border: Border.all(color: line),
+  borderRadius: BorderRadius.circular(radius),
+  boxShadow: cardShadow,
+);
 
 /// 浅橙标签（默认）。
 /// 需要「当季 / 新鲜」这类绿色语义时，显式传 `bg: green100`。
-BoxDecoration tagDeco({Color bg = orange100}) => BoxDecoration(
-      color: bg,
-      borderRadius: BorderRadius.circular(rTag),
-    );
+BoxDecoration tagDeco({Color bg = orange100}) =>
+    BoxDecoration(color: bg, borderRadius: BorderRadius.circular(rTag));

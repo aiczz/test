@@ -6,7 +6,7 @@ SQLite 与 PostgreSQL 的差异只在这一层处理，上层代码不感知。
 from collections.abc import Generator
 from weakref import WeakKeyDictionary
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -81,8 +81,45 @@ def uses_compact_catalog(bind: Engine | None = None) -> bool:
     return complete
 
 
+# 增量列：表已经存在时，`create_all` 不会补列，缺的列要在启动时 ALTER 上去。
+#
+# 【为什么需要这个】
+# 家庭档案新增了 low_sodium / cook_minutes / tools / diet_preferences 四列。
+# 开发机和服务器上都已经有一个建好表的 shishi.db 了，光靠 create_all
+# 新列永远不会出现 —— 于是「保存了偏好，一查就报 no such column」。
+#
+# 只做 `ADD COLUMN`（幂等、不丢数据），不做改类型/删列。
+# 上 PostgreSQL 后这一小段应该换成 Alembic（说明书 §25）。
+_ADDED_COLUMNS: dict[str, dict[str, str]] = {
+    "user_preferences": {
+        "diet_preferences": "JSON",
+        "tools": "JSON",
+        "low_sodium": "BOOLEAN DEFAULT 1",
+        "cook_minutes": "INTEGER DEFAULT 45",
+    },
+}
+
+
+def _ensure_columns() -> None:
+    """把 `_ADDED_COLUMNS` 里声明的列补到已有表上（幂等）。"""
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    for table, columns in _ADDED_COLUMNS.items():
+        if table not in existing_tables:
+            continue  # 表还不存在，create_all 会带着全部列建出来
+        present = {column["name"] for column in inspector.get_columns(table)}
+        missing = {name: ddl for name, ddl in columns.items() if name not in present}
+        if not missing:
+            continue
+        with engine.begin() as connection:
+            for name, ddl in missing.items():
+                connection.execute(
+                    text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+                )
+
+
 def create_db_and_tables() -> None:
-    """建表。
+    """建表 + 补列。
 
     SQLite 阶段直接用 `create_all`（幂等）；
     切到 PostgreSQL 后应改用 Alembic 迁移（说明书 §25），
@@ -102,6 +139,8 @@ def create_db_and_tables() -> None:
         SQLModel.metadata.create_all(engine, tables=tables)
     else:
         SQLModel.metadata.create_all(engine)
+
+    _ensure_columns()
 
 
 def get_session() -> Generator[Session, None, None]:

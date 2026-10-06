@@ -53,13 +53,13 @@ class _Item {
   final String? fallbackReason;
 
   _Item.user(this.text)
-      : kind = _Kind.user,
-        steps = const <AgentStep>[],
-        running = false,
-        recipes = const <Recipe>[],
-        localFallback = false,
-        fallbackReason = null,
-        fromBackend = true; // 用户自己的话无所谓降级
+    : kind = _Kind.user,
+      steps = const <AgentStep>[],
+      running = false,
+      recipes = const <Recipe>[],
+      localFallback = false,
+      fallbackReason = null,
+      fromBackend = true; // 用户自己的话无所谓降级
 
   /// 这条回复附带的推荐菜（后端会给，最多 3 道）。
   ///
@@ -74,17 +74,17 @@ class _Item {
     this.recipes = const <Recipe>[],
     this.localFallback = false,
     this.fallbackReason,
-  })  : kind = _Kind.ai,
-        steps = const <AgentStep>[],
-        running = false,
-        fromBackend = true;
+  }) : kind = _Kind.ai,
+       steps = const <AgentStep>[],
+       running = false,
+       fromBackend = true;
 
   _Item.trace(this.steps, this.running, {this.fromBackend = false})
-      : kind = _Kind.trace,
-        text = '',
-        recipes = const <Recipe>[],
-        localFallback = false,
-        fallbackReason = null;
+    : kind = _Kind.trace,
+      text = '',
+      recipes = const <Recipe>[],
+      localFallback = false,
+      fallbackReason = null;
 
   /// 轨迹用：这份轨迹是不是后端返回的真实轨迹
   final bool fromBackend;
@@ -94,11 +94,7 @@ class AiPage extends StatefulWidget {
   final String? initialPrompt;
   final int requestToken;
 
-  const AiPage({
-    super.key,
-    this.initialPrompt,
-    this.requestToken = 0,
-  });
+  const AiPage({super.key, this.initialPrompt, this.requestToken = 0});
 
   @override
   State<AiPage> createState() => _AiPageState();
@@ -196,8 +192,10 @@ class _AiPageState extends State<AiPage> {
       if (!mounted) return;
       setState(() {
         growing.add(step);
-        _items[_items.length - 1] =
-            _Item.trace(List<AgentStep>.from(growing), true);
+        _items[_items.length - 1] = _Item.trace(
+          List<AgentStep>.from(growing),
+          true,
+        );
       });
       _scrollToBottom();
     }
@@ -363,8 +361,11 @@ class _Header extends StatelessWidget {
                   color: Colors.white.withAlpha(46),
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: const Icon(Icons.auto_awesome,
-                    color: Colors.white, size: 19),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: Colors.white,
+                  size: 19,
+                ),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -382,7 +383,10 @@ class _Header extends StatelessWidget {
                     SizedBox(height: 3),
                     Text(
                       '我会结合时令、人数和家中食材给你建议',
-                      style: TextStyle(fontSize: 11.5, color: Color(0xCCFFFFFF)),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Color(0xCCFFFFFF),
+                      ),
                     ),
                   ],
                 ),
@@ -420,7 +424,9 @@ class _Header extends StatelessWidget {
                   onTap: () => onPrompt(p),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withAlpha(31),
                       border: Border.all(color: Colors.white.withAlpha(89)),
@@ -497,11 +503,7 @@ class _ItemView extends StatelessWidget {
               children: [
                 Text(
                   item.text,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: ink,
-                    height: 1.7,
-                  ),
+                  style: const TextStyle(fontSize: 14, color: ink, height: 1.7),
                 ),
                 if (item.localFallback) ...[
                   const SizedBox(height: 6),
@@ -560,7 +562,8 @@ class _MiniRecipeCard extends StatelessWidget {
             height: 110,
             width: double.infinity,
             child: DishPhoto(asset: recipe.image),
-          ),          Padding(
+          ),
+          Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -642,8 +645,7 @@ class _TraceCard extends StatelessWidget {
     this.isBackend = false,
   });
 
-  int get _totalMs =>
-      steps.fold<int>(0, (sum, s) => sum + s.ms);
+  int get _totalMs => steps.fold<int>(0, (sum, s) => sum + s.ms);
 
   @override
   Widget build(BuildContext context) {
@@ -681,9 +683,7 @@ class _TraceCard extends StatelessWidget {
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  running
-                      ? '协作中…'
-                      : (isBackend ? '后端真实轨迹' : '本地演示轨迹'),
+                  running ? '协作中…' : (isBackend ? '后端真实轨迹' : '本地演示轨迹'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -706,10 +706,7 @@ class _TraceCard extends StatelessWidget {
 
           // ---- 每一步 ----
           for (var i = 0; i < steps.length; i++)
-            _TraceRow(
-              step: steps[i],
-              last: i == steps.length - 1 && !running,
-            ),
+            _TraceRow(step: steps[i], last: i == steps.length - 1 && !running),
 
           if (running)
             const Padding(
@@ -740,8 +737,7 @@ class _TraceRow extends StatelessWidget {
     final vetoed = step.status == 'veto';
     final info = step.status == 'info';
 
-    final Color dotColor =
-        vetoed ? orange : (info ? muted : orange700);
+    final Color dotColor = vetoed ? orange : (info ? muted : orange700);
     final IconData dotIcon = vetoed
         ? Icons.block
         : (info ? Icons.info_outline : Icons.check);
@@ -764,9 +760,7 @@ class _TraceRow extends StatelessWidget {
                 child: Icon(dotIcon, size: 10, color: dotColor),
               ),
               if (!last)
-                Expanded(
-                  child: Container(width: 1.2, color: orange100),
-                ),
+                Expanded(child: Container(width: 1.2, color: orange100)),
             ],
           ),
           const SizedBox(width: 10),
@@ -791,8 +785,7 @@ class _TraceRow extends StatelessWidget {
                       ),
                       Text(
                         '${step.ms} ms',
-                        style: const TextStyle(
-                            fontSize: 10, color: muted),
+                        style: const TextStyle(fontSize: 10, color: muted),
                       ),
                     ],
                   ),
@@ -854,7 +847,9 @@ class _InputBar extends StatelessWidget {
                     filled: true,
                     fillColor: orange50,
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(999),
                       borderSide: BorderSide.none,
@@ -872,8 +867,11 @@ class _InputBar extends StatelessWidget {
                   child: const SizedBox(
                     width: 44,
                     height: 44,
-                    child: Icon(Icons.send_rounded,
-                        color: Colors.white, size: 19),
+                    child: Icon(
+                      Icons.send_rounded,
+                      color: Colors.white,
+                      size: 19,
+                    ),
                   ),
                 ),
               ),

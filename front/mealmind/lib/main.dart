@@ -10,6 +10,7 @@ import 'pages/recipes.dart';
 import 'services/api_config.dart';
 import 'services/auth_store.dart';
 import 'services/content_store.dart';
+import 'state/app_state.dart';
 import 'state/home_feed.dart';
 import 'theme.dart';
 
@@ -50,6 +51,11 @@ class _BootstrapState extends State<_Bootstrap> {
     }
 
     await ContentStore.instance.load();
+
+    // ★ 家庭档案：先读本机缓存，再从账号拉一次。
+    //   必须放在 probe 之后（要知道在不在线、登没登录），
+    //   也必须在首页推荐之前 —— 推荐是按这套约束算的。
+    await AppState.instance.load();
 
     // ★ 首页推荐流：后端按「时令 + 天气 + 营养」打分筛候选，
     //   再每天每地区问一次大模型。拿到就用，拿不到首页自动退回本地规则。

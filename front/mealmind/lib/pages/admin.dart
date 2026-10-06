@@ -14,9 +14,9 @@ const _softGold = Color(0xFFFFF3DA);
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
 
-  static Future<void> open(BuildContext context) => Navigator.of(context).push(
-    MaterialPageRoute<void>(builder: (_) => const AdminPage()),
-  );
+  static Future<void> open(BuildContext context) =>
+      Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => const AdminPage()));
 
   @override
   State<AdminPage> createState() => _AdminPageState();
@@ -207,9 +207,11 @@ class _AdminPageState extends State<AdminPage> {
     } on DioException catch (error) {
       if (!mounted) return;
       final body = error.response?.data;
-      _toast(body is Map && body['detail'] is String
-          ? body['detail'] as String
-          : '操作失败，请稍后再试');
+      _toast(
+        body is Map && body['detail'] is String
+            ? body['detail'] as String
+            : '操作失败，请稍后再试',
+      );
     } finally {
       if (mounted) setState(() => _busyUserId = null);
     }
@@ -273,10 +275,7 @@ class _AdminPageState extends State<AdminPage> {
                   '食时管理台',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
                 ),
-                Text(
-                  '运营与账号安全',
-                  style: TextStyle(fontSize: 9.5, color: muted),
-                ),
+                Text('运营与账号安全', style: TextStyle(fontSize: 9.5, color: muted)),
               ],
             ),
           ],
@@ -369,7 +368,9 @@ class _AdminPageState extends State<AdminPage> {
                   duration: const Duration(milliseconds: 180),
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
-                    color: _section == index ? Colors.white : Colors.transparent,
+                    color: _section == index
+                        ? Colors.white
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: _section == index
                         ? const <BoxShadow>[
@@ -501,7 +502,10 @@ class _AdminPageState extends State<AdminPage> {
               ),
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0x22FFFFFF),
                   borderRadius: BorderRadius.circular(10),
@@ -510,7 +514,11 @@ class _AdminPageState extends State<AdminPage> {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Icon(Icons.check_circle_rounded, color: Colors.white, size: 14),
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
                     SizedBox(width: 6),
                     Text(
                       '账号服务运行正常',
@@ -535,7 +543,11 @@ class _AdminPageState extends State<AdminPage> {
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: const Color(0x33FFFFFF)),
           ),
-          child: const Icon(Icons.insights_rounded, color: Colors.white, size: 36),
+          child: const Icon(
+            Icons.insights_rounded,
+            color: Colors.white,
+            size: 36,
+          ),
         ),
       ],
     ),
@@ -545,7 +557,13 @@ class _AdminPageState extends State<AdminPage> {
     final cells = <(String, int, IconData, Color, Color)>[
       ('全部用户', stats.totalUsers, Icons.groups_2_rounded, orange700, orange100),
       ('今日活跃', stats.activeUsersToday, Icons.bolt_rounded, _blue, _softBlue),
-      ('今日新增', stats.newUsersToday, Icons.person_add_alt_1_rounded, _gold, _softGold),
+      (
+        '今日新增',
+        stats.newUsersToday,
+        Icons.person_add_alt_1_rounded,
+        _gold,
+        _softGold,
+      ),
       ('受限账号', stats.bannedUsers, Icons.block_rounded, orange, orange100),
     ];
     return LayoutBuilder(
@@ -588,7 +606,10 @@ class _AdminPageState extends State<AdminPage> {
                             ),
                             Text(
                               item.$1,
-                              style: const TextStyle(color: muted, fontSize: 10.5),
+                              style: const TextStyle(
+                                color: muted,
+                                fontSize: 10.5,
+                              ),
                             ),
                           ],
                         ),
@@ -639,7 +660,10 @@ class _AdminPageState extends State<AdminPage> {
                 ),
               ),
               const SizedBox(height: 3),
-              Text(description, style: const TextStyle(color: muted, fontSize: 10.5)),
+              Text(
+                description,
+                style: const TextStyle(color: muted, fontSize: 10.5),
+              ),
             ],
           ),
         ),
@@ -690,7 +714,10 @@ class _AdminPageState extends State<AdminPage> {
               ),
               const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 13,
+                ),
                 decoration: cardDeco(radius: 14),
                 child: Text(
                   '${users.length} 位',
@@ -709,7 +736,9 @@ class _AdminPageState extends State<AdminPage> {
             color: orange700,
             onRefresh: _load,
             child: users.isEmpty
-                ? ListView(children: const <Widget>[_EmptyState(text: '没有匹配的用户')])
+                ? ListView(
+                    children: const <Widget>[_EmptyState(text: '没有匹配的用户')],
+                  )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
                     itemCount: users.length,
@@ -731,12 +760,16 @@ class _AdminPageState extends State<AdminPage> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: user.isAdmin ? orange700 : (user.isBanned ? orange100 : green100),
+            color: user.isAdmin
+                ? orange700
+                : (user.isBanned ? orange100 : green100),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Icon(
             user.isAdmin ? Icons.shield_rounded : Icons.person_rounded,
-            color: user.isAdmin ? Colors.white : (user.isBanned ? orange : green700),
+            color: user.isAdmin
+                ? Colors.white
+                : (user.isBanned ? orange : green700),
             size: 21,
           ),
         ),
@@ -770,7 +803,9 @@ class _AdminPageState extends State<AdminPage> {
               ),
               const SizedBox(height: 3),
               Text(
-                user.lastLoginAt == null ? '尚未登录' : '最近活动 ${_fmt(user.lastLoginAt)}',
+                user.lastLoginAt == null
+                    ? '尚未登录'
+                    : '最近活动 ${_fmt(user.lastLoginAt)}',
                 style: const TextStyle(color: muted, fontSize: 9.5),
               ),
             ],
@@ -781,7 +816,10 @@ class _AdminPageState extends State<AdminPage> {
               ? const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: orange700),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: orange700,
+                  ),
                 )
               : PopupMenuButton<String>(
                   tooltip: '账号操作',
@@ -792,7 +830,9 @@ class _AdminPageState extends State<AdminPage> {
                       child: Row(
                         children: <Widget>[
                           Icon(
-                            user.isBanned ? Icons.lock_open_rounded : Icons.block_rounded,
+                            user.isBanned
+                                ? Icons.lock_open_rounded
+                                : Icons.block_rounded,
                             size: 18,
                             color: user.isBanned ? green700 : orange,
                           ),
@@ -808,7 +848,9 @@ class _AdminPageState extends State<AdminPage> {
   );
 
   Widget _logsView() {
-    final logs = _onlyFailed ? _logs.where((log) => !log.success).toList() : _logs;
+    final logs = _onlyFailed
+        ? _logs.where((log) => !log.success).toList()
+        : _logs;
     return Column(
       children: <Widget>[
         Padding(
@@ -855,7 +897,9 @@ class _AdminPageState extends State<AdminPage> {
             color: orange700,
             onRefresh: _load,
             child: logs.isEmpty
-                ? ListView(children: const <Widget>[_EmptyState(text: '没有符合条件的登录记录')])
+                ? ListView(
+                    children: const <Widget>[_EmptyState(text: '没有符合条件的登录记录')],
+                  )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
                     itemCount: logs.length,
@@ -909,7 +953,10 @@ class _AdminPageState extends State<AdminPage> {
               ),
               if (!compact && log.detail != null) ...<Widget>[
                 const SizedBox(height: 4),
-                Text(log.detail!, style: const TextStyle(color: orange, fontSize: 10)),
+                Text(
+                  log.detail!,
+                  style: const TextStyle(color: orange, fontSize: 10),
+                ),
               ],
             ],
           ),
@@ -928,7 +975,11 @@ class _AdminPageState extends State<AdminPage> {
     children: <Widget>[
       Text(
         title,
-        style: const TextStyle(color: ink, fontWeight: FontWeight.w900, fontSize: 15),
+        style: const TextStyle(
+          color: ink,
+          fontWeight: FontWeight.w900,
+          fontSize: 15,
+        ),
       ),
       const SizedBox(width: 8),
       Text(subtitle, style: const TextStyle(color: muted, fontSize: 10)),
@@ -944,7 +995,11 @@ class _AdminPageState extends State<AdminPage> {
     ),
     child: Text(
       text,
-      style: TextStyle(color: foreground, fontSize: 9, fontWeight: FontWeight.w800),
+      style: TextStyle(
+        color: foreground,
+        fontSize: 9,
+        fontWeight: FontWeight.w800,
+      ),
     ),
   );
 

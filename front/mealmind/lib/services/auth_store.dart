@@ -336,11 +336,7 @@ class AuthStore extends ChangeNotifier {
   }
 
   /// 邮箱验证码注册。注册成功只建账号，不自动登录。
-  Future<void> registerEmail(
-    String email,
-    String code,
-    String password,
-  ) async {
+  Future<void> registerEmail(String email, String code, String password) async {
     final normalized = _normalizeEmail(email);
     if (!_isEmail(normalized)) {
       throw const AuthException('请输入正确的邮箱地址');

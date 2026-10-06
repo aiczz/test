@@ -45,12 +45,15 @@ final Dio _dio = Dio(
 );
 
 /// 拉取一周（或 N 天）方案
+///
+/// ⚠️ 这里原来还有一个 `budget` 参数（每周饮食预算）。
+///    已删：清洗库里没有任何价格数据，方案里的金额是手写的，按人数缩放
+///    也还是编的。预算这件事整体不做。
 Future<Plan> fetchPlan({
   String userId = 'u01',
   String? week,
   int days = 7,
   int people = 3,
-  double budget = 300,
   bool lowSodium = true,
   List<String> preferences = const <String>[],
   List<String> avoid = const <String>[],
@@ -67,7 +70,6 @@ Future<Plan> fetchPlan({
       base,
       FamilyProfile(
         people: people,
-        budget: budget,
         lowSodium: lowSodium,
         preferences: preferences.toSet(),
         avoid: avoid.toSet(),
@@ -83,7 +85,6 @@ Future<Plan> fetchPlan({
         'week': week,
         'days': days,
         'people': people,
-        'budget': budget,
         'low_sodium': lowSodium,
         'preferences': preferences,
         'avoid': avoid,

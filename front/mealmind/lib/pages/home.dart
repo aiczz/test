@@ -48,9 +48,8 @@ class HomePage extends StatelessWidget {
   /// 底部导航那 5 项是「首页 / 食材 / 菜谱 / AI / 我的」；
   /// 菜单是首页推出去的完整方案，看完返回即可，不占导航位。
   void _openMenu(BuildContext context) {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const MenuPage()),
-    );
+    Navigator.of(context)
+        .push<void>(MaterialPageRoute<void>(builder: (_) => const MenuPage()));
   }
 
   @override
@@ -478,7 +477,11 @@ class _SourceBlock extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 5),
               child: Text(
                 lineText,
-                style: const TextStyle(fontSize: 11.5, color: ink, height: 1.55),
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: ink,
+                  height: 1.55,
+                ),
               ),
             ),
         ],

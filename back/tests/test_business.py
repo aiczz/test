@@ -382,3 +382,101 @@ def test_profile_get_and_partial_update(client):
     assert updated["avoid_foods"] == ["辛辣", "海鲜"]
     # 没传的字段保持原值，不能被 PUT 清空
     assert updated["taste"] == "清淡"
+
+
+def test_family_constraints_persist_and_reload(client):
+    """★ 家庭档案必须真的存住 —— 这是「改了人数其他页面还是 3 人」的根因。
+
+    以前前端从来没调过 /api/profile，档案只活在前端内存里，
+    刷新一次就回到默认的 3 人 / 45 分钟 / 开限钠。
+    现在这几项要能存进去、再读出来还是那些值。
+    """
+    header = _auth(client)
+
+    resp = client.put(
+        "/api/profile",
+        json={
+            "family_size": 5,
+            "cook_minutes": 90,
+            "low_sodium": False,
+            "preferences": ["少油", "高蛋白"],
+            "avoid_foods": ["海鲜", "花生"],
+            "tools": ["烤箱", "空气炸锅"],
+        },
+        headers=header,
+    )
+    assert resp.status_code == 200, resp.text
+
+    # 换一次请求（新的 Session）重新读 —— 读到的必须是存下去的值，
+    # 而不是同一次请求里的内存副本。
+    again = client.get("/api/profile", headers=header).json()
+    assert again["family_size"] == 5
+    assert again["cook_minutes"] == 90
+    assert again["low_sodium"] is False
+    assert again["preferences"] == ["少油", "高蛋白"]
+    assert again["avoid_foods"] == ["海鲜", "花生"]
+    assert again["tools"] == ["烤箱", "空气炸锅"]
+
+
+def test_family_constraints_partial_update_keeps_the_rest(client):
+    """只改一项时，其他约束不能被清掉。
+
+    前端每次保存会把整套档案发上来，但「提醒开关」这类本机设置不会发，
+    所以要确认部分更新是安全的。
+    """
+    header = _auth(client)
+    client.put(
+        "/api/profile",
+        json={"family_size": 4, "cook_minutes": 30, "low_sodium": True},
+        headers=header,
+    )
+
+    # 只改人数
+    after = client.put("/api/profile", json={"family_size": 2}, headers=header).json()
+    assert after["family_size"] == 2
+    assert after["cook_minutes"] == 30, "只改人数不该把烹饪时间清回默认值"
+    assert after["low_sodium"] is True
+
+
+def test_family_constraints_are_bounds_checked(client):
+    """人数和时间范围要被校验，不能存进 0 人或 0 分钟这种值。"""
+    header = _auth(client)
+    assert (
+        client.put("/api/profile", json={"family_size": 0}, headers=header).status_code
+        == 422
+    )
+    assert (
+        client.put("/api/profile", json={"family_size": 99}, headers=header).status_code
+        == 422
+    )
+    assert (
+        client.put("/api/profile", json={"cook_minutes": 1}, headers=header).status_code
+        == 422
+    )
+
+
+def test_constraints_reach_the_ai_trace(client):
+    """约束不只是存下来，还要真的进到推荐链路里（轨迹里能看见）。
+
+    轨迹上那行「读取约束」是给人看的证据：写了 2 人就不该显示 3 人。
+    """
+    header = _auth(client)
+    body = client.post(
+        "/api/ai/chat",
+        json={
+            "message": "今晚吃什么",
+            "people": 2,
+            "cook_minutes": 25,
+            "low_sodium": True,
+            "avoid": ["辛辣"],
+            "preferences": ["清淡"],
+        },
+        headers=header,
+    ).json()
+
+    read = next(step for step in body["trace"] if step["agent"] == "读取约束")
+    assert "2 人用餐" in read["summary"]
+    assert "25 分钟" in read["summary"]
+    assert "限钠" in read["summary"]
+    assert "辛辣" in read["summary"]
+    assert "清淡" in read["summary"]

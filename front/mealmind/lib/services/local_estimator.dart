@@ -10,13 +10,16 @@ import '../state/app_state.dart';
 ///    现在就是通的、可演示的、可验证的。
 ///
 /// 规则（全部确定性，可复现）：
-///    人数    → 采购量与金额按 (人数 / 3) 线性缩放，菜量 servings = 人数
-///    预算    → 换成用户设定值，预算占比由界面重算（超支会变色）
+///    人数    → 采购量按 (人数 / 3) 线性缩放，菜量 servings = 人数
 ///    限钠    → 钠上限 2000mg（限钠）/ 2400mg（不限钠）
 ///    忌口    → 过滤掉 tags 命中忌口词的菜
 ///    厨具/时间 → 本期只记录进约束栏，不做过滤
 ///              （基准数据里还没有「所需厨具」「耗时」这两个字段，
 ///                硬造一个过滤规则反而是假的）
+///
+///    ⚠️ 这里原来还有「预算 → 按人数缩放金额」。
+///       已删：清洗库里没有任何价格数据，基准方案里的 ¥296 之类是手写的，
+///       把编出来的钱按人数乘一遍还是编的。
 ///
 /// 后端 CP-SAT 就绪后：删掉这个文件，把 api.dart 里 useMock 改成 false。
 /// =====================================================================
@@ -28,7 +31,7 @@ const int kBasePeople = 3;
 Plan applyProfile(Plan base, FamilyProfile p) {
   final ratio = p.people / kBasePeople;
 
-  // ---- 1. 采购量与金额按人数缩放 ----
+  // ---- 1. 采购量按人数缩放（只缩数量，不碰价格 —— 没有价格数据）----
   final shopping = base.shoppingList.map((cat) {
     final items = cat.items
         .map(
@@ -36,19 +39,11 @@ Plan applyProfile(Plan base, FamilyProfile p) {
             name: it.name,
             amount: _roundAmount(it.amount * ratio),
             unit: it.unit,
-            price: _round2(it.price * ratio),
-            priceSource: it.priceSource,
           ),
         )
         .toList();
     return ShoppingCategory(category: cat.category, items: items);
   }).toList();
-
-  // 总价按缩放后的明细重算 —— 不做 base.totalCost * ratio，
-  // 因为取整之后两者会有分位差，重算才能保证「合计 = 分项之和」对得上。
-  final totalCost = _round2(
-    shopping.fold<double>(0.0, (sum, cat) => sum + cat.subtotal),
-  );
 
   // ---- 2. 忌口过滤 + 菜量跟随人数 ----
   final days = base.days.map((day) {
@@ -86,12 +81,8 @@ Plan applyProfile(Plan base, FamilyProfile p) {
 
   return Plan(
     week: base.week,
-    budget: p.budget,
-    totalCost: totalCost,
     meta: PlanMeta(
       generatedAt: base.meta.generatedAt,
-      priceDataDate: base.meta.priceDataDate,
-      priceCity: base.meta.priceCity,
       solveMs: 0,
       solver: '本地估算（待接 CP-SAT 求解器）',
     ),
@@ -104,8 +95,6 @@ Plan applyProfile(Plan base, FamilyProfile p) {
 // =====================================================================
 // 取整助手 —— 采购量要取整到「买菜时说得出口」的粒度
 // =====================================================================
-
-double _round2(double v) => (v * 100).roundToDouble() / 100;
 
 /// 500g → 670g 合理；1.5kg → 2.5kg 合理；0.5 盒 → 1 盒合理
 double _roundAmount(double v) {

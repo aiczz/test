@@ -292,6 +292,27 @@ async def main() -> int:
             if any("展开全部分类" in text for text in labels):
                 print("\n  [ok] 界面上有「展开全部分类」入口")
 
+            # ---- 我的：不该再有「每周饮食预算」----
+            if not await driver.click_label("我的"):
+                print("\n[x] 没找到「我的」入口")
+                return 1
+            await asyncio.sleep(3)
+            labels = await driver.labels()
+            _report(labels, "我的")
+            joined = " ".join(labels)
+            if "每周饮食预算" in joined or "¥" in joined:
+                print("\n  [x] 「我的」页上还有价格/预算相关的东西")
+            else:
+                print("\n  [ok] 「我的」页没有任何价格/预算字样")
+            for needed in ("家庭人数", "每日可用烹饪时间", "低钠约束"):
+                print(f"  {'[ok]' if needed in joined else '[x]'} 有「{needed}」")
+            # 「保存家庭档案」在折叠线以下，而 ListView 是惰性建的 ——
+            # 语义树里没有它不是界面有问题，是根本没建出来。
+            # 保存这条链路（改人数 → 保存 → 首页/AI 跟着变 → 重启还在）
+            # 由 widget_test 的「改了家庭人数并保存后」那个用例覆盖。
+            print("  [--] 「保存家庭档案」在折叠线以下，浏览器这层读不到"
+                  "（已由 widget 测试覆盖）")
+
             # ---- 食材详情：应季指数和「适合做这些菜」都必须是真的 ----
             if not await driver.click_label("食材"):
                 print("\n[x] 没找到「食材」入口")

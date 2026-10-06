@@ -20,11 +20,7 @@ class DishPhoto extends StatelessWidget {
 
   final BoxFit fit;
 
-  const DishPhoto({
-    super.key,
-    required this.asset,
-    this.fit = BoxFit.cover,
-  });
+  const DishPhoto({super.key, required this.asset, this.fit = BoxFit.cover});
 
   @override
   Widget build(BuildContext context) {

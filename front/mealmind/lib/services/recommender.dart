@@ -125,9 +125,7 @@ class HomePicks {
       source: feed.source,
       sourceLabel: feed.sourceLabel,
       weatherLine: feed.weatherLine.isEmpty ? null : feed.weatherLine,
-      foodReasons: {
-        for (final pick in feed.foods) pick.item.name: pick.reason,
-      },
+      foodReasons: {for (final pick in feed.foods) pick.item.name: pick.reason},
       recipeReasons: {
         for (final pick in feed.recipes) pick.item.name: pick.reason,
       },
@@ -142,6 +140,7 @@ class HomePicks {
 /// 按家庭档案给首页挑推荐内容。[limit] 是每个区块最多几张卡片。
 HomePicks pickForHome(
   FamilyProfile profile, {
+
   /// 内容数据源。不传就用本地假数据 —— 页面从 ContentStore 传真后端数据进来。
   List<Food>? foodPool,
   List<Recipe>? recipePool,
@@ -174,8 +173,9 @@ List<Food> _visibleFoods(FamilyProfile p, List<Food> source) {
   if (p.avoid.isEmpty) return source;
   final kept = source
       .where(
-        (f) =>
-            !p.avoid.any((a) => f.name.contains(a) || f.tags.any((t) => t.contains(a))),
+        (f) => !p.avoid.any(
+          (a) => f.name.contains(a) || f.tags.any((t) => t.contains(a)),
+        ),
       )
       .toList();
   // 全被筛光时退回原始列表：宁可推一道「可能不合忌口」的，
@@ -276,9 +276,7 @@ List<AgentStep> localTraceFor(FamilyProfile p) {
     ),
     AgentStep(
       agent: '本地规则排序',
-      summary: p.lowSodium
-          ? '口味偏好命中优先，低钠（清淡 / 低脂）加分'
-          : '口味偏好命中优先',
+      summary: p.lowSodium ? '口味偏好命中优先，低钠（清淡 / 低脂）加分' : '口味偏好命中优先',
       ms: 1,
     ),
   ];

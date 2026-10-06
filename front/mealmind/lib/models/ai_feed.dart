@@ -47,20 +47,20 @@ class HomeWeather {
   );
 
   /// 天气图标（按后端给的饮食意图选，而不是按天气码 —— 我们只用得着这个粒度）
-  String get emoji => const {
-    'cold': '❄️',
-    'snow': '🌨️',
-    'hot': '☀️',
-    'rain': '🌧️',
-    'dry': '🍂',
-    'mild': '🌤️',
-  }[kind] ?? '🌤️';
+  String get emoji =>
+      const {
+        'cold': '❄️',
+        'snow': '🌨️',
+        'hot': '☀️',
+        'rain': '🌧️',
+        'dry': '🍂',
+        'mild': '🌤️',
+      }[kind] ??
+      '🌤️';
 
   /// 来源标签。后端如实标注，前端也如实显示 —— 不假装是实时天气。
-  String get sourceLabel => const {
-    'live': '实时天气',
-    'estimated': '按季节估算',
-  }[source] ?? '天气未知';
+  String get sourceLabel =>
+      const {'live': '实时天气', 'estimated': '按季节估算'}[source] ?? '天气未知';
 }
 
 /// 一条「算法 + AI」的动作记录。

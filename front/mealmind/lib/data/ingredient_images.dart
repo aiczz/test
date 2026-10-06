@@ -1,4 +1,4 @@
-﻿// GENERATED FILE -- do not edit by hand.
+// GENERATED FILE -- do not edit by hand.
 // Regenerate with team/front/scripts/make-dart-image-map.ps1
 //
 // Chinese ingredient name (and common alias) -> bundled photo.
@@ -1121,4 +1121,3 @@ const Map<String, String> kIngredientImageByName = <String, String>{
   '多多大蒜': 'assets/images/food-0002-garlic.jpg',
   '姜末少量': 'assets/images/food-0003-ginger.jpg',
 };
-

@@ -57,7 +57,6 @@ class _MenuPageState extends State<MenuPage> {
     final p = AppState.instance.profile;
     return fetchPlan(
       people: p.people,
-      budget: p.budget,
       lowSodium: p.lowSodium,
       preferences: p.preferences.toList(),
       avoid: p.avoid.toList(),
@@ -133,8 +132,8 @@ class _ErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 契约里的 INFEASIBLE（约束冲突）给不一样的提示
-    final isInfeasible = error is PlanApiException &&
-        (error as PlanApiException).isInfeasible;
+    final isInfeasible =
+        error is PlanApiException && (error as PlanApiException).isInfeasible;
 
     return Center(
       child: Padding(
@@ -158,9 +157,7 @@ class _ErrorView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              isInfeasible
-                  ? '预算、营养与忌口要求无法同时满足，\n可以试着放宽一条约束。'
-                  : '$error',
+              isInfeasible ? '预算、营养与忌口要求无法同时满足，\n可以试着放宽一条约束。' : '$error',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: muted, height: 1.6),
             ),
@@ -268,7 +265,7 @@ class _ActiveConstraintsCard extends StatelessWidget {
             children: [
               _Tag(text: '${p.people} 人', bg: orange100, fg: orange700),
               _Tag(
-                text: '预算 ¥${p.budget.toStringAsFixed(0)}',
+                text: '${p.cookMinutes.round()} 分钟内',
                 bg: orange100,
                 fg: orange700,
               ),
@@ -323,10 +320,7 @@ class _WeightSlider extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              const Text(
-                '权衡',
-                style: TextStyle(fontSize: 11, color: muted),
-              ),
+              const Text('权衡', style: TextStyle(fontSize: 11, color: muted)),
               const Spacer(),
               Text(
                 '健康',
@@ -345,12 +339,7 @@ class _WeightSlider extends StatelessWidget {
               thumbColor: orange700,
               overlayColor: const Color(0x1AD2601F),
             ),
-            child: Slider(
-              value: value,
-              min: 0,
-              max: 100,
-              onChanged: onChanged,
-            ),
+            child: Slider(value: value, min: 0, max: 100, onChanged: onChanged),
           ),
           Text(
             '拖动滑杆重新权衡（接上求解器后会实时重解）',
@@ -362,7 +351,12 @@ class _WeightSlider extends StatelessWidget {
   }
 }
 
-// ---- 预算 + 营养汇总 ----
+// ---- 营养汇总 ----
+//
+// ⚠️ 这里原来还有「¥296 / 预算 ¥300 / 98%」和一条预算进度条。
+//    已删：清洗库里没有任何价格数据，那些金额来自手写的
+//    assets/mock/plan.json，却被当成真实采购成本展示出来。
+//    下面的钠摄入是**真数据**（每道菜的 na_mg 按配料克重算出来的），保留。
 
 class _SummaryCard extends StatelessWidget {
   final Plan plan;
@@ -371,7 +365,6 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final over = plan.budgetRatio > 1;
     final sodium = plan.nutrition;
 
     return Container(
@@ -380,56 +373,12 @@ class _SummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '¥${plan.totalCost.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
-                  color: orange900,
-                  height: 1,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '/ 预算 ¥${plan.budget.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 13, color: muted),
-              ),
-              const Spacer(),
-              _Tag(
-                text: '${(plan.budgetRatio * 100).toStringAsFixed(0)}%',
-                bg: over ? orange100 : green100,
-                fg: over ? orange : green700,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: plan.budgetRatio.clamp(0.0, 1.0).toDouble(),
-              minHeight: 7,
-              backgroundColor: line,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                over ? orange : green700,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Divider(height: 1, color: line),
-          const SizedBox(height: 16),
-
           // 钠摄入 —— 慢病硬约束的直观体现
           Row(
             children: [
               const Icon(Icons.water_drop_outlined, size: 15, color: muted),
               const SizedBox(width: 6),
-              const Text(
-                '钠摄入',
-                style: TextStyle(fontSize: 13, color: ink),
-              ),
+              const Text('钠摄入', style: TextStyle(fontSize: 13, color: ink)),
               const Spacer(),
               Text(
                 '${sodium.sodiumMg} / ${sodium.sodiumLimitMg} mg',
@@ -455,9 +404,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            sodium.sodiumRatio > 0.95
-                ? '已接近上限 —— 这是求解器管住的硬约束，不是打分项'
-                : '在限值以内',
+            sodium.sodiumRatio > 0.95 ? '已接近上限 —— 这是求解器管住的硬约束，不是打分项' : '在限值以内',
             style: const TextStyle(fontSize: 11, color: muted),
           ),
 
@@ -471,17 +418,9 @@ class _SummaryCard extends StatelessWidget {
                 unit: 'kcal',
               ),
               const SizedBox(width: 8),
-              _NutriChip(
-                label: '蛋白',
-                value: '${sodium.proteinG}',
-                unit: 'g',
-              ),
+              _NutriChip(label: '蛋白', value: '${sodium.proteinG}', unit: 'g'),
               const SizedBox(width: 8),
-              _NutriChip(
-                label: '蔬菜',
-                value: '${sodium.vegetableG}',
-                unit: 'g',
-              ),
+              _NutriChip(label: '蔬菜', value: '${sodium.vegetableG}', unit: 'g'),
             ],
           ),
         ],
@@ -512,10 +451,7 @@ class _NutriChip extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(
-              label,
-              style: const TextStyle(fontSize: 10, color: muted),
-            ),
+            Text(label, style: const TextStyle(fontSize: 10, color: muted)),
             const SizedBox(height: 4),
             RichText(
               text: TextSpan(
@@ -536,10 +472,7 @@ class _NutriChip extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 2),
-            const Text(
-              '每人每天',
-              style: TextStyle(fontSize: 9, color: muted),
-            ),
+            const Text('每人每天', style: TextStyle(fontSize: 9, color: muted)),
           ],
         ),
       ),
@@ -705,8 +638,10 @@ class _DishTile extends StatelessWidget {
               children: [
                 for (final t in dish.tags)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
                     decoration: tagDeco(),
                     child: Text(
                       t,
@@ -748,7 +683,6 @@ class _MetaFooter extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '价格数据来自 ${m.priceCity} 官方公示（更新于 ${m.priceDataDate}）· '
               '由 ${m.solver} 求解，耗时 ${m.solveMs} ms',
               style: const TextStyle(fontSize: 11, color: muted, height: 1.5),
             ),
@@ -787,7 +721,7 @@ class _ShoppingBar extends StatelessWidget {
                 shape: const StadiumBorder(),
               ),
               child: Text(
-                '查看购物清单 · ${plan.itemCount} 项 · ¥${plan.totalCost.toStringAsFixed(0)}',
+                '查看购物清单 · ${plan.itemCount} 项',
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 15,
@@ -856,7 +790,7 @@ class _ShoppingSheet extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    '${plan.itemCount} 项 · 合计 ¥${plan.totalCost.toStringAsFixed(0)}',
+                    '${plan.itemCount} 项',
                     style: const TextStyle(fontSize: 12, color: muted),
                   ),
                   const Spacer(),
@@ -874,8 +808,6 @@ class _ShoppingSheet extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
                 children: [
                   for (final cat in plan.shoppingList) _CategoryBlock(cat: cat),
-                  const SizedBox(height: 8),
-                  const _PriceLegend(),
                 ],
               ),
             ),
@@ -898,22 +830,13 @@ class _CategoryBlock extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 18, bottom: 8),
-          child: Row(
-            children: [
-              Text(
-                cat.category,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: ink,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '小计 ¥${cat.subtotal.toStringAsFixed(1)}',
-                style: const TextStyle(fontSize: 11, color: muted),
-              ),
-            ],
+          child: Text(
+            cat.category,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: ink,
+            ),
           ),
         ),
         for (final item in cat.items) _ShoppingRow(item: item),
@@ -929,10 +852,6 @@ class _ShoppingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 三级降级：不同来源给不同颜色的标签
-    final bg = _sourceBg(item.priceSource);
-    final fg = _sourceFg(item.priceSource);
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
@@ -940,190 +859,18 @@ class _ShoppingRow extends StatelessWidget {
           const Icon(Icons.check_box_outline_blank, size: 17, color: line),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  style: const TextStyle(fontSize: 13.5, color: ink),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: bg,
-                        borderRadius: BorderRadius.circular(rTag),
-                      ),
-                      child: Text(
-                        item.sourceLabel,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          color: fg,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      '置信度 ${item.confidenceLabel}',
-                      style: const TextStyle(fontSize: 9.5, color: muted),
-                    ),
-                  ],
-                ),
-              ],
+            child: Text(
+              item.name,
+              style: const TextStyle(fontSize: 13.5, color: ink),
             ),
           ),
           Text(
             item.amountLabel,
             style: const TextStyle(fontSize: 12, color: muted),
           ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 54,
-            child: Text(
-              '¥${item.price.toStringAsFixed(1)}',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: ink,
-              ),
-            ),
-          ),
         ],
       ),
     );
-  }
-}
-
-/// 价格来源图例 —— 答辩时这一块能直接讲"我们不假装全国都有精确数据"
-class _PriceLegend extends StatelessWidget {
-  const _PriceLegend();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: orange50,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.info_outline, size: 14, color: muted),
-              const SizedBox(width: 6),
-              const Text(
-                '价格来源说明',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: ink,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const _LegendRow(
-            label: '本地公示价格',
-            desc: '该城市有官方开放数据接口，直接采用',
-            color: orange100,
-            fg: orange700,
-          ),
-          const SizedBox(height: 6),
-          const _LegendRow(
-            label: '周边城市参考价',
-            desc: '本地无接口，用同省城市均价折算',
-            color: orange100,
-            fg: orange,
-          ),
-          const SizedBox(height: 6),
-          const _LegendRow(
-            label: '全国均价估算',
-            desc: '完全无数据，用全国均价 × 城市系数',
-            color: Color(0xFFEFEFEF),
-            fg: muted,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendRow extends StatelessWidget {
-  final String label;
-  final String desc;
-  final Color color;
-  final Color fg;
-
-  const _LegendRow({
-    required this.label,
-    required this.desc,
-    required this.color,
-    required this.fg,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(top: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(rTag),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 9.5,
-              color: fg,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            desc,
-            style: const TextStyle(fontSize: 10.5, color: muted, height: 1.5),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// =====================================================================
-// 价格来源配色（三级降级）
-// =====================================================================
-
-Color _sourceBg(String source) {
-  switch (source) {
-    case 'local':
-      return orange100;
-    case 'nearby':
-      return orange100;
-    default:
-      return const Color(0xFFEFEFEF);
-  }
-}
-
-Color _sourceFg(String source) {
-  switch (source) {
-    case 'local':
-      return orange700;
-    case 'nearby':
-      return orange;
-    default:
-      return muted;
   }
 }
 
@@ -1148,11 +895,7 @@ class _Tag extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: fg,
-        ),
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg),
       ),
     );
   }

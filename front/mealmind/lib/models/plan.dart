@@ -10,27 +10,27 @@ library;
 
 class PlanMeta {
   final String generatedAt; // 生成时间
-  final String priceDataDate; // 价格数据日期（用于显示"数据更新于 X"）
-  final String priceCity; // 价格所属城市
   final int solveMs; // 求解耗时（毫秒）
   final String solver; // 求解器名称
 
   const PlanMeta({
     required this.generatedAt,
-    required this.priceDataDate,
-    required this.priceCity,
     required this.solveMs,
     required this.solver,
   });
 
   factory PlanMeta.fromJson(Map<String, dynamic> j) => PlanMeta(
-        generatedAt: j['generated_at'] as String? ?? '',
-        priceDataDate: j['price_data_date'] as String? ?? '',
-        priceCity: j['price_city'] as String? ?? '',
-        solveMs: (j['solve_ms'] as num?)?.toInt() ?? 0,
-        solver: j['solver'] as String? ?? '',
-      );
+    generatedAt: j['generated_at'] as String? ?? '',
+    solveMs: (j['solve_ms'] as num?)?.toInt() ?? 0,
+    solver: j['solver'] as String? ?? '',
+  );
 }
+
+// ⚠️ 这里原来有 priceDataDate / priceCity 两个字段（价格数据日期 / 城市），
+//    以及下面 ShoppingItem 的 price / priceSource 和 Plan 的 budget / totalCost。
+//    全部删掉了：清洗库里**没有任何价格数据**，这些数字来自手写的
+//    assets/mock/plan.json（¥296 这种），却被当成「本地公示价格（置信度：高）」
+//    展示出来。没有数据支撑的金额不该出现在界面上。
 
 // =====================================================================
 // 营养汇总
@@ -52,17 +52,16 @@ class PlanNutrition {
   });
 
   factory PlanNutrition.fromJson(Map<String, dynamic> j) => PlanNutrition(
-        calories: (j['calories_per_person_per_day'] as num?)?.toInt() ?? 0,
-        proteinG: (j['protein_g_per_person_per_day'] as num?)?.toInt() ?? 0,
-        vegetableG: (j['vegetable_g_per_person_per_day'] as num?)?.toInt() ?? 0,
-        sodiumMg: (j['sodium_mg_per_person_per_day'] as num?)?.toInt() ?? 0,
-        sodiumLimitMg:
-            (j['sodium_limit_mg_per_person_per_day'] as num?)?.toInt() ?? 2000,
-      );
+    calories: (j['calories_per_person_per_day'] as num?)?.toInt() ?? 0,
+    proteinG: (j['protein_g_per_person_per_day'] as num?)?.toInt() ?? 0,
+    vegetableG: (j['vegetable_g_per_person_per_day'] as num?)?.toInt() ?? 0,
+    sodiumMg: (j['sodium_mg_per_person_per_day'] as num?)?.toInt() ?? 0,
+    sodiumLimitMg:
+        (j['sodium_limit_mg_per_person_per_day'] as num?)?.toInt() ?? 2000,
+  );
 
   /// 钠摄入占上限的百分比（0.0 ~ 1.0+），用于画进度条
-  double get sodiumRatio =>
-      sodiumLimitMg <= 0 ? 0 : sodiumMg / sodiumLimitMg;
+  double get sodiumRatio => sodiumLimitMg <= 0 ? 0 : sodiumMg / sodiumLimitMg;
 }
 
 // =====================================================================
@@ -85,14 +84,12 @@ class Dish {
   });
 
   factory Dish.fromJson(Map<String, dynamic> j) => Dish(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        name: j['name'] as String? ?? '',
-        servings: (j['servings'] as num?)?.toInt() ?? 1,
-        reason: j['reason'] as String? ?? '',
-        tags: ((j['tags'] as List?) ?? const [])
-            .map((e) => e.toString())
-            .toList(),
-      );
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    name: j['name'] as String? ?? '',
+    servings: (j['servings'] as num?)?.toInt() ?? 1,
+    reason: j['reason'] as String? ?? '',
+    tags: ((j['tags'] as List?) ?? const []).map((e) => e.toString()).toList(),
+  );
 }
 
 class Meal {
@@ -102,18 +99,14 @@ class Meal {
   const Meal({required this.slot, required this.dishes});
 
   factory Meal.fromJson(Map<String, dynamic> j) => Meal(
-        slot: j['slot'] as String? ?? '',
-        dishes: ((j['dishes'] as List?) ?? const [])
-            .map((e) => Dish.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+    slot: j['slot'] as String? ?? '',
+    dishes: ((j['dishes'] as List?) ?? const [])
+        .map((e) => Dish.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 
-  String get slotLabel => const {
-        'breakfast': '早餐',
-        'lunch': '午餐',
-        'dinner': '晚餐',
-      }[slot] ??
-      slot;
+  String get slotLabel =>
+      const {'breakfast': '早餐', 'lunch': '午餐', 'dinner': '晚餐'}[slot] ?? slot;
 }
 
 class PlanDay {
@@ -128,12 +121,12 @@ class PlanDay {
   });
 
   factory PlanDay.fromJson(Map<String, dynamic> j) => PlanDay(
-        date: j['date'] as String? ?? '',
-        weekday: j['weekday'] as String? ?? '',
-        meals: ((j['meals'] as List?) ?? const [])
-            .map((e) => Meal.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+    date: j['date'] as String? ?? '',
+    weekday: j['weekday'] as String? ?? '',
+    meals: ((j['meals'] as List?) ?? const [])
+        .map((e) => Meal.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 
   /// 只取 MM-DD 用于显示
   String get shortDate => date.length >= 10 ? date.substring(5) : date;
@@ -147,24 +140,18 @@ class ShoppingItem {
   final String name;
   final double amount;
   final String unit;
-  final double price; // ★ 小计金额（元），不是单价
-  final String priceSource; // local | nearby | national
 
   const ShoppingItem({
     required this.name,
     required this.amount,
     required this.unit,
-    required this.price,
-    required this.priceSource,
   });
 
   factory ShoppingItem.fromJson(Map<String, dynamic> j) => ShoppingItem(
-        name: j['name'] as String? ?? '',
-        amount: (j['amount'] as num?)?.toDouble() ?? 0,
-        unit: j['unit'] as String? ?? '',
-        price: (j['price'] as num?)?.toDouble() ?? 0,
-        priceSource: j['price_source'] as String? ?? 'local',
-      );
+    name: j['name'] as String? ?? '',
+    amount: (j['amount'] as num?)?.toDouble() ?? 0,
+    unit: j['unit'] as String? ?? '',
+  );
 
   /// 数量显示：整数不显示小数点（500 而不是 500.0）
   String get amountLabel {
@@ -173,22 +160,6 @@ class ShoppingItem {
         : amount.toString();
     return '$s$unit';
   }
-
-  /// 价格来源文案（对应方案里"三级降级 + 置信度诚实标注"）
-  String get sourceLabel => const {
-        'local': '本地公示价格',
-        'nearby': '周边城市参考价',
-        'national': '全国均价估算',
-      }[priceSource] ??
-      priceSource;
-
-  /// 置信度：高 / 中 / 低
-  String get confidenceLabel => const {
-        'local': '高',
-        'nearby': '中',
-        'national': '低',
-      }[priceSource] ??
-      '未知';
 }
 
 class ShoppingCategory {
@@ -198,14 +169,11 @@ class ShoppingCategory {
   const ShoppingCategory({required this.category, required this.items});
 
   factory ShoppingCategory.fromJson(Map<String, dynamic> j) => ShoppingCategory(
-        category: j['category'] as String? ?? '',
-        items: ((j['items'] as List?) ?? const [])
-            .map((e) => ShoppingItem.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
-
-  double get subtotal =>
-      items.fold(0.0, (sum, it) => sum + it.price);
+    category: j['category'] as String? ?? '',
+    items: ((j['items'] as List?) ?? const [])
+        .map((e) => ShoppingItem.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 }
 
 // =====================================================================
@@ -214,8 +182,6 @@ class ShoppingCategory {
 
 class Plan {
   final String week;
-  final double budget;
-  final double totalCost;
   final PlanMeta meta;
   final PlanNutrition nutrition;
   final List<PlanDay> days;
@@ -223,8 +189,6 @@ class Plan {
 
   const Plan({
     required this.week,
-    required this.budget,
-    required this.totalCost,
     required this.meta,
     required this.nutrition,
     required this.days,
@@ -232,25 +196,19 @@ class Plan {
   });
 
   factory Plan.fromJson(Map<String, dynamic> j) => Plan(
-        week: j['week'] as String? ?? '',
-        budget: (j['budget'] as num?)?.toDouble() ?? 0,
-        totalCost: (j['total_cost'] as num?)?.toDouble() ?? 0,
-        meta: PlanMeta.fromJson(
-            (j['meta'] as Map<String, dynamic>?) ?? const {}),
-        nutrition: PlanNutrition.fromJson(
-            (j['nutrition'] as Map<String, dynamic>?) ?? const {}),
-        days: ((j['days'] as List?) ?? const [])
-            .map((e) => PlanDay.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        shoppingList: ((j['shopping_list'] as List?) ?? const [])
-            .map((e) => ShoppingCategory.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
-
-  /// 预算使用比例（0.0 ~ 1.0+）
-  double get budgetRatio => budget <= 0 ? 0 : totalCost / budget;
+    week: j['week'] as String? ?? '',
+    meta: PlanMeta.fromJson((j['meta'] as Map<String, dynamic>?) ?? const {}),
+    nutrition: PlanNutrition.fromJson(
+      (j['nutrition'] as Map<String, dynamic>?) ?? const {},
+    ),
+    days: ((j['days'] as List?) ?? const [])
+        .map((e) => PlanDay.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    shoppingList: ((j['shopping_list'] as List?) ?? const [])
+        .map((e) => ShoppingCategory.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 
   /// 清单条目总数
-  int get itemCount =>
-      shoppingList.fold(0, (sum, c) => sum + c.items.length);
+  int get itemCount => shoppingList.fold(0, (sum, c) => sum + c.items.length);
 }

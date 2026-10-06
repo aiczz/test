@@ -335,10 +335,7 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
 
                 if (_result != null) ...[
                   const SizedBox(height: 20),
-                  _ResultView(
-                    result: _result!,
-                    onAdd: _addToTodayMenu,
-                  ),
+                  _ResultView(result: _result!, onAdd: _addToTodayMenu),
                 ],
               ],
             ),
@@ -442,7 +439,11 @@ class _ComposeCard extends StatelessWidget {
                 //   离线时是算法的确定性理由。两种情况都不假装。
                 Text(
                   pick.reason,
-                  style: const TextStyle(fontSize: 12, color: muted, height: 1.55),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: muted,
+                    height: 1.55,
+                  ),
                 ),
                 const SizedBox(height: 9),
                 Wrap(
@@ -587,11 +588,7 @@ class _SectionLabel extends StatelessWidget {
   final String text;
   final String? trailing;
 
-  const _SectionLabel({
-    required this.icon,
-    required this.text,
-    this.trailing,
-  });
+  const _SectionLabel({required this.icon, required this.text, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -609,10 +606,7 @@ class _SectionLabel extends StatelessWidget {
         ),
         if (trailing != null) ...[
           const Spacer(),
-          Text(
-            trailing!,
-            style: const TextStyle(fontSize: 10.5, color: muted),
-          ),
+          Text(trailing!, style: const TextStyle(fontSize: 10.5, color: muted)),
         ],
       ],
     );

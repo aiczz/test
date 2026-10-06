@@ -167,7 +167,7 @@ start ms-settings:developers
 | ---------- | ------------------- | ---------------------------------------------------------- |
 | POST       | `/api/ai/chat`      | AI 助手对话（登录可选）                                    |
 | POST       | `/api/ai/recommend` | **AI 配菜**：已选食材 + 今日菜单已有菜 + 硬约束 → 推荐菜品 |
-| GET/PUT 🔒 | `/api/profile`      | 个人偏好                                                   |
+| GET/PUT 🔒 | `/api/profile`      | 家庭档案（人数 / 烹饪时间 / 限钠 / 口味偏好 / 忌口 / 厨具） |
 | GET        | `/api/health`       | 健康检查                                                   |
 
 `GET /api/home` 也扩了参数（全部可选，不传就是旧行为）：
@@ -176,6 +176,15 @@ start ms-settings:developers
 /api/home?city=杭州&lat=30.27&lon=120.16&date=2026-10-05
           &people=3&cook_minutes=45&low_sodium=true&avoid=辛辣&refresh=false
 ```
+
+> **家庭档案必须存在服务器上，不能只留前端内存。**
+> `/api/profile` 是那套约束的持久化出口：前端登录后启动时拉一次、保存时推一次，
+> 另外本机也留一份缓存。
+> 踩过的坑：前端原先**从来没调过这个接口** —— 在「我的」页把人数从 3 改成 5，
+> 切到首页和 AI 页看到的还是 3，刷新一下连「我的」页自己也变回 3。
+> `user_preferences` 新增的 `low_sodium` / `cook_minutes` / `tools` /
+> `diet_preferences` 四列，靠 `create_db_and_tables()` 里的增量 `ALTER TABLE`
+> 补到已有库上（`create_all` 不会给已存在的表加列）。
 
 ---
 

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_config.dart';
 import '../services/auth_store.dart';
@@ -27,7 +30,6 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   int _people = 3;
-  double _budget = 300;
   double _cookMinutes = 45;
   bool _lowSodium = true;
   bool _reminders = true;
@@ -35,53 +37,82 @@ class _ProfilePageState extends State<ProfilePage> {
   final Set<String> _avoid = <String>{'辛辣'};
   final Set<String> _tools = <String>{'炒锅', '汤锅'};
 
+  bool _saving = false;
+
   @override
   void initState() {
     super.initState();
-    // 回填已保存的档案。不回填的话每次进这一页都回到默认值，
-    // 用户会以为自己上次的修改丢了。
-    final p = AppState.instance.profile;
-    _people = p.people;
-    _budget = p.budget;
-    _cookMinutes = p.cookMinutes;
-    _lowSodium = p.lowSodium;
-    _reminders = p.reminders;
-    _preferences
-      ..clear()
-      ..addAll(p.preferences);
-    _avoid
-      ..clear()
-      ..addAll(p.avoid);
-    _tools
-      ..clear()
-      ..addAll(p.tools);
+    _fillFromProfile();
+    // 档案可能在别处被改（比如 startup 时从账号拉回来），跟着回填
+    AppState.instance.addListener(_fillFromProfile);
   }
 
-  /// 保存 = 写进全局共享状态，并通知菜单页立即重算。
+  @override
+  void dispose() {
+    AppState.instance.removeListener(_fillFromProfile);
+    super.dispose();
+  }
+
+  /// 回填已保存的档案。不回填的话每次进这一页都回到默认值，
+  /// 用户会以为自己上次的修改丢了。
+  void _fillFromProfile() {
+    if (!mounted) return;
+    final p = AppState.instance.profile;
+    setState(() {
+      _people = p.people;
+      _cookMinutes = p.cookMinutes;
+      _lowSodium = p.lowSodium;
+      _preferences
+        ..clear()
+        ..addAll(p.preferences);
+      _avoid
+        ..clear()
+        ..addAll(p.avoid);
+      _tools
+        ..clear()
+        ..addAll(p.tools);
+    });
+  }
+
+  /// 保存 = 写内存（页面之间立刻同步）+ 写本机 + 推账号。
   ///
-  /// ⚠️ 注意这里和之前的区别：以前这个方法只弹了个 SnackBar，
-  ///    什么也没存 —— 那句「下次生成菜单将使用这些约束」是假的。
-  ///    现在它真的存了，菜单页也真的会跟着变。
-  void _saveProfile() {
-    AppState.instance.saveProfile(
+  /// ⚠️ 这里踩过一个很大的坑：以前它**只**写内存，连后端接口都没调过。
+  ///    结果是刷新一下页面就回到默认的 3 人 —— 用户在「我的」页把人数
+  ///    改成 5，切到首页 / AI 页看到的还是 3。现在三层都写，
+  ///    并且如实告诉用户存到哪一层了（没登录时不会假装同步成功）。
+  Future<void> _saveProfile() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    final result = await AppState.instance.saveProfile(
       AppState.instance.profile.copyWith(
         people: _people,
-        budget: _budget,
         cookMinutes: _cookMinutes,
         lowSodium: _lowSodium,
-        reminders: _reminders,
         preferences: Set<String>.of(_preferences),
         avoid: Set<String>.of(_avoid),
         tools: Set<String>.of(_tools),
       ),
     );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    // 提醒开关只是本机偏好，不参与推荐计算，单独存在本地
+    unawaited(_persistReminders());
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('家庭档案已保存 —— 菜单与购物清单已按新约束重算'),
+      SnackBar(
+        content: Text(result.message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: orange900,
+        backgroundColor: result.synced ? orange900 : muted,
       ),
     );
+  }
+
+  Future<void> _persistReminders() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('reminders_enabled', _reminders);
+    } catch (error) {
+      debugPrint('[ProfilePage] 提醒开关保存失败：$error');
+    }
   }
 
   /// 档案摘要：全部用真实存在的家庭档案数据拼出来，一个编的数字都没有。
@@ -95,14 +126,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
     _showInfo(
       '当前饮食档案',
-      '${profile.people} 人用餐，每周预算 ¥${profile.budget.toStringAsFixed(0)}，'
-          '每天下厨时间 ${profile.cookMinutes.round()} 分钟。\n\n'
+      '${profile.people} 人用餐，每天下厨时间 ${profile.cookMinutes.round()} 分钟。\n\n'
           '口味偏好：$pref\n'
           '忌口：$avoid\n'
           '可用厨具：$tools\n'
           '每日钠上限：${profile.sodiumLimitMg} mg'
           '（${profile.lowSodium ? '已开启低钠约束' : '未开启低钠约束'}）\n\n'
-          '首页推荐、菜单和购物清单都是按这套档案算出来的 —— '
+          '首页推荐、菜单和 AI 助手都是按这套档案算出来的 —— '
           '在上面改任何一项，切回首页就能看到变化。',
     );
   }
@@ -160,9 +190,8 @@ class _ProfilePageState extends State<ProfilePage> {
   /// 这一页（完整方案 + 买菜清单）此前没有任何入口 —— 底部导航里没有它，
   /// 也没有按钮指向它，而上面那张档案卡和保存提示都在说「菜单已重算」。
   void _openMenu() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const MenuPage()),
-    );
+    Navigator.of(context)
+        .push<void>(MaterialPageRoute<void>(builder: (_) => const MenuPage()));
   }
 
   Future<void> _editChoices({
@@ -319,17 +348,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     onPlus: _people >= 8
                         ? null
                         : () => setState(() => _people++),
-                  ),
-                  const Divider(height: 28),
-                  _SliderSetting(
-                    icon: Icons.account_balance_wallet_outlined,
-                    label: '每周饮食预算',
-                    value: '¥${_budget.round()}',
-                    min: 100,
-                    max: 800,
-                    divisions: 14,
-                    sliderValue: _budget,
-                    onChanged: (value) => setState(() => _budget = value),
                   ),
                   const Divider(height: 28),
                   _SliderSetting(
@@ -524,9 +542,7 @@ class _ProfileHero extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [orange50, Color(0xFFFFF5E5)],
-        ),
+        gradient: const LinearGradient(colors: [orange50, Color(0xFFFFF5E5)]),
         borderRadius: BorderRadius.circular(rBlock),
       ),
       child: Row(
@@ -1004,8 +1020,7 @@ class _WeeklyCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${profile.people} 人用餐 · 周预算 '
-                        '¥${profile.budget.toStringAsFixed(0)} · '
+                        '${profile.people} 人用餐 · '
                         '每天 ${profile.cookMinutes.round()} 分钟',
                         style: const TextStyle(fontSize: 12, color: muted),
                       ),

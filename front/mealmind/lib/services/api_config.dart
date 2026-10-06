@@ -130,9 +130,8 @@ class BackendStatus extends ChangeNotifier {
         //    所以必须校验它真的返回了我们的健康检查 JSON。
         final res = await dio.get<Map<String, dynamic>>('/api/health');
         final body = res.data;
-        final ok = res.statusCode == 200 &&
-            body != null &&
-            body['status'] == 'ok';
+        final ok =
+            res.statusCode == 200 && body != null && body['status'] == 'ok';
         if (ok) {
           apiBase = candidate;
           _online = true;
@@ -162,6 +161,5 @@ class BackendStatus extends ChangeNotifier {
   }
 
   /// 当前用的是不是同源地址（部署相关的问题排查用）
-  bool get sameOrigin =>
-      kIsWeb && apiBase.isNotEmpty && apiBase == _pageOrigin;
+  bool get sameOrigin => kIsWeb && apiBase.isNotEmpty && apiBase == _pageOrigin;
 }

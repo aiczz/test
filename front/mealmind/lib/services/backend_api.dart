@@ -15,6 +15,8 @@ import '../data/dish_images.dart';
 import '../data/ingredient_images.dart';
 import '../models/ai_feed.dart';
 import '../models/content.dart';
+import '../state/app_state.dart';
+import 'api_config.dart';
 import 'auth_store.dart';
 
 /// 前端分类（中文）→ 后端分类（说明书 §7.3 的英文枚举）
@@ -268,7 +270,7 @@ class BackendApi {
 
   /// GET /api/recipes/tags —— 分类筛选区的数据源。
   ///
-  /// 后端把库里 985 个零散标签（「汤」「汤羹」「老火汤」…）归一成 46 个
+  /// 后端把库里 985 个零散标签（「汤」「汤羹」「老火汤」…）归一成 45 个
   /// 规范分类，并且**只返回有菜的分类**，所以这里拿到的每个分类点进去都有菜，
   /// 旁边还能显示「这个分类有几道」。
   ///
@@ -288,6 +290,56 @@ class BackendApi {
       debugPrint('[BackendApi] 菜谱分类加载失败：$error');
       return const <RecipeTagGroup>[];
     }
+  }
+
+  // ---------------------------------------------------------------- 家庭档案
+
+  /// 家庭档案接口能不能用（要在线 + 已登录，后端会返回 401 否则）。
+  bool get canUseProfileApi =>
+      BackendStatus.instance.online && AuthStore.instance.isLoggedIn;
+
+  /// GET /api/profile —— 把服务器上的家庭档案读回来（需要登录）。
+  ///
+  /// ★ 为什么必须有这一步：家庭档案以前**只活在前端内存里**（AppState），
+  ///   前端从来没调过这个接口。后果是刷新一次页面就回到默认的 3 人 /
+  ///   45 分钟 —— 用户在「我的」页把人数改成 5，切到首页和 AI 页看到的
+  ///   还是 3，就是这个原因。
+  ///
+  /// 返回 null 表示「这次读不到」（没登录 / 后端不在线 / 老后端没这个接口）。
+  /// 调用方要区分「读不到」和「读到的是默认值」，不能拿默认值覆盖本地。
+  Future<FamilyProfile?> fetchProfile() async {
+    if (!BackendStatus.instance.online || !AuthStore.instance.isLoggedIn) {
+      return null;
+    }
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/profile',
+        options: _auth,
+      );
+      final data = res.data;
+      if (data == null) return null;
+      return FamilyProfile.fromServerJson(data);
+    } catch (error) {
+      debugPrint('[BackendApi] 家庭档案读取失败：$error');
+      return null;
+    }
+  }
+
+  /// PUT /api/profile —— 把家庭档案存到账号上。
+  ///
+  /// 抛异常表示没存上，调用方要如实告诉用户「只存在本机」，
+  /// 而不是弹一句「已保存」然后刷新就没了。
+  Future<FamilyProfile> pushProfile(FamilyProfile profile) async {
+    final res = await _dio.put<Map<String, dynamic>>(
+      '/api/profile',
+      data: profile.toServerJson(),
+      options: _auth,
+    );
+    final data = res.data;
+    if (data == null) {
+      throw const FormatException('保存家庭档案时后端返回了空数据');
+    }
+    return FamilyProfile.fromServerJson(data);
   }
 
   Future<Set<String>> fetchFavoriteIds() async {
@@ -655,11 +707,17 @@ class BackendApi {
     name: json['name'] as String? ?? '',
     image: _recipeImageFor(json['name']?.toString() ?? '', json['image']),
     desc: json['description'] as String? ?? '',
-    // 后端给的是分钟数；清洗库的 dishes 没有时长列，抽不到做法里的时间时
-    // 那个数字是估的 —— 这种情况加「约」字，不把估值说得像真的。
+    // 烹饪时间：清洗库的 dishes **没有时长列**，所以这个数字只有两个来源
+    //   · 从做法文本里抽出来的（「小火炖 30 分钟」）→ 有依据，显示「约 N 分钟」
+    //   · 抽不到 → 后端默认填 30，那是**编的**，不显示数字
+    //
+    // ⚠️ 以前两种情况都显示「约30分钟」。实测 10000 道菜里只有 4386 道
+    //    （43.9%）真的能从做法里抽到时间，另外 5614 道（56.1%）全是那个默认值
+    //    —— 所以外观上 60% 的菜都「需要 30 分钟」，用户看到的就是一堆假数字。
+    //    现在没有依据的显示「时长不详」，宁可少一个信息，也不编。
     time: json['duration_estimated'] == true
-        ? '约${json['duration_minutes'] ?? 0}分钟'
-        : '${json['duration_minutes'] ?? 0}分钟',
+        ? '时长不详'
+        : '约${json['duration_minutes'] ?? 0}分钟',
     people: json['servings'] as String? ?? '',
     tags: ((json['tags'] as List?) ?? const <dynamic>[])
         .map((e) => e.toString())

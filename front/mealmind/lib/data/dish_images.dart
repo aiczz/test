@@ -1,4 +1,4 @@
-﻿// GENERATED FILE -- do not edit by hand.
+// GENERATED FILE -- do not edit by hand.
 // Regenerate with team/front/scripts/make-dart-image-map.ps1
 //
 // Dish name -> bundled photo.
@@ -28,7 +28,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '玉米菜团子': 'assets/images/dish-082420-cornmeal-dumplings.jpg',
   '冒菜': 'assets/images/dish-016092-maocai.jpg',
   '三汁焖锅之清江鱼': 'assets/images/dish-157292-three-sauce-qingjiang-fish.jpg',
-  '川味干煸肥肠 炒肥肠 宴客 年夜菜 玛捷斯': 'assets/images/dish-143257-sichuan-dry-fried-intestine.jpg',
+  '川味干煸肥肠 炒肥肠 宴客 年夜菜 玛捷斯':
+      'assets/images/dish-143257-sichuan-dry-fried-intestine.jpg',
   '羊肉汤': 'assets/images/dish-006243-lamb-offal-soup.jpg',
   '健身人士专享减脂五彩馄饨': 'assets/images/dish-171670-colorful-fitness-wontons.jpg',
   '方便易做的家常水煮鱼': 'assets/images/dish-028819-home-style-boiled-fish.jpg',
@@ -75,7 +76,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '香飘几条街的招牌凉拌菜钵钵鸡': 'assets/images/dish-068959-bobo-chicken.jpg',
   '简易版津味醋溜木须': 'assets/images/dish-026040-vinegar-stir-fry-muxu.jpg',
   '赶鸭子上架的啤酒魔芋烧鸭腿': 'assets/images/dish-026871-beer-braised-duck-konjac.jpg',
-  '鱼香肉沫茄子＃下饭神器': 'assets/images/dish-104423-fish-fragrant-minced-pork-eggplant.jpg',
+  '鱼香肉沫茄子＃下饭神器':
+      'assets/images/dish-104423-fish-fragrant-minced-pork-eggplant.jpg',
   '清汤全家福': 'assets/images/dish-012824-clear-assorted-soup.jpg',
   '徐妈妈的上海炸酱面': 'assets/images/dish-120578-shanghai-zhajiang-noodles.jpg',
   '酸辣汤': 'assets/images/dish-058350-hot-and-sour-soup.jpg',
@@ -84,7 +86,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '罗汉粉蒸肉【大师的菜】': 'assets/images/dish-075921-steamed-pork-rice-flour.jpg',
   '水煮牛肉 餐厅复刻版': 'assets/images/dish-188089-sichuan-boiled-beef.jpg',
   '卤三鸡': 'assets/images/dish-136586-braised-chicken-and-eggs.jpg',
-  '东南亚风味凉拌米粉': 'assets/images/dish-119314-southeast-asian-rice-noodle-salad.jpg',
+  '东南亚风味凉拌米粉':
+      'assets/images/dish-119314-southeast-asian-rice-noodle-salad.jpg',
   '家常凉拌菜': 'assets/images/dish-079926-cold-mixed-vegetables.jpg',
   '家常鲫鱼烧法简单很入味': 'assets/images/dish-061413-braised-crucian-carp.jpg',
   '菠萝咕噜肉': 'assets/images/dish-188247-pineapple-sweet-sour-pork.jpg',
@@ -124,7 +127,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '牛肉面': 'assets/images/dish-074297-beef-noodles.jpg',
   '日式关东煮': 'assets/images/dish-169673-japanese-oden.jpg',
   '火山排骨': 'assets/images/dish-190690-volcano-pork-ribs.jpg',
-  '鲍鱼红烧肉 2020年夜饭系列【大酱日记】': 'assets/images/dish-058405-abalone-braised-pork-belly.jpg',
+  '鲍鱼红烧肉 2020年夜饭系列【大酱日记】':
+      'assets/images/dish-058405-abalone-braised-pork-belly.jpg',
   '绝味脊骨炖土豆': 'assets/images/dish-192379-braised-pork-spine-potato.jpg',
   '水煮肉片': 'assets/images/dish-160318-spicy-boiled-pork.jpg',
   '吮指猪蹄儿': 'assets/images/dish-186069-braised-pork-trotter.jpg',
@@ -146,7 +150,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '羊肉丸子汤': 'assets/images/dish-174291-lamb-meatball-soup.jpg',
   '红烧肉': 'assets/images/dish-051652-red-braised-pork.jpg',
   '柠檬百香果麻辣鸡': 'assets/images/dish-187723-passionfruit-spicy-chicken.jpg',
-  '食屋FOODHOUSE 黑椒咖喱鸡腿饭': 'assets/images/dish-064409-black-pepper-curry-chicken-rice.jpg',
+  '食屋FOODHOUSE 黑椒咖喱鸡腿饭':
+      'assets/images/dish-064409-black-pepper-curry-chicken-rice.jpg',
   '这样做的凉拌猪肝': 'assets/images/dish-132886-pork-liver-salad.jpg',
   '私房【泡菜牛肉丝】酸辣开胃菜·不要太下饭哦': 'assets/images/dish-125850-pickled-beef.jpg',
   '️尖椒酿肉️香辣脆爽': 'assets/images/dish-010504-stuffed-peppers.jpg',
@@ -165,15 +170,20 @@ const Map<String, String> kDishImageByName = <String, String>{
   '家常水煮鱼': 'assets/images/dish-078335-boiled-fish.jpg',
   '鲶鱼炖茄子': 'assets/images/dish-090692-catfish-eggplant.jpg',
   '什锦凉拌菜': 'assets/images/dish-000427-mixed-cold-salad.jpg',
-  '五款早餐饮品：杏仁米糊+黑芝麻糊+水果奶昔+银耳羹+南瓜米糊【曼食慢语】': 'assets/images/dish-152173-breakfast-five-drinks.jpg',
-  '四川人的国民回锅肉以及萝卜汤': 'assets/images/dish-043330-twice-cooked-pork-radish-soup.jpg',
-  '黄桃罐头‼️白藜麦饭‼️蒸贝贝瓜‼️蒸双色鸡腿㊙️【北鼎蒸炖锅】一锅出': 'assets/images/dish-177290-steamed-meal-chicken-quinoa.jpg',
+  '五款早餐饮品：杏仁米糊+黑芝麻糊+水果奶昔+银耳羹+南瓜米糊【曼食慢语】':
+      'assets/images/dish-152173-breakfast-five-drinks.jpg',
+  '四川人的国民回锅肉以及萝卜汤':
+      'assets/images/dish-043330-twice-cooked-pork-radish-soup.jpg',
+  '黄桃罐头‼️白藜麦饭‼️蒸贝贝瓜‼️蒸双色鸡腿㊙️【北鼎蒸炖锅】一锅出':
+      'assets/images/dish-177290-steamed-meal-chicken-quinoa.jpg',
   '一锅上菜•蒸汽小海鲜&海鲜粥': 'assets/images/dish-082272-seafood-steamer-congee.jpg',
-  '35分钟快手一锅三菜 火腿鸡汁娃娃菜 手撕鸡 糯米虾球': 'assets/images/dish-005432-three-dish-family-meal.jpg',
+  '35分钟快手一锅三菜 火腿鸡汁娃娃菜 手撕鸡 糯米虾球':
+      'assets/images/dish-005432-three-dish-family-meal.jpg',
   '一锅轰动朋友圈的香辣酸菜鱼': 'assets/images/dish-106236-spicy-sauerkraut-fish.jpg',
   '低卡蔬菜汤—3种搭配': 'assets/images/dish-126162-quinoa-soup-trio.jpg',
   '西昌早粉-红烧牛肉粉': 'assets/images/dish-054617-braised-beef-rice-noodles.jpg',
-  '番茄虾仁菠萝三色糙米藜麦菜脯咖喱椰浆泰式蛋炒饭': 'assets/images/dish-026598-curry-shrimp-pineapple-rice.jpg',
+  '番茄虾仁菠萝三色糙米藜麦菜脯咖喱椰浆泰式蛋炒饭':
+      'assets/images/dish-026598-curry-shrimp-pineapple-rice.jpg',
   '烧烤BBQ': 'assets/images/dish-054942-barbecue-platter.jpg',
   '滑蛋牛肉&滑蛋牛肉三明治': 'assets/images/dish-122370-beef-scrambled-egg.jpg',
   '又营养的平底锅锡纸牛肉': 'assets/images/dish-074630-foil-baked-beef.jpg',
@@ -210,7 +220,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '酸萝卜老鸭汤 酸汤就是爽口': 'assets/images/dish-002330-pickled-radish-duck-soup.jpg',
   '羊肉包子': 'assets/images/dish-005147-lamb-steamed-buns.jpg',
   '清新柠檬 | 腐皮鱼腩': 'assets/images/dish-008506-lemon-fish-tofu-skin.jpg',
-  '㊙️不加一滴水‼️仔姜炒鸡‼️鸡肉鲜嫩一秒上头': 'assets/images/dish-015951-young-ginger-chicken.jpg',
+  '㊙️不加一滴水‼️仔姜炒鸡‼️鸡肉鲜嫩一秒上头':
+      'assets/images/dish-015951-young-ginger-chicken.jpg',
   '平底锅版锡纸牛肉': 'assets/images/dish-020678-foil-baked-beef.jpg',
   '豆瓣茄子肉丝': 'assets/images/dish-020818-eggplant-shredded-pork.jpg',
   '五彩鸡肉丝': 'assets/images/dish-021806-colorful-shredded-chicken.jpg',
@@ -255,7 +266,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '家常菜之宫保鸡丁': 'assets/images/dish-077552-kung-pao-chicken.jpg',
   '番茄炖排骨': 'assets/images/dish-078389-tomato-braised-pork-ribs.jpg',
   '国民下饭神菜~鱼香肉丝': 'assets/images/dish-079426-fish-fragrant-shredded-pork.jpg',
-  '入口即化的鸡爪明虾煲超下饭': 'assets/images/dish-084117-chicken-feet-shrimp-casserole.jpg',
+  '入口即化的鸡爪明虾煲超下饭':
+      'assets/images/dish-084117-chicken-feet-shrimp-casserole.jpg',
   '柠檬百香果鸡爪': 'assets/images/dish-141186-lemon-passion-fruit-chicken-feet.jpg',
   '凉拌腐竹花生米': 'assets/images/dish-159658-tofu-skin-peanut-salad.jpg',
   '重庆烧鸡公反正好吃': 'assets/images/dish-175868-chongqing-braised-chicken.jpg',
@@ -269,7 +281,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '易做炸莲藕丸': 'assets/images/dish-014577-fried-lotus-root-pork-balls.jpg',
   '茶树菇炒牛肉': 'assets/images/dish-018882-beef-tea-tree-mushrooms.jpg',
   '大白菜包肉': 'assets/images/dish-022774-napa-cabbage-pork-rolls.jpg',
-  '香菇土豆扁豆炖红烧肉': 'assets/images/dish-023660-braised-pork-mushroom-potato-beans.jpg',
+  '香菇土豆扁豆炖红烧肉':
+      'assets/images/dish-023660-braised-pork-mushroom-potato-beans.jpg',
   '剁椒牛肉': 'assets/images/dish-017537-chopped-chili-beef.jpg',
   '摩飞锅家常干烧耗儿鱼~一道连汤汤都不剩的下饭菜': 'assets/images/dish-022258-dry-braised-fish.jpg',
   '老妈味道【回锅肉】川味经典·闻着让人开胃家常菜': 'assets/images/dish-025798-twice-cooked-pork.jpg',
@@ -280,10 +293,12 @@ const Map<String, String> kDishImageByName = <String, String>{
   '六品豆腐': 'assets/images/dish-040939-six-treasure-tofu.jpg',
   '柠檬百香果凉拌虾': 'assets/images/dish-052828-lemon-passion-fruit-shrimp.jpg',
   '红烧狮子头': 'assets/images/dish-056081-braised-lions-head-meatballs.jpg',
-  '超级下饭的鱼香肉丝': 'assets/images/dish-187425-fish-fragrant-shredded-pork-spicy.jpg',
+  '超级下饭的鱼香肉丝':
+      'assets/images/dish-187425-fish-fragrant-shredded-pork-spicy.jpg',
   '烧鸡公': 'assets/images/dish-188732-chongqing-braised-chicken.jpg',
   '泡椒鸡杂面': 'assets/images/dish-014456-pickled-chili-chicken-offal-noodles.jpg',
-  '四川的鱼香肉丝': 'assets/images/dish-024267-sichuan-fish-fragrant-pork-bamboo-shoots.jpg',
+  '四川的鱼香肉丝':
+      'assets/images/dish-024267-sichuan-fish-fragrant-pork-bamboo-shoots.jpg',
   '青椒肉丝炒面': 'assets/images/dish-029403-green-pepper-pork-noodles.jpg',
   '五花肉豆腐煲': 'assets/images/dish-032257-pork-belly-tofu-casserole.jpg',
   '重庆辣子鸡': 'assets/images/dish-042660-chongqing-spicy-chicken.jpg',
@@ -299,7 +314,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '到舔盘土豆红烧肉盖饭': 'assets/images/dish-076295-braised-pork-potato-rice.jpg',
   '干煸肥肠': 'assets/images/dish-077575-dry-fried-pork-intestine.jpg',
   '番茄土豆胡萝卜炖牛腩': 'assets/images/dish-097851-tomato-potato-carrot-beef.jpg',
-  '不加一滴水️自制家庭版三汁焖锅️': 'assets/images/dish-098341-three-sauce-braised-hotpot.jpg',
+  '不加一滴水️自制家庭版三汁焖锅️':
+      'assets/images/dish-098341-three-sauce-braised-hotpot.jpg',
   '炸鱼仔&花甲粉丝煲': 'assets/images/dish-092900-seafood-vermicelli-casserole.jpg',
   '家常黄焖鸡': 'assets/images/dish-095628-home-style-braised-chicken.jpg',
   '四川家常菜香菇莴笋烧兔丁': 'assets/images/dish-097088-sichuan-rabbit-stir-fry.jpg',
@@ -317,7 +333,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '土豆烧鸡': 'assets/images/dish-110845-potato-braised-chicken.jpg',
   '小炒鸡杂': 'assets/images/dish-117985-spicy-chicken-offal.jpg',
   '重庆鸡公煲': 'assets/images/dish-124745-chongqing-chicken-hotpot.jpg',
-  '樉樉的小厨房 温州酱鸭舌 小美版': 'assets/images/dish-091598-wenzhou-braised-duck-tongue.jpg',
+  '樉樉的小厨房 温州酱鸭舌 小美版':
+      'assets/images/dish-091598-wenzhou-braised-duck-tongue.jpg',
   'Feeling私房菜——酸辣肚丝汤': 'assets/images/dish-095981-hot-sour-pork-tripe-soup.jpg',
   '鲜、香、美味鸡蛋酱拌面的绝配': 'assets/images/dish-102923-egg-meat-sauce-noodles.jpg',
   '卤肉': 'assets/images/dish-108335-braised-pork-belly-intestine.jpg',
@@ -334,7 +351,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '家常蛋炒饭': 'assets/images/dish-144552-homestyle-egg-fried-rice.jpg',
   '川椒小炒牛肉丝': 'assets/images/dish-153444-sichuan-pepper-beef.jpg',
   '泡椒啤酒魔芋烧鸭子': 'assets/images/dish-156213-beer-braised-duck-konjac.jpg',
-  '低碳低卡韩式拌花菜杂粮饭/健身减脂版韩式拌饭': 'assets/images/dish-156544-mixed-grain-bibimbap.jpg',
+  '低碳低卡韩式拌花菜杂粮饭/健身减脂版韩式拌饭':
+      'assets/images/dish-156544-mixed-grain-bibimbap.jpg',
   '香辣快手毛血旺': 'assets/images/dish-160632-sichuan-maoxuewang.jpg',
   '送饭之 腐竹萝卜焖牛腩': 'assets/images/dish-161526-braised-beef-daikon-tofu-skin.jpg',
   '馋哭邻居的飘香山药炖牛肉': 'assets/images/dish-169904-beef-chinese-yam-stew.jpg',
@@ -346,7 +364,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '浓情肉沫千页豆腐': 'assets/images/dish-187974-minced-meat-thousand-layer-tofu.jpg',
   '媲美川菜馆的宫保菜系列之新手也能做的美味宫保鸡丁': 'assets/images/dish-188687-kung-pao-chicken.jpg',
   '新荷塘月色': 'assets/images/dish-189946-pork-green-bean-stir-fry.jpg',
-  '外公的私房菜之【五彩烤麸】': 'assets/images/dish-193422-five-color-braised-wheat-gluten.jpg',
+  '外公的私房菜之【五彩烤麸】':
+      'assets/images/dish-193422-five-color-braised-wheat-gluten.jpg',
   '肉末豆角': 'assets/images/dish-199878-minced-pork-long-beans.jpg',
   '红烧鸡腿肉': 'assets/images/dish-000349-braised-chicken-thigh-potato.jpg',
   '红烧三文鱼': 'assets/images/dish-001035-soy-braised-salmon.jpg',
@@ -357,7 +376,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '开胃下饭素菜': 'assets/images/dish-011098-spicy-sprout-glass-noodle-stirfry.jpg',
   '食屋FOODHOUSE 荞麦冷面': 'assets/images/dish-035174-cold-buckwheat-noodles.jpg',
   '炒鸡下饭的酸辣鱼片汤': 'assets/images/dish-078934-hot-sour-fish-slice-soup.jpg',
-  '改良酸菜烧肉炖粉条': 'assets/images/dish-080445-sauerkraut-pork-glass-noodle-casserole.jpg',
+  '改良酸菜烧肉炖粉条':
+      'assets/images/dish-080445-sauerkraut-pork-glass-noodle-casserole.jpg',
   '三鲜笋炸鹌鹑': 'assets/images/dish-082942-crispy-chicken-bamboo-shoots.jpg',
   '草头猪肝【曼食快语】': 'assets/images/dish-127352-shepherd-purse-pork-liver.jpg',
   '魔芋粉丝版Japchae': 'assets/images/dish-141622-japchae-konjac-noodles.jpg',
@@ -371,10 +391,12 @@ const Map<String, String> kDishImageByName = <String, String>{
   '牛肉土豆炖豆角': 'assets/images/dish-009215-beef-potato-green-bean-stew.jpg',
   '一口不过瘾的糯米蒸排骨': 'assets/images/dish-011319-sticky-rice-steamed-pork-ribs.jpg',
   '汤汁都吃光的萝卜炖牛排骨': 'assets/images/dish-011763-beef-ribs-white-radish-soup.jpg',
-  '盒马厨房 超快手清蒸小龙虾配秘制老干妈复合蘸酱': 'assets/images/dish-015862-steamed-crawfish-black-bean-sauce.jpg',
+  '盒马厨房 超快手清蒸小龙虾配秘制老干妈复合蘸酱':
+      'assets/images/dish-015862-steamed-crawfish-black-bean-sauce.jpg',
   '豆瓣鱼': 'assets/images/dish-016338-grass-carp-doubanjiang.jpg',
   '鱼香肉丝 没有鱼的鱼香肉丝': 'assets/images/dish-031275-fish-fragrant-pork.jpg',
-  '翻译 牛肉盖饭How to Make Gyudon | Cooking with Dog': 'assets/images/dish-006818-gyudon-beef-rice.jpg',
+  '翻译 牛肉盖饭How to Make Gyudon | Cooking with Dog':
+      'assets/images/dish-006818-gyudon-beef-rice.jpg',
   '十三香木耳炒鸡': 'assets/images/dish-006851-thirteen-spice-chicken-wood-ear.jpg',
   '柠檬酸辣手撕鸡': 'assets/images/dish-007492-lemon-chili-shredded-chicken.jpg',
   '碗仔梅菜扣肉': 'assets/images/dish-008141-pork-belly-preserved-mustard-greens.jpg',
@@ -384,10 +406,12 @@ const Map<String, String> kDishImageByName = <String, String>{
   '汁香肉嫩的爆汁照烧鸡腿饭': 'assets/images/dish-018680-honey-teriyaki-chicken-rice.jpg',
   '川味鱼香肉丝': 'assets/images/dish-117201-sichuan-fish-fragrant-pork.jpg',
   '肉皮烧茄子': 'assets/images/dish-020298-braised-eggplant-porkskin-soybean.jpg',
-  '中餐 | 川味酱焖猪蹄【独家】': 'assets/images/dish-023690-sichuan-braised-pork-trotter-tofu-knots.jpg',
+  '中餐 | 川味酱焖猪蹄【独家】':
+      'assets/images/dish-023690-sichuan-braised-pork-trotter-tofu-knots.jpg',
   '白菜猪肉丸子汤': 'assets/images/dish-024120-pork-meatball-napa-soup.jpg',
   '一锅东北乱炖': 'assets/images/dish-025778-northeastern-pork-rib-stew.jpg',
-  '红烧带鱼最经典最家常的做法 可当热菜也可是冷盘 味道都一样好': 'assets/images/dish-026039-soy-braised-hairtail.jpg',
+  '红烧带鱼最经典最家常的做法 可当热菜也可是冷盘 味道都一样好':
+      'assets/images/dish-026039-soy-braised-hairtail.jpg',
   '又美味—番茄炖牛肉': 'assets/images/dish-026261-tomato-braised-beef.jpg',
   '爆炒鸭胗': 'assets/images/dish-026903-spicy-duck-gizzard.jpg',
   '嫩滑⭕️不碎的酸菜鱼': 'assets/images/dish-027112-sauerkraut-fish.jpg',
@@ -404,11 +428,14 @@ const Map<String, String> kDishImageByName = <String, String>{
   '冬阴功汤': 'assets/images/dish-043332-tom-yum-shrimp-clam.jpg',
   '凉拌菜': 'assets/images/dish-037354-mixed-vegetable-glass-noodle-salad.jpg',
   '酸辣开胃': 'assets/images/dish-040237-sour-spicy-beef-lotus-root.jpg',
-  '梅香茄子煲': 'assets/images/dish-040697-cantonese-salted-fish-eggplant-claypot.jpg',
+  '梅香茄子煲':
+      'assets/images/dish-040697-cantonese-salted-fish-eggplant-claypot.jpg',
   '素什锦': 'assets/images/dish-042421-chinese-assorted-vegetables.jpg',
   '泰式咖喱虾 一碗咖喱汤汁好下饭': 'assets/images/dish-044958-thai-coconut-curry-shrimp.jpg',
-  '东北乱炖': 'assets/images/dish-046783-northeastern-mixed-pork-vegetable-stew.jpg',
-  '港式柱侯萝卜炆牛腩煲': 'assets/images/dish-046892-hong-kong-braised-brisket-tendon-daikon.jpg',
+  '东北乱炖':
+      'assets/images/dish-046783-northeastern-mixed-pork-vegetable-stew.jpg',
+  '港式柱侯萝卜炆牛腩煲':
+      'assets/images/dish-046892-hong-kong-braised-brisket-tendon-daikon.jpg',
   '地道川味水煮牛肉': 'assets/images/dish-048086-sichuan-boiled-beef.jpg',
   '菠萝彩椒滑鸡片': 'assets/images/dish-051116-pineapple-sweet-sour-chicken.jpg',
   '鲍鱼焖鸡学做之笔记': 'assets/images/dish-052531-abalone-shiitake-braised-chicken.jpg',
@@ -450,7 +477,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '冰镇超好吃：拌杂菜': 'assets/images/dish-084916-mixed-vegetable-salad.jpg',
   '冰糖红烧肉': 'assets/images/dish-085313-rock-sugar-braised-pork.jpg',
   '㊙️家常菜‼️啫啫鲈鱼煲‼️年年有余': 'assets/images/dish-085953-claypot-sea-bass.jpg',
-  '到停不下来的火锅底料炒螺丝': 'assets/images/dish-086087-spicy-stir-fried-river-snails.jpg',
+  '到停不下来的火锅底料炒螺丝':
+      'assets/images/dish-086087-spicy-stir-fried-river-snails.jpg',
   '豆豉排骨蒸南瓜': 'assets/images/dish-089242-steamed-ribs-pumpkin-black-bean.jpg',
   '红烧鸽子': 'assets/images/dish-089594-braised-pigeon.jpg',
   'Q弹脆爽凉拌无骨鸡爪': 'assets/images/dish-089769-boneless-chicken-feet-salad.jpg',
@@ -459,7 +487,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '简易又超好吃的香菇焖鸡': 'assets/images/dish-094760-braised-chicken-shiitake.jpg',
   '白菜豆腐丸子汤': 'assets/images/dish-095380-napa-tofu-meatball-soup.jpg',
   '鸭血粉丝': 'assets/images/dish-095510-duck-blood-vermicelli-soup.jpg',
-  '可荤可素的下饭菜——蘑菇青椒炒鸡蛋': 'assets/images/dish-096479-mushroom-pepper-egg-stir-fry.jpg',
+  '可荤可素的下饭菜——蘑菇青椒炒鸡蛋':
+      'assets/images/dish-096479-mushroom-pepper-egg-stir-fry.jpg',
   '牛腩炖土豆': 'assets/images/dish-096751-beef-brisket-potato-stew.jpg',
   '野蘑菇炖鸡': 'assets/images/dish-096917-wild-mushroom-chicken-stew.jpg',
   '冰城串吧版东北大拉皮': 'assets/images/dish-099859-northeast-liangpi.jpg',
@@ -472,7 +501,8 @@ const Map<String, String> kDishImageByName = <String, String>{
   '家常炒菜酸甜口辣炒豆芽': 'assets/images/dish-103672-sweet-sour-spicy-bean-sprouts.jpg',
   '脆瓜五花腩': 'assets/images/dish-069219-crispy-cucumber-pork-belly.jpg',
   '酸甜炝拌莲菜 好吃又下饭 你学会了吗': 'assets/images/dish-072138-sweet-sour-lotus-root.jpg',
-  '麻辣培根炒杏鲍菇面': 'assets/images/dish-072432-spicy-bacon-king-oyster-mushroom-noodles.jpg',
+  '麻辣培根炒杏鲍菇面':
+      'assets/images/dish-072432-spicy-bacon-king-oyster-mushroom-noodles.jpg',
   '香辣肉丝': 'assets/images/dish-076688-spicy-shredded-pork.jpg',
   '凉拌藕片': 'assets/images/dish-096680-chilled-lotus-root-salad.jpg',
   '红烧五花肉': 'assets/images/dish-108754-red-braised-pork-belly.jpg',
@@ -490,4 +520,3 @@ const Map<String, String> kDishImageByName = <String, String>{
   '木耳炒肉': 'assets/images/dish-138944-wood-ear-pork-stir-fry.jpg',
   '口水肥牛丨酸辣爽口': 'assets/images/dish-139806-mouthwatering-beef-slices.jpg',
 };
-

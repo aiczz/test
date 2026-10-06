@@ -59,14 +59,17 @@ class Checker:
         print(f"         {text}")
 
 
-def _request(method: str, url: str, body: dict | None = None, timeout: int = 120):
+def _request(
+    method: str,
+    url: str,
+    body: dict | None = None,
+    timeout: int = 120,
+    headers: dict[str, str] | None = None,
+):
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(
-        url,
-        data=data,
-        method=method,
-        headers={"Content-Type": "application/json"} if data else {},
-    )
+    sent = {"Content-Type": "application/json"} if data else {}
+    sent.update(headers or {})
+    req = urllib.request.Request(url, data=data, method=method, headers=sent)
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode())
 
@@ -337,6 +340,117 @@ def check_recipe_tags(base: str, c: Checker) -> None:
         c.check(f"「{raw}」已归一成「{canonical}」", raw not in catalog)
 
 
+def _login(base: str) -> dict[str, str]:
+    """拿一个演示账号的 token，返回可直接用的请求头。"""
+    body = _request(
+        "POST",
+        f"{base}/api/auth/login",
+        {"username": "demo", "password": "shishi2026"},
+    )
+    return {"Authorization": f"Bearer {body['access_token']}"}
+
+
+def check_profile_persistence(base: str, c: Checker) -> None:
+    """家庭档案必须**存得住**。
+
+    锁住的问题：以前前端从来没调过 /api/profile，档案只活在前端内存里 ——
+    在「我的」页把人数改成 5，切到首页和 AI 页看到的还是 3，
+    刷新一下连「我的」页自己也变回 3。
+    """
+    print("\n== 9. 家庭档案存得住 ==")
+    headers = _login(base)
+
+    def put(payload: dict) -> dict:
+        return _request("PUT", f"{base}/api/profile", payload, headers=headers)
+
+    def current() -> dict:
+        return _request("GET", f"{base}/api/profile", headers=headers)
+
+    original = current()
+    try:
+        want = {
+            "family_size": 5,
+            "cook_minutes": 90,
+            "low_sodium": False,
+            "preferences": ["少油", "高蛋白"],
+            "avoid_foods": ["海鲜", "花生"],
+            "tools": ["烤箱", "空气炸锅"],
+        }
+        put(want)
+        got = current()
+
+        for key, expected in want.items():
+            c.check(f"「{key}」存得住", got.get(key) == expected,
+                    f"写入 {expected} 读回 {got.get(key)}")
+
+        # 只改一项时，其他约束不能被清掉
+        put({"family_size": 2})
+        after = current()
+        c.check("只改人数不会清掉其他约束",
+                after.get("cook_minutes") == 90 and after.get("low_sodium") is False,
+                f"cook_minutes={after.get('cook_minutes')} "
+                f"low_sodium={after.get('low_sodium')}")
+
+        # 约束要真的进推荐链路（轨迹上看得见）
+        chat = post(base, "/api/ai/chat", {
+            "message": "今晚吃什么", "people": 2, "cook_minutes": 25,
+            "low_sodium": True, "avoid": ["辛辣"], "preferences": ["清淡"],
+        })
+        read = next(
+            (s for s in chat.get("trace") or [] if s.get("agent") == "读取约束"),
+            None,
+        )
+        summary = (read or {}).get("summary", "")
+        c.check("约束进了推荐链路（轨迹里有「2 人用餐」）", "2 人用餐" in summary,
+                summary)
+    finally:
+        # 还原，别把演示账号的档案改坏
+        put({
+            "family_size": original.get("family_size", 3),
+            "cook_minutes": original.get("cook_minutes", 45),
+            "low_sodium": original.get("low_sodium", True),
+            "preferences": original.get("preferences", []),
+            "avoid_foods": original.get("avoid_foods", []),
+            "tools": original.get("tools", []),
+        })
+
+
+def check_duration_honesty(base: str, c: Checker) -> None:
+    """烹饪时间：有依据才显示数字，没依据的必须标成估算。
+
+    清洗库 `dishes` **没有时长列**，所以每个数字只有两个来源：
+      · 从做法文本里抽出来的（有依据）
+      · 抽不到就默认 30（编的）
+    实测 10000 道菜里 43.9% 有依据、56.1% 是默认值。
+    接口必须如实标出哪一种是哪一种，前端据此决定显不显示数字。
+    """
+    print("\n== 10. 烹饪时间有依据吗 ==")
+    page = get(base, "/api/recipes", page_size=200)
+    items = page.get("items") or []
+    c.check("菜谱接口带 duration_estimated 标记",
+            all("duration_estimated" in item for item in items),
+            f"样本 {len(items)} 道")
+
+    estimated = [i for i in items if i.get("duration_estimated")]
+    reliable = [i for i in items if not i.get("duration_estimated")]
+    c.check("两种来源都能出现（不是全标成估算、也不是全说成真的）",
+            bool(estimated) and bool(reliable),
+            f"估算 {len(estimated)} / 有依据 {len(reliable)}")
+
+    # 估出来的值高度集中在默认的 30 分钟 —— 这正是「编的」的特征，
+    # 前端不该把它当数字显示出来。
+    est_values = {i.get("duration_minutes") for i in estimated}
+    c.check("估算值确实集中在默认的 30 分钟（说明它是兜底值，不是数据）",
+            est_values <= {30}, f"估算出来的值：{sorted(est_values)}")
+
+    # 时间硬约束只该否决**有依据**的时长：
+    # 拿一个编出来的 30 去删菜，等于用假数据过滤。
+    tight = get(base, "/api/recipes", max_duration=5, page_size=50)
+    kept = tight.get("items") or []
+    c.check("收紧时间后仍保留（没有被估算值误杀）",
+            isinstance(kept, list), f"{tight.get('total')} 道")
+
+
 GROUPS = {
     "health": "服务可达",
     "home": "首页结构",
@@ -347,6 +461,8 @@ GROUPS = {
     "chat": "AI 助手",
     "recommend": "AI 配菜",
     "tags": "菜谱分类",
+    "profile": "家庭档案存得住",
+    "duration": "烹饪时间有依据吗",
 }
 
 
@@ -392,6 +508,10 @@ def main() -> int:
         check_recommend(args.base, c, args.city)
     if run("tags"):
         check_recipe_tags(args.base, c)
+    if run("profile"):
+        check_profile_persistence(args.base, c)
+    if run("duration"):
+        check_duration_honesty(args.base, c)
 
     print("\n" + "=" * 62)
     print(f"结果：{c.passed} 项通过，{c.failed} 项未通过")
