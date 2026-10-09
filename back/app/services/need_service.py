@@ -34,7 +34,22 @@ class HealthGoal:
     phrases: list[str] = field(default_factory=list)   # 用户可能怎么说
     effect_keywords: list[str] = field(default_factory=list)  # 拿去匹配 effects_json
 
+    # ★ 「这个诉求本质上是**营养**需求，不是中医功效需求」的标记。
+    #
+    # 为什么需要它：`effects_json` 是中医功效词（补气血 / 健脾 / 润肺…），
+    # 里面几乎没有营养学词汇 —— 实测全库只有 **1 条**「补充蛋白质」。
+    # 所以「健身要补蛋白」这种诉求，靠 effect_keywords 是匹配不到东西的，
+    # 必须改用「每 100g 蛋白质含量」来排。不处理的话，
+    # 用户说「家里有健身的」，推出来的还是山药和石榴。
+    prefer_high_protein: bool = False
+
     def as_prompt_line(self) -> str:
+        if self.prefer_high_protein:
+            return (
+                f"用户明确表达了「{self.name}」的诉求，这是**营养**需求。"
+                "请优先挑选蛋白质含量高的食材/菜品，"
+                "并在回答里围绕蛋白质、修复与增肌来说明，不要只讲时令和天气。"
+            )
         return (
             f"用户明确表达了「{self.name}」的诉求。"
             f"请优先挑选带有这类功效的食材/菜品"
@@ -109,6 +124,18 @@ _GOALS: list[HealthGoal] = [
         name="补肾强腰",
         phrases=["补肾", "肾虚", "腰膝酸软", "腰酸"],
         effect_keywords=["补肾", "补肾益气", "补肾养血", "壮腰", "补元气"],
+    ),
+    HealthGoal(
+        name="健身增肌",
+        phrases=[
+            "健身", "增肌", "长肌肉", "练肌肉", "撸铁", "高蛋白", "补蛋白",
+            "蛋白质", "增重", "长身体", "运动后", "练完",
+        ],
+        # ⚠️ 这几个是库里**真实存在**的、勉强沾边的功效词（数量很少）。
+        #    真正起作用的排序是下面的 prefer_high_protein ——
+        #    靠每 100g 蛋白质含量排，而不是靠中医功效词。
+        effect_keywords=["补虚养身", "补虚强身", "强身健体", "补充蛋白质", "养血强身"],
+        prefer_high_protein=True,
     ),
     HealthGoal(
         name="补钙强骨",

@@ -376,16 +376,68 @@ def score_foods(
     date_key: str = "",
     pool_size: int = 80,
     limit: int = 3,
+    health_goal: Any = None,
+    exclude_ids: set[int] | None = None,
 ) -> list[ScoredItem]:
-    """按综合打分挑出今天的推荐食材（按分数降序）。"""
+    """按综合打分挑出今天的推荐食材（按分数降序）。
+
+    `health_goal`（食养诉求）会做两件事：
+      1. **扩大召回**：光看当季食材的话，候选里可能压根没有「补气血」的食材，
+         再好的排序也救不回来。所以把 effects_json 命中诉求关键词的食材
+         也拉进池子（`foods_matching_effects`）。
+      2. **把「对不对症」变成主序**：用户明说了「健身要补蛋白」的时候，
+         鸡胸肉就该排在当季青菜前面。所以有诉求时 `band = 100 × 契合度`，
+         没有诉求时才按时令档位排。
+         （菜品那边反过来 —— 一顿饭的时令感更重要，诉求只在同档位内加权。
+           两边的取舍不同，是有意的。）
+    """
     season_name = f"{season_char_of(month)}季"
 
     seasonal = food_repository.list_seasonal(session, month=month, limit=pool_size)
     if seasonal:
-        pool = [(food, season) for food, season in seasonal]
+        pool: list[tuple[Any, Any]] = [(food, season) for food, season in seasonal]
     else:
         rows, _ = food_repository.list_foods(session, offset=0, limit=pool_size)
         pool = [(food, None) for food in rows]
+
+    # 有诉求时，把「对症」的食材也加进候选池
+    goal_keywords = list(getattr(health_goal, "effect_keywords", None) or [])
+    if goal_keywords:
+        seen = {int(getattr(food, "id", 0)) for food, _ in pool}
+        matched = foods_matching_effects(session, goal_keywords, limit=150)
+        if matched:
+            # 一次取全部核心食材再筛，比按 id 逐个查省事得多（590 条很小）
+            rows, _ = food_repository.list_foods(session, offset=0, limit=1000)
+            by_id = {int(getattr(food, "id", 0)): food for food in rows}
+            for food_id in matched:
+                if food_id not in seen and food_id in by_id:
+                    pool.append((by_id[food_id], None))
+                    seen.add(food_id)
+
+    # ★ 「健身要补蛋白」这类诉求：光靠功效词捞不到人。
+    #   effects_json 是中医功效（补气血/健脾…），全库只 1 条「补充蛋白质」——
+    #   而鸡胸肉（24.6g/100g）、牛里脊（22.2g）这些**压根不带功效标签**。
+    #   所以按营养值直接捞：蛋白质 >= 15g/100g 的核心食材全部进池子。
+    #   不这么做的话，用户说「家里有健身的」，推出来是山药和石榴。
+    if getattr(health_goal, "prefer_high_protein", False):
+        seen = {int(getattr(food, "id", 0)) for food, _ in pool}
+        rows, _ = food_repository.list_foods(session, offset=0, limit=1000)
+        by_id = {int(getattr(food, "id", 0)): food for food in rows}
+        candidates_ids = [fid for fid in by_id if fid not in seen]
+        for food_id, insight in food_insights(session, candidates_ids).items():
+            protein = insight.protein
+            # ⚠️ 必须同时要求 is_protein_source（肉蛋/水产/豆）。
+            #    只按蛋白质数值排的话，口蘑(38.7g)、羊肚菌 会冲进前三 ——
+            #    那是**干货**的浓缩值，谁也不会一次吃 100g 干蘑菇。
+            #    "高蛋白食材"在用户心里指的是肉蛋水产豆，不是干菌菇。
+            if (
+                protein is not None
+                and protein >= 15
+                and insight.is_protein_source
+                and food_id in by_id
+            ):
+                pool.append((by_id[food_id], None))
+                seen.add(food_id)
 
     if not pool:
         return []
@@ -451,16 +503,39 @@ def score_foods(
         )
         salt = daily_salt(region or "national", date_key, "food", name)
 
+        # ---- 食养诉求契合度（用户明说的需求）----
+        goal_fit_score = 0.0
+        if goal_keywords:
+            effect_tags = set(getattr(insight, "tags", None) or ())
+            goal_fit_score = goal_fit(effect_tags, goal_keywords)
+
+        # ★ 「健身要补蛋白」这类诉求本质是**营养**需求，不是中医功效需求。
+        #   effects_json 里几乎没有营养学词（全库只有 1 条「补充蛋白质」），
+        #   靠功效匹配的话，用户说「家里有健身的」推出来的还是山药和石榴。
+        #   所以这类诉求改用「每 100g 蛋白质含量」来评：>=20g 算优秀。
+        if getattr(health_goal, "prefer_high_protein", False) and insight is not None:
+            protein = insight.protein
+            if protein is not None:
+                goal_fit_score = max(goal_fit_score, min(protein / 20.0, 1.0))
+        if goal_keywords and goal_fit_score == 0.0:
+            goal_fit_score = -0.5
+
         # 质量分不含轮换因子 —— 池子用它排序，保证「能进池子的都是好候选」
         quality = (
             W_WEATHER * weather_fit
             + W_NUTRITION * nutrition_fit
             + W_PREFERENCE * preference_fit
             + W_POPULARITY * popularity
+            + W_GOAL * goal_fit_score
+            + (W_IMAGE if has_image(name) else 0.0)
+            # 「对症」的食材也得当季优先 —— 但只是加权，主序见下面的 band
+            + W_SEASON * (season_score / 100.0)
         )
         score = quality + W_DAILY * salt
 
         highlights: list[str] = []
+        if goal_fit_score > 0 and health_goal is not None:
+            highlights.append(getattr(health_goal, "name", "对症"))
         if season_score >= 95:
             highlights.append(f"{month}月正当时")
         elif season_score >= 85:
@@ -488,19 +563,34 @@ def score_foods(
                     "preference": preference_fit,
                     "popularity": popularity,
                     "daily": salt,
+                    "goal": goal_fit_score,
                 },
                 insight=insight,
                 highlights=highlights[:3],
                 quality=quality,
-                # ★ 时令是主序（档位）：95 分的莲藕永远不会被 90 分的南瓜挤下去，
-                #   但同为「当月时令」的几十个食材每天会换一批。
-                band=float(season_score),
+                # ★ 排序主序：
+                #   没有诉求 → 时令档位（95 分的莲藕永远压过 90 分的南瓜，
+                #              但同为「当月时令」的几十个食材每天会换一批）
+                #   有诉求   → 对症程度（用户明说了「补气血」，那就该以它为先）
+                band=(
+                    100.0 * goal_fit_score
+                    if goal_keywords
+                    else float(season_score)
+                ),
             )
         )
+
+    if exclude_ids:
+        scored = [item for item in scored if item.item_id not in exclude_ids]
 
     for item in scored:
         item.reason = _food_reason(item, month=month, weather=weather)
 
+    # ★ 有诉求时不要按「每日轮换」抽稀 —— 用户要的是「对症的那几样」，
+    #   轮换会把最对症的挤出去，看起来就像没听懂。
+    if goal_keywords:
+        scored.sort(key=lambda item: (-item.band, -item.quality, item.item_id))
+        return scored[:limit] if limit else scored
     picked = _select_with_rotation(
         scored, limit=limit, pool_size=ROTATE_POOL_FOOD
     )

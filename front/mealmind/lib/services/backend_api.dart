@@ -444,6 +444,9 @@ class BackendApi {
     //   recentRecipeIds  —— 「换一批」要避开这些
     String? lastIntent,
     List<int> recentRecipeIds = const <int>[],
+    // 推荐食材那条链路要排除的食材。
+    // ⚠️ 不能复用 recentRecipeIds —— 食材 id 和菜品 id 是两套空间，混用会误排除。
+    List<int> recentFoodIds = const <int>[],
   }) async {
     final res = await _aiDio.post<Map<String, dynamic>>(
       '/api/ai/chat',
@@ -457,11 +460,13 @@ class BackendApi {
         'avoid': avoid,
         'last_intent': ?lastIntent,
         if (recentRecipeIds.isNotEmpty) 'recent_recipe_ids': recentRecipeIds,
+        if (recentFoodIds.isNotEmpty) 'recent_food_ids': recentFoodIds,
       },
       options: _auth,
     );
     final data = res.data ?? const <String, dynamic>{};
     final recipes = (data['recipes'] as List?) ?? const <dynamic>[];
+    final foods = (data['foods'] as List?) ?? const <dynamic>[];
     return AiChatResult(
       answer: data['answer'] as String? ?? '',
       intent: data['intent'] as String? ?? 'general',
@@ -472,9 +477,17 @@ class BackendApi {
           .whereType<Map<String, dynamic>>()
           .map(_recipeFromJson)
           .toList(),
+      // ★ 推荐食材（intent == 'recommend_foods' 时才有）。
+      //   和 recipes 是对称的两条链路：菜谱 ← meal_recommendation，食材 ← recommend_foods。
+      foods: foods
+          .whereType<Map<String, dynamic>>()
+          .map(_foodFromJson)
+          .toList(),
       trace: _traceFromJson(data['trace']),
       source: data['source'] as String? ?? 'algorithm',
       model: data['model'] as String?,
+      // 意图是「按语义判的」还是「关键词匹配的」—— 界面上如实标出来
+      intentSource: data['intent_source'] as String? ?? 'rules',
     );
   }
 
@@ -871,6 +884,15 @@ class AiChatResult {
   final List<String> toolsUsed;
   final List<Recipe> recipes;
 
+  /// ★ 推荐的**食材**（`intent == 'recommend_foods'` 时才有）。
+  ///
+  /// 和 `recipes` 是对称的两条链路：
+  ///   菜谱 ← meal_recommendation / cook_with_my_foods
+  ///   食材 ← recommend_foods
+  /// 用户不一定想「用家里的食材做菜」，也可能直接让 AI 按需求从食材库里
+  /// 挑对症的 —— 比如「家里有健身的」→ 鸡胸肉。
+  final List<Food> foods;
+
   /// ★ 后端真实发生的协作轨迹。
   ///
   /// 之前这份轨迹是前端按家庭档案自己「演」出来的（recommender.dart 的
@@ -883,18 +905,25 @@ class AiChatResult {
   final String source;
   final String? model;
 
+  /// 意图是怎么判出来的：ai（按语义）/ rules（关键词兜底）。
+  /// 如实标注 —— 用户和评委都该知道这句话是「被理解了」还是「被匹配了」。
+  final String intentSource;
+
   const AiChatResult({
     required this.answer,
     required this.intent,
     this.toolsUsed = const <String>[],
     this.recipes = const <Recipe>[],
+    this.foods = const <Food>[],
     this.trace = const <AgentStep>[],
     this.source = 'algorithm',
     this.model,
+    this.intentSource = 'rules',
   });
 
   bool get fromAi => source == 'ai';
   bool get hasBackendTrace => trace.isNotEmpty;
+  bool get hasCards => recipes.isNotEmpty || foods.isNotEmpty;
 }
 
 /// 把后端的 trace 数组转成前端统一的 AgentStep

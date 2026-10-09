@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ from app.repositories.catalog_insight_repository import (
     food_insights,
     seasonal_knowledge,
 )
+from app.schemas.home import HomeFoodItem
 from app.schemas.ai import (
     AiChatRequest,
     AiChatResponse,
@@ -53,6 +55,9 @@ from app.services import (
 )
 from app.services.need_service import HealthGoal
 from app.services.scoring_service import HardConstraints, ScoredItem
+
+# 语义意图识别失败时只记日志、不打扰用户 —— 退回关键词规则就是了。
+logger = logging.getLogger(__name__)
 
 # 意图关键词。
 #
@@ -135,6 +140,18 @@ _MEAL_HINTS = (
 _POSSESSIVE_HINTS = ("我的", "我家", "家里", "自家", "现有的")
 _FOOD_HINTS = ("食材", "材料", "原料", "库存", "冰箱", "东西")
 
+# 「想要食材建议」信号（区别于「想做饭」）。
+#
+# ⚠️ 这一小串**只在离线兜底时用得上**。联网时意图是模型按语义判的 ——
+#    像「家里有健身的」这种一个「食材」都没提的说法，关键词表认不出来。
+#    这也正是要加语义那层的原因：规则这层的价值是「没配 AI 也不变哑巴」，
+#    不是「判得准」。
+_FOOD_WANT_HINTS = (
+    "推荐点食材", "推荐食材", "推荐些食材", "吃什么食材", "吃哪些食材",
+    "该买什么", "买点什么", "买什么菜", "要买什么", "采购", "买菜",
+    "补钙", "补铁", "补锌", "补蛋白质", "补充蛋白",
+)
+
 # 忌口/否定表达 —— 必须尊重，否则可能推出用户不能吃的东西（安全问题）
 _NEGATION_HINTS = (
     "不吃", "不能吃", "忌口", "忌食", "忌", "过敏", "讨厌", "受不了",
@@ -183,6 +200,10 @@ class _Route:
     mentioned_names: list[str] = field(default_factory=list)
     # 用户在话里声明的忌口（「我不吃香菜」）—— 必须加进硬约束
     avoid_added: list[str] = field(default_factory=list)
+    # 这个意图是「按语义判出来的」（ai）还是「关键词匹配出来的」（rules）。
+    # 如实标出来并进轨迹 —— 用户和评委都该知道这句话是被**理解**了还是被**匹配**了。
+    source: str = "rules"
+    why: str = ""
 
 
 def _mentioned_foods(session: Session | None, message: str) -> tuple[list[int], list[str]]:
@@ -250,10 +271,163 @@ def _declared_avoid(message: str, mentioned_names: list[str]) -> list[str]:
     return terms
 
 
+# =====================================================================
+# 语义意图识别
+#
+# 【为什么要加这一层】
+# `_route()` 是**关键词**匹配。中文的表达方式太多了：
+#     「最近有点虚」    「想给娃补补」     「体检说血脂高」
+#     「家里有健身的」  「想买点能补钙的」
+# 这些句子里一个「吃」「推荐」「食材」都没有，关键词表永远补不全。
+#
+# 所以：**优先让大模型按语义判断**，判不出来（没配 key / 网络失败 / 返回垃圾）
+# 再退回关键词那套。两层都要有 —— 关键词那层不只是兜底，
+# 它还是**离线可用**的保证（没配 AI 时整个助手不能变成哑巴）。
+#
+# 判出来的结果会如实写进轨迹（「意图识别」那一步），标明是语义判的还是关键词判的。
+# =====================================================================
+
+# 意图清单 —— 提示词里给模型看的就是这四个
+_INTENT_LABELS = {
+    "meal_recommendation": "想知道**吃什么菜**，或提出了饮食/健康诉求（想补气血、减脂、清淡点…）",
+    "recommend_foods": (
+        "想知道**吃什么食材 / 该买什么**，或要针对某个目标挑食材"
+        "（健身要补蛋白、要补钙、贫血、想润肺…）；也包含「随便推荐点食材」"
+    ),
+    "cook_with_my_foods": "明确要用**自己现有的食材 / 家里的食材 / 库存**来做菜",
+    "general": "纯寒暄、打招呼、问你是谁、说谢谢/再见，没有饮食需求",
+}
+
+
+def _classify_prompt(message: str, last_intent: str | None) -> str:
+    goals = "、".join(goal.name for goal in need_service.all_goals())
+    labels = "\n".join(f"  - {k}：{v}" for k, v in _INTENT_LABELS.items())
+    context = (
+        f"\n【上一轮意图】{last_intent}（如果这句是「换一批」「还有吗」这类"
+        f"没有新信息的追问，就沿用这个意图）"
+        if last_intent
+        else ""
+    )
+    return f"""你在判断用户这句话的**意图**，并抽出其中的需求。按意思判断，不要按关键词。
+
+可选意图：
+{labels}
+
+用户说：{message}{context}
+
+注意：
+- 中文说法很多样。「最近有点虚」「想给娃补补」「家里有健身的」「体检说血脂高」
+  都表达了需求，不要因为它们没有「吃」「推荐」这类词就判成 general；
+- 只有用户**明确提到自己的食材/库存**时，才是 cook_with_my_foods；
+- 既要菜又要食材、或者没说清是菜还是食材时，选 meal_recommendation；
+- 拿不准就不要硬判：宁可给 general，也不要瞎猜一个需求出来。
+
+只输出 JSON：
+{{
+  "intent": "四选一",
+  "goal": 食养诉求名，从下面这份清单里选一个，没有就给 null
+          （{goals}），
+  "foods": ["用户明确点名的食材名", ...]（没有就给空数组）,
+  "avoid": ["用户明确说不吃/过敏的东西", ...]（没有就给空数组）,
+  "why": "一句话说明你为什么这么判（不超过 30 字）"
+}}"""
+
+
+def _route_semantic(
+    *, session: Session | None, message: str, payload: Any = None
+) -> _Route | None:
+    """让模型按语义判意图。判不出来返回 None（调用方退回关键词规则）。"""
+    if not client.is_configured():
+        return None
+
+    last_intent = getattr(payload, "last_intent", None) if payload else None
+    result = client.complete_json(
+        [
+            {
+                "role": "system",
+                "content": "你是意图分类器。只输出 JSON，不要任何多余文字。",
+            },
+            {"role": "user", "content": _classify_prompt(message, last_intent)},
+        ],
+        max_tokens=200,
+        temperature=0.0,
+    )
+    if not result.ok:
+        logger.info("语义意图识别失败，退回关键词规则：%s", result.error)
+        return None
+
+    data = result.data or {}
+    intent = str(data.get("intent") or "").strip()
+    if intent not in _INTENT_LABELS:
+        logger.info("语义意图识别给了个没见过的标签：%r", intent)
+        return None
+
+    # 诉求：优先用模型给的名字，认不出来再用关键词兜（模型可能给个近义说法）
+    goal = None
+    raw_goal = str(data.get("goal") or "").strip()
+    if raw_goal:
+        goal = next(
+            (g for g in need_service.all_goals() if g.name == raw_goal), None
+        )
+    if goal is None:
+        goal = need_service.extract_goal(message)
+
+    # 点名食材 / 忌口：一律以**库里的名字**为准（模型可能给口语化的说法），
+    # 所以这里不是直接采信模型，而是拿它当线索再走一遍确定性识别 ——
+    # 顺序也重要：把模型提到的食材名拼进探测串，能补上关键词漏掉的。
+    mentioned_ids, mentioned_names = _mentioned_foods(session, message)
+    for extra in data.get("foods") or []:
+        extra_name = str(extra).strip()
+        if extra_name and extra_name not in mentioned_names:
+            extra_ids, extra_names = _mentioned_foods(session, extra_name)
+            for food_id, food_name in zip(extra_ids, extra_names):
+                if food_name not in mentioned_names:
+                    mentioned_ids.append(food_id)
+                    mentioned_names.append(food_name)
+
+    avoid_added = _declared_avoid(message, mentioned_names)
+    for extra in data.get("avoid") or []:
+        name = str(extra).strip()
+        if name and name not in avoid_added:
+            avoid_added.append(name)
+
+    # 被否定的食材不能当召回依据（同 `_route` 的处理）
+    kept = [
+        (food_id, name)
+        for food_id, name in zip(mentioned_ids, mentioned_names)
+        if name not in avoid_added
+    ]
+
+    return _Route(
+        intent=intent,
+        follow_up=_is_follow_up(message),
+        health_goal=goal,
+        mentioned_ids=[food_id for food_id, _ in kept],
+        mentioned_names=[name for _, name in kept],
+        avoid_added=avoid_added,
+        source="ai",
+        why=str(data.get("why") or "").strip(),
+    )
+
+
+def _route_smart(
+    *, session: Session | None, message: str, payload: Any = None
+) -> _Route:
+    """语义优先、关键词兜底。两层都保证「一定能给出一个意图」。"""
+    semantic = _route_semantic(session=session, message=message, payload=payload)
+    if semantic is not None:
+        return semantic
+    return _route(session=session, message=message, payload=payload)
+
+
 def _route(
     *, session: Session | None, message: str, payload: Any = None
 ) -> _Route:
     """把一句话路由成「闲聊」或「推荐」，并顺带抽出诉求/食材/忌口。
+
+    ⚠️ 这是**关键词**版本，现在只当兜底用（见 `_route_smart`）：
+       没配 AI、网络失败、模型返回垃圾时走这条。
+       它的价值是「离线也能用」，不是「判得准」。
 
     优先级（顺序即优先级）：
         ① 追问               → 继承上一轮意图
@@ -290,9 +464,13 @@ def _route(
     # ① 追问
     if _is_follow_up(message):
         inherited = getattr(payload, "last_intent", None) if payload else None
+        # ⚠️ 可继承的意图清单要和「能出卡片的意图」保持一致。
+        #    漏了 recommend_foods 的后果：在食材推荐之后说「换一批」，
+        #    会突然变回推荐菜品 —— 卡片类型都变了，用户一脸问号。
         intent = (
             inherited
-            if inherited in {"meal_recommendation", "cook_with_my_foods"}
+            if inherited
+            in {"meal_recommendation", "cook_with_my_foods", "recommend_foods"}
             else "meal_recommendation"
         )
         return _Route(
@@ -312,6 +490,19 @@ def _route(
     if mentions_mine:
         return _Route(
             intent="cook_with_my_foods",
+            health_goal=goal,
+            mentioned_ids=mentioned_ids,
+            mentioned_names=mentioned_names,
+            avoid_added=avoid_added,
+        )
+
+    # ②.5 想要「食材」而不是「菜」→ recommend_foods
+    #
+    # 放在 cook_with_my_foods **之后**：说「用我的食材」是要做饭，
+    # 不是要采购建议 —— 那两句话的意图不一样。
+    if any(hint in message for hint in _FOOD_WANT_HINTS):
+        return _Route(
+            intent="recommend_foods",
             health_goal=goal,
             mentioned_ids=mentioned_ids,
             mentioned_names=mentioned_names,
@@ -486,17 +677,292 @@ def _coerce_picks(value: Any, allowed: set[int], limit: int) -> list[dict[str, A
 # =====================================================================
 
 
+def _food_candidate_lines(session: Session, items: list[ScoredItem]) -> list[str]:
+    """给模型看的食材候选清单。"""
+    lines: list[str] = []
+    for item in items:
+        insight = item.insight
+        tags = "、".join((insight.tags or [])[:4]) if insight else "—"
+        season = int(item.factors.get("season") or 0)
+        lines.append(
+            f"{item.item_id} | {item.name} | 标签：{tags} | 应季分：{season}"
+        )
+    return lines
+
+
+def _food_prompt(
+    *,
+    session: Session,
+    payload: Any,
+    constraints: HardConstraints,
+    weather: Any,
+    month: int,
+    candidates: list[ScoredItem],
+    health_goal: Any,
+    count: int,
+) -> str:
+    goal_block = ""
+    if health_goal is not None:
+        goal_block = f"\n【★ 用户的核心诉求 · 优先满足】{health_goal.as_prompt_line()}"
+    extra = (
+        f"\n【用户原话】{payload.message}"
+        if getattr(payload, "message", None)
+        else ""
+    )
+    return f"""【任务】帮用户挑 {count} 样**食材**（不是菜品），并说明为什么适合他。
+【家庭约束】{_constraints_block(constraints)}
+【今天】{month} 月（{scoring_service.season_char_of(month)}季）{payload.city or ''}
+【天气】{weather.description} —— {weather.advice}{extra}{goal_block}
+【时令知识 · 来自我们的时令数据库】
+{_facts_block(session, month)}
+
+【候选食材】（只能从这里挑）
+{chr(10).join(_food_candidate_lines(session, candidates))}
+
+请输出 JSON：
+{{
+  "answer": "给用户的一段话，2~3 句，说清为什么这几样适合他现在的需求",
+  "picks": [{{"id": 食材id, "reason": "一句话理由（不超过 20 字）"}}]
+}}
+
+要求：
+- picks 选 {count} 个，按推荐优先级排序，id 必须来自候选清单；
+- 必须围绕用户的需求说（他说健身就讲蛋白质，说补铁就讲含铁量），
+  不要只讲时令和天气；
+- 必须遵守忌口与限钠约束；
+- 全部用简体中文。"""
+
+
+def _answer_food_recommendation(
+    *,
+    session: Session,
+    payload: Any,
+    route: _Route,
+    user_id: int | None,
+) -> AiChatResponse:
+    """「推荐食材」链路 —— 和 `meal_recommendation` 对称，只是产出食材。
+
+    典型输入：「家里有健身的」「想补点钙」「体检说血脂高」「随便推荐点食材」。
+    """
+    message = payload.message
+    count = 3
+
+    constraints = _constraints(session, user_id, payload)
+    constraints.people = _parse_people(message) or payload.people or 3
+    if route.avoid_added:
+        merged = list(constraints.avoid)
+        for term in route.avoid_added:
+            if term not in merged:
+                merged.append(term)
+        constraints.avoid = tuple(merged)
+        constraints.preferences = tuple(
+            p for p in constraints.preferences if p not in constraints.avoid
+        )
+
+    month = datetime.now().month
+    weather = _weather_for(payload, month)
+    trace: list[AiTraceStep] = []
+
+    trace.append(
+        AiTraceStep(
+            agent="读取约束",
+            summary=(
+                f"读取约束：{constraints.people} 人用餐；"
+                f"{'限钠（少盐）' if constraints.low_sodium else '不限钠'}；"
+                f"口味偏好：{'、'.join(constraints.preferences) or '无'}；"
+                f"忌口：{'、'.join(constraints.avoid) or '无'}"
+            ),
+            ms=1,
+        )
+    )
+    # 意图是怎么判出来的，如实标出来
+    trace.append(
+        AiTraceStep(
+            agent="意图识别",
+            summary=(
+                "按语义判断：这句话是「想要食材推荐」"
+                + (f" —— {route.why}" if route.why else "")
+                if route.source == "ai"
+                else "按关键词判断：这句话是「想要食材推荐」（AI 未启用，走规则兜底）"
+            ),
+            ms=0,
+        )
+    )
+    if route.health_goal is not None:
+        trace.append(
+            AiTraceStep(
+                agent="需求解析",
+                summary=(
+                    f"识别到诉求「{route.health_goal.name}」→ 按功效关键词"
+                    f"（{'、'.join(route.health_goal.effect_keywords[:4])}…）"
+                    "扩大召回并优先排序"
+                ),
+                ms=1,
+            )
+        )
+    else:
+        trace.append(
+            AiTraceStep(
+                agent="需求解析",
+                summary="没有识别到具体诉求 → 按时令与天气推荐应季食材",
+                ms=1,
+            )
+        )
+
+    t0 = time.perf_counter()
+    # 「换一批」：把已经给过的食材排掉
+    already_shown_foods = {
+        int(i) for i in (getattr(payload, "recent_food_ids", None) or []) if i
+    }
+    candidates = scoring_service.score_foods(
+        session,
+        month=month,
+        weather=weather,
+        constraints=constraints,
+        region=payload.city or "national",
+        date_key=datetime.now().date().isoformat(),
+        pool_size=200,
+        limit=8,
+        health_goal=route.health_goal,
+        exclude_ids=already_shown_foods or None,
+    )
+    trace.append(
+        AiTraceStep(
+            agent="候选召回",
+            summary=(
+                f"按功效匹配 + 综合打分召回 → 候选 {len(candidates)} 样食材"
+                if route.health_goal is not None
+                else f"按当月时令与天气召回 → 综合打分筛出候选 {len(candidates)} 样食材"
+            ),
+            ms=int((time.perf_counter() - t0) * 1000),
+        )
+    )
+
+    if not candidates:
+        return AiChatResponse(
+            answer="按当前条件没找到合适的食材，放宽一下忌口再试试？",
+            intent="recommend_foods",
+            trace=trace,
+            source="algorithm",
+            intent_source=route.source,
+        )
+
+    allowed = {item.item_id for item in candidates}
+    answer: str | None = None
+    picks: list[dict[str, Any]] = []
+    source = "algorithm"
+    model_name: str | None = None
+    ai_ms = 0
+
+    if client.is_configured():
+        result = client.complete_json(
+            [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _food_prompt(
+                        session=session,
+                        payload=payload,
+                        constraints=constraints,
+                        weather=weather,
+                        month=month,
+                        candidates=candidates,
+                        health_goal=route.health_goal,
+                        count=count,
+                    ),
+                },
+            ]
+        )
+        ai_ms = result.elapsed_ms
+        if result.ok:
+            raw_answer = str(result.data.get("answer") or "").strip()
+            picks = _coerce_picks(result.data.get("picks"), allowed, count)
+            if raw_answer:
+                answer = raw_answer
+                source = "ai"
+                model_name = result.model
+
+    if answer is None:
+        trace.append(
+            AiTraceStep(
+                agent="文案生成",
+                summary="模型不可用，改用规则生成（结果结构不变）",
+                ms=ai_ms,
+                status="info",
+            )
+        )
+        prefix = (
+            f"按你说的「{route.health_goal.name}」，我挑了这几样："
+            if route.health_goal is not None
+            else "按现在的时令，我挑了这几样："
+        )
+        answer = prefix + "、".join(item.name for item in candidates[:count]) + "。"
+        picks = [
+            {"id": item.item_id, "reason": item.reason or ""}
+            for item in candidates[:count]
+        ]
+    else:
+        trace.append(
+            AiTraceStep(
+                agent="模型定稿",
+                summary=f"在候选内定稿 {len(picks)} 样食材",
+                ms=ai_ms,
+            )
+        )
+
+    # 模型挑中的排前面、剩下的补齐 —— 和菜品那条链路用同一个策略
+    chosen = _order_candidates(candidates, [p["id"] for p in picks], count)
+    reason_by_id = {int(p["id"]): str(p.get("reason") or "") for p in picks}
+    foods = [
+        HomeFoodItem(
+            **home_service.food_brief_payload(item),
+            reason=reason_by_id.get(item.item_id) or item.reason,
+            highlights=item.highlights,
+            score=round(item.score, 3),
+        )
+        for item in chosen
+    ]
+
+    return AiChatResponse(
+        answer=answer,
+        intent="recommend_foods",
+        tools_used=(
+            ["nutrition_check", "seasonal_calendar"]
+            if route.health_goal is not None
+            else ["seasonal_calendar"]
+        ),
+        foods=foods,
+        trace=trace,
+        source=source,
+        model=model_name,
+        intent_source=route.source,
+    )
+
+
 def chat(
     session: Session, user_id: int | None, payload: AiChatRequest
 ) -> AiChatResponse:
     message = payload.message
 
     # ---- 路由：先抽信号，再决定「闲聊」还是「推荐」----
-    # 详见 _route 的注释：原来是"命中固定短语才算推荐"，19 条常见说法错 11 条。
-    route = _route(session=session, message=message, payload=payload)
+    #
+    # 两层：先让模型按**语义**判（中文说法太多，关键词表永远补不全），
+    # 判不出来再退回关键词规则（没配 AI 时整个助手不能变哑巴）。
+    route = _route_smart(session=session, message=message, payload=payload)
     intent = route.intent
     follow_up = route.follow_up
     health_goal = route.health_goal
+
+    # ★ 「推荐食材」是另一条链路：用户要的是"该吃什么/该买什么"，
+    #   不是"做哪道菜"。和 meal_recommendation 对称，但没有"用我的库存"那个变体
+    #   （既然是"给我推荐该吃的"，就不该反过来受库存限制）。
+    if intent == "recommend_foods":
+        return _answer_food_recommendation(
+            session=session,
+            payload=payload,
+            route=route,
+            user_id=user_id,
+        )
 
     # 「换一批」要避开已经展示过的菜 —— 否则轮换因子是固定的，重问还是那三道
     already_shown = {

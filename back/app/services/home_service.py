@@ -70,7 +70,7 @@ def _item_reason(item: ScoredItem, notes: dict[int, str]) -> str:
     return notes.get(item.item_id) or item.reason
 
 
-def _food_brief_payload(item: ScoredItem) -> dict[str, Any]:
+def food_brief_payload(item: ScoredItem) -> dict[str, Any]:
     """把打分结果转成 FoodBrief 的字段。
 
     ⚠️ 必须手动回填 `season_score`：`food_service.to_brief()` 不传 season 对象时
@@ -268,7 +268,7 @@ def build_home(
 
     food_items = [
         HomeFoodItem(
-            **_food_brief_payload(item),
+            **food_brief_payload(item),
             reason=_item_reason(item, enhancement.food_notes),
             highlights=item.highlights,
             score=round(item.score, 3),

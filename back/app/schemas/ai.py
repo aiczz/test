@@ -11,6 +11,7 @@
 
 from pydantic import BaseModel, Field
 
+from app.schemas.home import HomeFoodItem
 from app.schemas.recipe import RecipeBrief
 
 
@@ -51,6 +52,12 @@ class AiChatRequest(AiContext):
     #                         否则每天轮换因子是固定的，重问一次还是那三道
     last_intent: str | None = None
     recent_recipe_ids: list[int] = []
+    # 同上，但针对「推荐食材」链路：已经给过的食材要排除，
+    # 否则用户说「换一批」拿到的还是同几样。
+    #
+    # ⚠️ 为什么不能复用 recent_recipe_ids：那是**菜品 id**，和食材 id 是两套空间，
+    #    混用会误排除 —— 拿菜品的 id 去排食材，正好把不相干的食材滤掉。
+    recent_food_ids: list[int] = []
 
 
 class AiMenuSummary(BaseModel):
@@ -64,6 +71,21 @@ class AiChatResponse(BaseModel):
     # 说明书 §20：前端靠这个展示"多智能体用了哪些工具"
     tools_used: list[str] = []
     recipes: list[RecipeBrief] = []
+
+    # ★ 推荐食材（intent == "recommend_foods" 时才有）。
+    #
+    # 【为什么要有这个意图】
+    # 用户不一定想「用家里的食材做菜」，也可能直接想让 AI 按某个需求
+    # 从食材库里挑对症的食材 —— 比如「家里有健身的」→ 鸡胸肉。
+    # 这和 meal_recommendation 是**对称**的：
+    #     菜谱 ← meal_recommendation   食材 ← recommend_foods
+    # 区别是食材这边**没有** cook_with_my_foods 那个「用我的库存」变体：
+    # 既然是「给我推荐该吃/该买的食材」，就不该反过来受库存限制。
+    #
+    # 复用 HomeFoodItem（FoodBrief + reason/highlights/score），
+    # 前端就能用和首页同一套食材卡片渲染。
+    foods: list[HomeFoodItem] = []
+
     menu: AiMenuSummary | None = None
 
     # ---- 本次新增（都带默认值，老前端不受影响）----
@@ -71,6 +93,9 @@ class AiChatResponse(BaseModel):
     # ai = 真的调了模型；algorithm = 规则兜底
     source: str = "algorithm"
     model: str | None = None
+    # 意图是怎么判出来的：ai（按语义）/ rules（关键词兜底）。
+    # 如实标出来 —— 用户和评委都该知道这句话是"被理解"的还是"被匹配"的。
+    intent_source: str = "rules"
 
 
 # =====================================================================

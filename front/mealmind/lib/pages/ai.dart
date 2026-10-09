@@ -11,6 +11,7 @@ import '../state/today_menu.dart';
 import '../theme.dart';
 import '../widgets/ai_compose_sheet.dart';
 import '../widgets/dish_photo.dart';
+import '../widgets/food_photo.dart';
 
 /// =====================================================================
 /// AI 助手页 · 小食
@@ -57,6 +58,7 @@ class _Item {
       steps = const <AgentStep>[],
       running = false,
       recipes = const <Recipe>[],
+      foods = const <Food>[],
       localFallback = false,
       fallbackReason = null,
       fromBackend = true; // 用户自己的话无所谓降级
@@ -69,9 +71,16 @@ class _Item {
   ///    现在直接带上完整的 Recipe 对象，不再二次查询。
   final List<Recipe> recipes;
 
+  /// 这条回复附带的推荐**食材**（`intent == 'recommend_foods'` 时才有）。
+  ///
+  /// 和 `recipes` 是一样的道理：直接带上完整对象，不去 ContentStore 二次查询
+  /// —— 那样会「后端明明推了 3 样，界面上一张卡都没有」。
+  final List<Food> foods;
+
   _Item.ai(
     this.text, {
     this.recipes = const <Recipe>[],
+    this.foods = const <Food>[],
     this.localFallback = false,
     this.fallbackReason,
   }) : kind = _Kind.ai,
@@ -83,6 +92,7 @@ class _Item {
     : kind = _Kind.trace,
       text = '',
       recipes = const <Recipe>[],
+      foods = const <Food>[],
       localFallback = false,
       fallbackReason = null;
 
@@ -115,6 +125,10 @@ class _AiPageState extends State<AiPage> {
   /// 用途：用户说「换一批呢」时要避开这些 —— 否则后端每天的轮换因子是固定的，
   /// 重问一次还是那三道，用户会觉得「根本没换」。
   final Set<int> _shownRecipeIds = <int>{};
+
+  /// 本次会话里【已经展示过】的**食材** id（推荐食材那条链路用）。
+  /// 和 _shownRecipeIds 分开：食材和菜品是两套 id 空间，混用会误排除。
+  final Set<int> _shownFoodIds = <int>{};
 
   /// 上一轮的意图。追问（「换一批」「还有别的吗」）本身不含推荐关键词，
   /// 带上它后端才知道该继续推荐，而不是当成闲聊。
@@ -206,12 +220,16 @@ class _AiPageState extends State<AiPage> {
     final reply = await pending;
     if (!mounted) return;
 
-    // 记住这一轮的意图 + 展示了哪些菜，供下一句追问使用
+    // 记住这一轮的意图 + 展示了哪些菜/食材，供下一句追问使用
     if (reply != null) {
       if (reply.intent.isNotEmpty) _lastIntent = reply.intent;
       for (final recipe in reply.recipes) {
         final id = int.tryParse(recipe.id);
         if (id != null) _shownRecipeIds.add(id);
+      }
+      for (final food in reply.foods) {
+        final id = int.tryParse(food.id);
+        if (id != null) _shownFoodIds.add(id);
       }
     }
 
@@ -246,6 +264,10 @@ class _AiPageState extends State<AiPage> {
           recipes: (reply != null && reply.recipes.isNotEmpty)
               ? reply.recipes
               : const <Recipe>[],
+          // ★ 同理，推荐食材也直接带上完整对象（见 _Item.foods 的注释）。
+          foods: (reply != null && reply.foods.isNotEmpty)
+              ? reply.foods
+              : const <Food>[],
           localFallback: reply == null,
           fallbackReason: reply == null ? _lastChatError : null,
         ),
@@ -286,6 +308,7 @@ class _AiPageState extends State<AiPage> {
         // ★ 会话上下文：追问靠它才不会被当成闲聊
         lastIntent: _lastIntent,
         recentRecipeIds: _shownRecipeIds.toList(),
+        recentFoodIds: _shownFoodIds.toList(),
       );
     } catch (error) {
       // 注意：这里不 import dio —— 网络错误统一由 service 层翻译成人话，
@@ -521,6 +544,14 @@ class _ItemView extends StatelessWidget {
                     const SizedBox(height: 10),
                   ],
                 ],
+                // ★ 推荐食材的卡片 —— 和菜谱卡片是并列的两条链路
+                if (item.foods.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  for (final food in item.foods) ...[
+                    _MiniFoodCard(food: food),
+                    const SizedBox(height: 10),
+                  ],
+                ],
               ],
             ),
           ),
@@ -539,6 +570,78 @@ class _ItemView extends StatelessWidget {
 // =====================================================================
 // 推荐卡片（AI 回复里附带的）
 // =====================================================================
+
+/// 推荐**食材**的卡片。
+///
+/// 对应后端的 `recommend_foods` 意图 —— 用户不一定想「用家里的食材做菜」，
+/// 也可能直接让 AI 按需求从食材库里挑对症的（「家里有健身的」→ 鸡胸肉）。
+/// 视觉上刻意和菜谱卡片区分：食材是「买东西」的语境，用方图 + 标签，
+/// 菜谱是「做饭」的语境，用横图 + 时长。
+class _MiniFoodCard extends StatelessWidget {
+  final Food food;
+
+  const _MiniFoodCard({required this.food});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        border: Border.all(color: line),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 92, height: 92, child: FoodPhoto(asset: food.image)),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    food.name,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 5,
+                    runSpacing: 5,
+                    children: [
+                      for (final tag in food.tags.take(3))
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: orange50,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            tag,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: orange700,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _MiniRecipeCard extends StatelessWidget {
   /// 直接接收后端返回的 Recipe —— 不再去 ContentStore 里按 id 反查。

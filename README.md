@@ -25,7 +25,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `python -m pytest` | 162 passed |
+| 后端 `python -m pytest` | 190 passed |
 | 后端 `ruff --select F821,F811,F401,F841` | 干净 |
 | 前端 `dart analyze lib test` | 干净 |
 | 前端 `flutter test` | 10 passed |
@@ -177,7 +177,7 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
 
 ## 六、当前进度
 
-> 更新于 **v1.0.0**（2026-10-06）。状态：**可交付** —— 后端 162 个测试、
+> 更新于 **v1.0.0**（2026-10-06）。状态：**可交付** —— 后端 190 个测试、
 > 前端 10 个测试、验收脚本 49 项断言全过（见 `CHANGELOG.md`）。
 
 - [x] 环境搭建（Flutter + Android 工具链）
@@ -197,7 +197,7 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
       AI 请求里带的硬约束可以在轨迹的「读取约束」那一步看见）
 - [x] 品牌应用图标（自适应图标，非 Flutter 默认蓝色图标）+ PWA 清单
 - [x] 交互测试接入 CI（`flutter test` 是真实门禁，不是摆设）
-- [x] ★ **后端**：FastAPI + SQLModel，**15 张表、37 个接口、162 个测试**
+- [x] ★ **后端**：FastAPI + SQLModel，**15 张表、37 个接口、190 个测试**
       （SQLite 开箱即跑，改一行 `DATABASE_URL` 即可切 PostgreSQL；
       后端测试在 CI 里真的会跑 —— 见 `backend-tests.yml`）
 - [x] ★ **登录闭环**：注册 / 登录 / 手机验证码 / 演示账号一键登录 / token 持久化；
