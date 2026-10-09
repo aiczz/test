@@ -39,6 +39,7 @@ from typing import Any
 
 from sqlmodel import Session
 
+from app.data.dish_images import has_image
 from app.repositories import food_repository, recipe_repository
 from app.repositories.catalog_insight_repository import (
     DishInsight,
@@ -65,6 +66,15 @@ W_DAILY = 0.9        # 每日轮换（同地区同一天恒定）
 # 用户明确说出的食养诉求（「想吃点补气血的」）。
 # 权重给得比天气还高 —— 用户主动说出口的需求，优先级应该压过环境因素。
 W_GOAL = 2.4
+
+# 有配图的菜优先。
+#
+# 【这是展示层的考量，不是营养/口味判断】
+# 精选目录里 700 道有 481 道配了图（69%）。不优先的话，首页那 3 道很容易
+# 全落在没图的那 31% 上，卡片就成了三块「暂无配图」。
+# 权重刻意给小（0.6，比人气还低）：它只是**同等条件下**的偏好，
+# 绝不能盖过时令(3.0)/天气(1.6)/营养(1.2)/口味偏好(1.8)。
+W_IMAGE = 0.6
 
 # 每日轮换的「池子」大小。
 #
@@ -768,6 +778,8 @@ def score_dishes(
             + W_PREFERENCE * preference_fit
             + W_POPULARITY * popularity
             + W_GOAL * goal_score
+            # 有配图的优先（展示层偏好，权重很小，见 W_IMAGE 的说明）
+            + (W_IMAGE if has_image(name) else 0.0)
             # 时长没依据、又明显超预算的：降权而不是删掉
             - overtime_penalty
         )

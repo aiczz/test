@@ -311,7 +311,9 @@ def check_recipe_tags(base: str, c: Checker) -> None:
         return
 
     flat = [(tag["name"], tag["count"]) for g in groups for tag in g["tags"]]
-    c.check("分类数量够用（不是几个手写分类）", len(flat) >= 30,
+    # 精选目录（700 道）之后筛选区收窄到 28 个分类 —— 见 sql/catalog_v1/README.md。
+    # 卡 >= 20 是防退化（比如某次改动把分类搞没了），不是要求"越多越好"。
+    c.check("分类数量够用（不是几个手写分类）", len(flat) >= 20,
             f"{len(flat)} 个分类")
     c.check("没有 0 道菜的分类（点进去不会空）",
             all(count > 0 for _, count in flat),

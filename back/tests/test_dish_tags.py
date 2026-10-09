@@ -16,6 +16,7 @@ from sqlmodel.pool import StaticPool
 
 from app.data.dish_tags import (
     ALL_CANONICAL_TAGS,
+    RETIRED_TAGS,
     TAG_GROUPS,
     _RULES,
     canonical_dish_tags,
@@ -76,15 +77,43 @@ def test_rule_order_traps_do_not_regress():
     assert canonical_tag("红烧牛肉") == "红烧卤味"
 
 
-def test_rules_only_produce_grouped_tags():
-    """规则能产出的规范名，必须都在分组表里。
+def test_rules_only_produce_grouped_or_retired_tags():
+    """规则能产出的规范名，必须要么在分组表里、要么在 RETIRED_TAGS 里。
 
-    漏一个的后果是：这个标签会出现在卡片上，但筛选区里永远找不到它 ——
-    正是用户抱怨的「标签和分类对不上」。
+    漏一个的后果是：这个标签会出现在卡片上，既点不动、又没人知道它是有意退场的
+    —— 正是用户抱怨的「标签和分类对不上」。
+
+    ★ 精选目录（700 道）之后，筛选区从 45 个分类收窄到 28 个：
+    「年夜饭」「便当」这类只剩几道，撑不起一个入口，退到 RETIRED_TAGS。
+    但**规则留着** —— 删规则会让这些菜掉进更宽泛的桶里被错误归类
+    （「年夜饭」会被「饭」规则吃掉，变成一道主食）。
     """
     produced = {canonical for _, canonical in _RULES}
-    ungrouped = produced - set(ALL_CANONICAL_TAGS)
-    assert not ungrouped, f"这些规范标签没有归组，界面上会看不到：{ungrouped}"
+    known = set(ALL_CANONICAL_TAGS) | set(RETIRED_TAGS)
+    unknown = produced - known
+    assert not unknown, f"这些规范标签既没归组、也没登记为退场：{unknown}"
+
+
+def test_retired_tags_do_not_overlap_the_filter_groups():
+    """退场的标签不能再出现在筛选区里，否则等于没收窄。"""
+    overlap = set(RETIRED_TAGS) & set(ALL_CANONICAL_TAGS)
+    assert not overlap, f"这些标签同时被标成退场和保留：{overlap}"
+
+
+def test_retired_tags_are_not_filterable_but_stay_on_cards():
+    """退场标签的两种表现要对得上：
+
+    · `is_filter_tag` 是 False（筛选区里没有它）
+    · 但菜的标签里仍然保留它（卡片上的分类依然准确，只是不可点）
+    · 而且它必须排在**可点的核心分类之后** —— 卡片通常只显示前两个标签，
+      排前面就成「显示一个点不动的分类」了
+    """
+    assert not is_filter_tag("年夜饭")
+    assert is_filter_tag("家常菜")
+
+    tags = canonical_dish_tags(["年夜饭", "家常菜", "汤"])
+    assert "年夜饭" in tags, "退场不等于删掉，卡片上还要有"
+    assert tags[:2] == ["家常菜", "汤羹"], f"核心分类必须排在前面，实际 {tags}"
 
 
 def test_no_duplicate_tag_across_groups():
@@ -272,6 +301,30 @@ def test_servings_are_not_fabricated_on_the_compact_catalog():
         assert total > 0
         assert {item.servings for item in items} == {None}, (
             "清洗库没有份量列，就不该报一个数字"
+        )
+
+
+def test_home_schemas_tolerate_missing_servings():
+    """★ servings 为 None 时，首页那几个结构不能炸。
+
+    真实发生过：`MenuBrief.servings` 标的是必填 `str`，而清洗库
+    `to_brief()` 给的是 `None` —— 于是整个 `/api/home` 直接 500。
+    测试没发现是因为**测试夹具用的是旧演示库**，那里 `recipes.servings`
+    是真的有值（整数 3），永远走不到 None 这条分支。
+    只有清洗库才复现，所以这个用例必须建在 compact 夹具上。
+    """
+    from app.schemas.home import HomeRecipeItem, MenuBrief
+
+    with Session(_compact_engine()) as session:
+        items, _ = recipe_service.list_recipes(session, page=1, page_size=1)
+        brief = items[0]
+        assert brief.servings is None, "前提：清洗库的份量就是 None"
+
+        # 首页把同一份 brief 塞进这两个结构，都必须合法
+        MenuBrief(id=0, title="秋季家常菜单", image=None,
+                  servings=brief.servings, tags=["当季推荐"])
+        HomeRecipeItem(
+            **brief.model_dump(), reason="当季食材", highlights=[], score=1.0
         )
 
 

@@ -28,7 +28,9 @@ class MenuBrief(BaseModel):
     id: int
     title: str
     image: str | None = None
-    servings: str
+    # 同 RecipeBrief.servings：清洗库没有份量列，这时是 None。
+    # ⚠️ 写成 `str` 会让整个 /api/home 500 —— 这个坑踩过一次。
+    servings: str | None = None
     tags: list[str] = []
 
 

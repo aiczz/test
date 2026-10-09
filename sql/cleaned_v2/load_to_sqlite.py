@@ -1,4 +1,4 @@
-"""把 cleaned_v2 的 6 张 CSV 导入 SQLite。
+"""把清洗好的 6 张 CSV 导入 SQLite。
 
 为什么不用 load_to_mysql.py：自托管那台是 2 核 2G 的轻量服务器，跑 MySQL 太重，
 后端本来就是 SQLite（shishi.db）。这里照搬它的表/列定义，只把方言换成 SQLite。
@@ -8,9 +8,18 @@
 所有约束（NOT NULL / UNIQUE / 外键）都去掉了：为 NULL 的单元格本来就会被写成
 None，留着约束只会让导入半路失败。
 
+【用哪一份数据】
+默认从本脚本所在目录读。但**交付用的不是这一份** ——
+`../catalog_v1/` 是从完整清洗结果里精选出来的 700 道（见那个目录的 README），
+部署时指定它：
+
+    python3 load_to_sqlite.py --db /opt/test/back/shishi.db --source ../catalog_v1
+
+`cleaned_v2/` 是完整的 10000 道，保留下来做研究和回溯用，不再用于部署。
+
 用法（在 /opt/test/sql/cleaned_v2 目录下）：
-    python3 load_to_sqlite.py --db /opt/test/back/shishi.db
-    python3 load_to_sqlite.py --db /opt/test/back/shishi.db --verify
+    python3 load_to_sqlite.py --db /opt/test/back/shishi.db --source ../catalog_v1
+    python3 load_to_sqlite.py --db /opt/test/back/shishi.db --source ../catalog_v1 --verify
 
 导入只动这 6 张内容表，不碰 users / my_foods 等业务表。
 """
@@ -114,9 +123,18 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=os.getenv("SHISHI_DB", ""),
                     help="目标 SQLite 文件，例如 /opt/test/back/shishi.db")
+    ap.add_argument("--source", default=str(HERE),
+                    help="数据目录，默认是本脚本所在目录（完整清洗结果）；"
+                         "交付部署用 ../catalog_v1（精选 700 道）")
     ap.add_argument("--verify", action="store_true",
                     help="只统计各表行数，不导入")
     args = ap.parse_args()
+
+    source = Path(args.source).expanduser().resolve()
+    if not source.is_dir():
+        print(f"找不到数据目录 {source}", file=sys.stderr)
+        return 2
+    print(f"数据来源：{source}")
 
     if not args.db:
         print("必须用 --db 指定 sqlite 文件", file=sys.stderr)
@@ -138,7 +156,7 @@ def main() -> int:
             return 0
 
         for table, filename, cols in TABLES:
-            path = HERE / filename
+            path = source / filename
             if not path.exists():
                 print(f"缺文件 {path}", file=sys.stderr)
                 return 2

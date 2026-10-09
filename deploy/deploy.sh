@@ -22,6 +22,9 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACK_DIR="$REPO_DIR/back"
 SQL_DIR="$REPO_DIR/sql/cleaned_v2"
+# 导入的是**精选目录**（700 道），不是完整清洗库（10000 道）。
+# 见 sql/catalog_v1/README.md 里怎么选出来的。
+CONTENT_DIR="$REPO_DIR/sql/catalog_v1"
 WEB_DIR="/opt/web"
 SERVICE_NAME="shishi-backend"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -122,9 +125,12 @@ PY
 }
 
 ROWS="$(content_rows)"
-if [ "$RELOAD_DATA" -eq 1 ] || [ "$ROWS" -lt 1000 ]; then
-  echo "  当前 dishes 行数=$ROWS，导入清洗好的内容数据（约 1 分钟）..."
-  "$PY" "$SQL_DIR/load_to_sqlite.py" --db "$DB_PATH"
+# 阈值 500 是按**精选目录**（700 道）定的。
+# ⚠️ 别沿用以前的 1000：精选之后正常就是 700 行，用 1000 判断的话
+#    每次跑 deploy.sh 都会以为"还没导入"、反复重导一遍（要一分钟）。
+if [ "$RELOAD_DATA" -eq 1 ] || [ "$ROWS" -lt 500 ]; then
+  echo "  当前 dishes 行数=$ROWS，导入精选菜谱目录（约 10 秒）..."
+  "$PY" "$SQL_DIR/load_to_sqlite.py" --db "$DB_PATH" --source "$CONTENT_DIR"
   echo "  导入后 dishes 行数=$(content_rows)"
 else
   echo "  内容数据已存在（dishes=$ROWS 行），跳过导入。强制重导：--reload-data"
