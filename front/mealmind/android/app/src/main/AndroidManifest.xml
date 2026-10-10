@@ -1,8 +1,24 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ⚠️ 这一行必须在 main 清单里，不能只靠 src/debug 那份。
+         Flutter 模板只把 INTERNET 放在 src/debug（和 src/profile）里，那是给
+         热重载用的；**release 包不会合并那两份**。少了它的后果很隐蔽：
+         · flutter run 调试一切正常（走的是 debug 清单，有权限）
+         · 打成 release 包后应用完全无法联网 —— 界面会安静地退回内置的
+           演示数据，看起来像「后端挂了」，其实请求根本没发出去。
+         2026-10 的 APK 就是这么一直连不上后端的。 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- 后端是 http://（自建服务器，比赛期间没上 HTTPS），而 targetSdk ≥ 28 时
+         系统默认**禁止明文 HTTP** —— 不开下面那个开关，即使有 INTERNET 权限，
+         请求也会被 Android 直接拒掉。
+         想收紧的话可以换成 networkSecurityConfig，只对服务器 IP 放行明文；
+         但那样**换服务器地址/域名时必须记得同步改那个 xml**，否则又是
+         「突然连不上」，所以这里用开关，宁可少一个坑。 -->
     <application
         android:label="食时"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
