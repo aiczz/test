@@ -576,14 +576,10 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       onChanged: (value) => setState(() => _reminders = value),
                     ),
-                    const Divider(height: 1, indent: 56),
-                    _MenuRow(
-                      icon: Icons.chat_bubble_outline,
-                      title: '意见反馈',
-                      subtitle: '帮助我们改进推荐',
-                      onTap: () =>
-                          _showInfo('意见反馈', '反馈入口将在后端接入时启用。当前演示版本不会上传个人资料。'),
-                    ),
+                    // 「意见反馈」入口已移除：后端从来没有 feedback 接口，
+                    // 它点下去只会弹一句「将在后端接入时启用」——
+                    // 交付版里留一个自认没做完的入口比没有这个功能更难看。
+                    // 以后要做就先把后端 POST /api/feedback 做出来再加回来。
                   ],
                 ),
               ),
