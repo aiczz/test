@@ -123,30 +123,42 @@ class _SplashScreen extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: _brandPaper,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            // BoxFit.cover：手机屏比这张图更窄长，cover 会左右各裁掉一点。
-            // 图里的 logo 和文字都集中在中线上，裁不到。
-            Image.asset(
-              'assets/images/splash.png',
-              fit: BoxFit.cover,
-            ),
-            // 转圈放在品牌文字下面那段留白里。
-            // 用比例定位（0.36 → 屏幕高度的 68%）而不是固定像素，
-            // 这样换机型也不会跑到文字上或跑出屏幕。
-            const Align(
-              alignment: Alignment(0, 0.36),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: _brandGreen,
+        // ⚠️ 这里**不能**直接把图 BoxFit.cover 铺满整屏。
+        //    图是竖的（941×1672，比例 0.563），而桌面浏览器视口很宽
+        //    （比如 2545×1383，比例 1.84）：cover 会为了填满宽度把图
+        //    放大 2.7 倍，高度溢出到 4516，屏幕上只剩中间那 30% ——
+        //    logo 被切掉一半、「食时」大得离谱。手机竖屏时比例接近，
+        //    所以只在网页端暴露出来。
+        //
+        //    改成用 AspectRatio 把图和转圈锁进同一个盒子：盒子按屏幕
+        //    能给的最大尺寸等比撑开（竖屏按宽度撑满、宽屏按高度撑满），
+        //    图永远不会被放大裁切。空出来的部分用图的底色 _brandPaper
+        //    填，和图片自身的背景同色，看不出接缝。
+        //    转圈也因此跟着盒子走，任何屏幕上都稳稳落在品牌文字下方。
+        body: Center(
+          child: AspectRatio(
+            aspectRatio: 941 / 1672,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/images/splash.png',
+                  fit: BoxFit.cover,
                 ),
-              ),
+                const Align(
+                  alignment: Alignment(0, 0.36),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _brandGreen,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
