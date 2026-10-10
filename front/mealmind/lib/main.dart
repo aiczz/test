@@ -101,62 +101,52 @@ class _AuthGate extends StatelessWidget {
   }
 }
 
-/// 启动屏。只用到 theme.dart 里已有的 token，视觉和 App 内保持一致。
+/// 启动屏。
+///
+/// 用品牌图（assets/images/splash.png）铺满整屏 —— 图里已经带了
+/// logo、「食时」和「顺应时令 · 智慧饮食」，所以这里**不再重复画一遍**，
+/// 只在下方的空白处放一个转圈。
+///
+/// 两个颜色是从图里取的实际值：
+///   · 转圈用图中的墨绿 #0A4924（原先用的橙色和这张图完全不搭）
+///   · 底色用图的底色 #FEFEFA，屏幕比例和图不一致时露出来的也是它，
+///     不会出现一条色差接缝
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
+
+  static const Color _brandGreen = Color(0xFF0A4924);
+  static const Color _brandPaper = Color(0xFFFEFEFA);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        backgroundColor: page,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 74,
-                height: 74,
-                decoration: BoxDecoration(
-                  color: orange700,
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: cardShadow,
-                ),
-                child: const Icon(Icons.rice_bowl, size: 38, color: cream),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                '食时',
-                style: TextStyle(
-                  fontSize: 27,
-                  fontWeight: FontWeight.w900,
-                  color: orange900,
-                  letterSpacing: -1.2,
-                  height: 1,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '顺应时令 · 智慧饮食',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: orange700,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 26),
-              const SizedBox(
+        backgroundColor: _brandPaper,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            // BoxFit.cover：手机屏比这张图更窄长，cover 会左右各裁掉一点。
+            // 图里的 logo 和文字都集中在中线上，裁不到。
+            Image.asset(
+              'assets/images/splash.png',
+              fit: BoxFit.cover,
+            ),
+            // 转圈放在品牌文字下面那段留白里。
+            // 用比例定位（0.36 → 屏幕高度的 68%）而不是固定像素，
+            // 这样换机型也不会跑到文字上或跑出屏幕。
+            const Align(
+              alignment: Alignment(0, 0.36),
+              child: SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: orange700,
+                  color: _brandGreen,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
