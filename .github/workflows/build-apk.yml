@@ -77,6 +77,26 @@ jobs:
         working-directory: front/mealmind
         run: flutter test
 
+      # 正式签名：README/deploy 里那份私钥不进仓库，走 GitHub Secrets。
+      # 没配 secrets 时这一步什么都不做，Gradle 会退回 debug 签名 —— 不会让构建失败。
+      - name: Prepare release keystore
+        working-directory: front/mealmind/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::没有配置 ANDROID_KEYSTORE_BASE64，本次用 debug 签名出包（不能覆盖安装旧版）"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > mealmind-release.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" "$PWD/mealmind-release.jks" \
+            > key.properties
+          echo "已启用 release 签名（alias=$KEY_ALIAS）"
+
       - name: Build APK
         working-directory: front/mealmind
         run: flutter build apk --release --dart-define=API_BASE=$API_BASE
@@ -96,7 +116,9 @@ jobs:
             - 提交：`${{ github.sha }}`
             - 构建时间：${{ github.event.repository.updated_at }}
 
-            ⚠️ 装的时候系统会提示「未知来源应用」，允许即可
-            （包用的是 debug 签名，比赛演示够用）。
+            ⚠️ 装的时候系统会提示「未知来源应用」，允许即可。
+
+            签名：配了 `ANDROID_KEYSTORE_BASE64` 就是固定私钥（可覆盖安装）；
+            没配则是临时 debug 签名（**换包要先卸载旧的**）。
           files: mealmind.apk
           make_latest: true

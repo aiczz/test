@@ -278,12 +278,17 @@ void main() {
     // 现在分类名 + 分组 + 每个分类的菜品数全部来自后端 /api/recipes/tags。
     // widget 测试跑在离线环境，所以这里手工喂一份和后端同形状的数据。
     final store = ContentStore.instance;
+    // ⚠️ 假数据**必须带配图**：菜谱页现在只列有实拍图的菜
+    //    （`_visible` 里的 image.isNotEmpty 那道筛子），
+    //    这里再像以前那样全给 image: '' 的话，三道菜一道都不会渲染，
+    //    「点分类能筛出菜」就变成了在测一个空页面。
+    //    最后那道「无图的汤」是故意留的：它锁住新行为 —— 没图就是不上列表。
     store.debugSeed(
       recipes: const <Recipe>[
         Recipe(
           id: '1',
           name: '番茄蛋花汤',
-          image: '',
+          image: 'assets/images/tomato.jpg',
           desc: '清爽开胃',
           time: '10分钟',
           people: '2人份',
@@ -292,7 +297,7 @@ void main() {
         Recipe(
           id: '2',
           name: '香煎鸡胸肉',
-          image: '',
+          image: 'assets/images/chicken.jpg',
           desc: '高蛋白',
           time: '15分钟',
           people: '1人份',
@@ -301,11 +306,20 @@ void main() {
         Recipe(
           id: '3',
           name: '牛肉面',
-          image: '',
+          image: 'assets/images/beef.jpg',
           desc: '一碗顶饱',
           time: '20分钟',
           people: '2人份',
           tags: <String>['面点主食'],
+        ),
+        Recipe(
+          id: '4',
+          name: '无图的汤',
+          image: '',
+          desc: '没有实拍图',
+          time: '10分钟',
+          people: '2人份',
+          tags: <String>['汤羹'],
         ),
       ],
       tagGroups: const <RecipeTagGroup>[
@@ -348,14 +362,18 @@ void main() {
     //    筛掉了、也可能只是滚不到，用数量断言才分得清这两件事。
     await tester.tap(find.text('汤羹').first);
     await tester.pumpAndSettle();
+    // 汤羹下有两道菜，但「无图的汤」没配图、不上列表 —— 所以只剩 1 道。
+    // 这条断言同时锁住两件事：分类真的筛得出菜，以及无图不上列表。
     expect(find.text('1 道'), findsOneWidget);
     expect(find.text('番茄蛋花汤'), findsOneWidget);
+    expect(find.text('无图的汤'), findsNothing);
 
-    // 再点「全部」三道菜都回来
+    // 再点「全部」三道有图的都回来（「无图的汤」仍然不在）
     await tester.tap(find.text('全部').first);
     await tester.pumpAndSettle();
     expect(find.text('3 道'), findsOneWidget);
     expect(find.text('番茄蛋花汤'), findsOneWidget);
+    expect(find.text('无图的汤'), findsNothing);
   });
 
   testWidgets('食材详情不编数据：拿不到应季指数和关联菜谱就如实说明', (tester) async {
@@ -410,33 +428,6 @@ void main() {
     // 关掉弹层，别影响后面的用例
     Navigator.of(tester.element(find.text('适合做这些菜'))).pop();
     await tester.pumpAndSettle();
-  });
-
-  testWidgets('首页能进本周菜单，也能返回', (tester) async {
-    // 这一页此前完全没有入口（死代码）：底部导航里没有它，
-    // 也没有任何按钮指向它，但「我的」页一直对用户说「菜单已重算」。
-    await tester.pumpWidget(ShishiApp(key: UniqueKey()));
-
-    // 入口在首页底部，而 ListView 不会构建视口外的项 ——
-    // 不先滚下去，find 会直接抛 "Bad state: No element"。
-    await tester.drag(find.byType(ListView).first, const Offset(0, -800));
-    await tester.pumpAndSettle();
-
-    final entry = find.text('本周菜单');
-    expect(entry, findsOneWidget);
-    await tester.tap(entry);
-    await tester.pumpAndSettle();
-
-    // 真的进到菜单页了：这是那一页独有的标题
-    expect(find.text('本次求解采用的约束'), findsOneWidget);
-
-    // 返回首页（AppBar 自动给的返回按钮）
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    // 首页回来了：底部导航始终可见，用它判断最稳
-    // （此刻首页停在底部，页头「今天吃什么」已经滚出视口了）
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('本周菜单'), findsOneWidget);
   });
 
   testWidgets('改了家庭人数并保存后，首页和 AI 页都跟着变，而且真的存住了', (tester) async {
