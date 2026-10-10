@@ -14,8 +14,6 @@ import '../theme.dart';
 import '../widgets/city_picker.dart';
 import '../widgets/dish_photo.dart';
 import '../widgets/food_photo.dart';
-import '../widgets/menu_entry_card.dart';
-import 'menu.dart';
 import 'recipes.dart';
 
 /// 首页 —— 对应队友原型 `homePage()`
@@ -43,15 +41,6 @@ class HomePage extends StatelessWidget {
     required this.onOpenFoodDetail,
   });
 
-  /// 本周菜单是【推一个二级页面】，不是切 tab。
-  ///
-  /// 底部导航那 5 项是「首页 / 食材 / 菜谱 / AI / 我的」；
-  /// 菜单是首页推出去的完整方案，看完返回即可，不占导航位。
-  void _openMenu(BuildContext context) {
-    Navigator.of(context)
-        .push<void>(MaterialPageRoute<void>(builder: (_) => const MenuPage()));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -63,6 +52,7 @@ class HomePage extends StatelessWidget {
           listenable: Listenable.merge(<Listenable>[
             AppState.instance,
             HomeFeedStore.instance,
+            ContentStore.instance,
           ]),
           builder: (context, _) {
             // ★ 有后端推荐就用后端的（算法筛候选 + 每天每地区一次 AI），
@@ -70,7 +60,11 @@ class HomePage extends StatelessWidget {
             //   界面上看不出差别，但推荐依据完全不同，所以界面上会如实标注来源。
             final feed = HomeFeedStore.instance.feed;
             final picks = feed != null
-                ? HomePicks.fromFeed(feed, AppState.instance.profile)
+                ? HomePicks.fromFeed(
+                    feed,
+                    AppState.instance.profile,
+                    recipePool: ContentStore.instance.recipes,
+                  )
                 : pickForHome(
                     AppState.instance.profile,
                     // 后端在线时用后端数据，否则 ContentStore 里是本地假数据
@@ -126,8 +120,6 @@ class HomePage extends StatelessWidget {
                   body: picks.aiTipBody,
                   onTap: onOpenAi,
                 ),
-                const SizedBox(height: 12),
-                MenuEntryCard(onTap: () => _openMenu(context)),
                 const SizedBox(height: 20),
                 _QuickActions(
                   picks: picks,

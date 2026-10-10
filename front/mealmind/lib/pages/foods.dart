@@ -29,7 +29,7 @@ class FoodsPageState extends State<FoodsPage> {
   final List<Food> _pantry = <Food>[];
   final Set<String> _selected = <String>{};
   final Map<String, int> _amounts = <String, int>{};
-  String _category = '全部';
+  final Set<String> _categoryFilters = <String>{};
   bool _showPantry = false;
   int _foodPage = 0;
   static const _pageSize = 40;
@@ -38,9 +38,7 @@ class FoodsPageState extends State<FoodsPage> {
   /// 删除要调 /api/my-foods/{item_id}，用的是记录 id 而不是 food_id。
   final Map<String, int> _serverItemIds = <String, int>{};
 
-  /// 「时令」是和其他几项并列的一个特殊分支 ——
-  /// 前几项按食材分类（category）切，它按「当季」切，
-  /// 所以判定走 ContentStore.isSeasonal()，而不是比 category 字符串。
+  /// 分类之间取并集，「时令」与所选分类组合筛选；空集合表示全部。
   static const _categories = <String>[
     '全部',
     '时令',
@@ -49,8 +47,6 @@ class FoodsPageState extends State<FoodsPage> {
     '肉蛋',
     '水产',
     '豆制品',
-    '主食',
-    '其他',
   ];
 
   /// 能不能和后端同步「我的食材」。三个条件缺一不可：
@@ -141,16 +137,20 @@ class FoodsPageState extends State<FoodsPage> {
     final source = _showPantry ? _pantry : ContentStore.instance.foods;
     final query = _search.text.trim().toLowerCase();
     return source.where((food) {
-      final categoryOk = switch (_category) {
-        '全部' => true,
-        '时令' => ContentStore.instance.isSeasonal(food),
-        _ => food.category == _category,
-      };
+      final selectedCategories = _categoryFilters.where(
+        (value) => value != '时令',
+      );
+      final categoryOk =
+          selectedCategories.isEmpty ||
+          selectedCategories.contains(food.category);
+      final seasonOk =
+          !_categoryFilters.contains('时令') ||
+          ContentStore.instance.isSeasonal(food);
       final queryOk =
           query.isEmpty ||
           food.name.toLowerCase().contains(query) ||
           food.tags.any((tag) => tag.toLowerCase().contains(query));
-      return categoryOk && queryOk;
+      return categoryOk && seasonOk && queryOk;
     }).toList();
   }
 
@@ -477,9 +477,15 @@ class FoodsPageState extends State<FoodsPage> {
                       for (final category in _categories)
                         _CategoryChip(
                           category: category,
-                          selected: _category == category,
+                          selected: category == '全部'
+                              ? _categoryFilters.isEmpty
+                              : _categoryFilters.contains(category),
                           onSelected: () => setState(() {
-                            _category = category;
+                            if (category == '全部') {
+                              _categoryFilters.clear();
+                            } else if (!_categoryFilters.add(category)) {
+                              _categoryFilters.remove(category);
+                            }
                             _foodPage = 0;
                           }),
                         ),
@@ -515,16 +521,24 @@ class FoodsPageState extends State<FoodsPage> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        _showPantry
-                            ? '我家的食材'
-                            : (_category == '全部' ? '全部食材' : _category),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
+                      Expanded(
+                        child: Text(
+                          _showPantry
+                              ? '我家的食材'
+                              : (_categoryFilters.isEmpty
+                                    ? '全部食材'
+                                    : (_categoryFilters.length == 1
+                                          ? _categoryFilters.single
+                                          : '筛选结果')),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       Text(
                         '${foods.length} 项',
                         style: const TextStyle(fontSize: 12, color: muted),
@@ -537,7 +551,8 @@ class FoodsPageState extends State<FoodsPage> {
                       pantryIsEmpty: _showPantry && _pantry.isEmpty,
                       onBrowse: () => setState(() {
                         _showPantry = false;
-                        _category = '全部';
+                        _categoryFilters.clear();
+                        _foodPage = 0;
                         _search.clear();
                       }),
                     )
@@ -547,7 +562,7 @@ class FoodsPageState extends State<FoodsPage> {
                         const spacing = 12.0;
                         final cardWidth = (constraints.maxWidth - spacing) / 2;
                         final imageHeight = cardWidth / 1.8;
-                        final contentHeight = _showPantry ? 154.0 : 132.0;
+                        final contentHeight = _showPantry ? 148.0 : 118.0;
                         return GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -1162,7 +1177,7 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
+    return FilterChip(
       avatar: Icon(
         selected ? Icons.check_circle_rounded : _icon,
         size: 17,

@@ -8,10 +8,8 @@ import '../services/auth_store.dart';
 import '../services/backend_api.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
-import '../widgets/menu_entry_card.dart';
 import 'admin.dart';
 import 'login.dart';
-import 'menu.dart';
 
 /// 个人中心：家庭档案是求解器的输入，不只是展示信息。
 class ProfilePage extends StatefulWidget {
@@ -36,6 +34,15 @@ class _ProfilePageState extends State<ProfilePage> {
   final Set<String> _preferences = <String>{'家常', '清淡'};
   final Set<String> _avoid = <String>{'辛辣'};
   final Set<String> _tools = <String>{'炒锅', '汤锅'};
+  static const _preferenceOptions = ['家常', '清淡', '少油', '高蛋白', '素食'];
+  static const _avoidOptions = ['辛辣', '花生', '海鲜', '乳制品', '香菜'];
+  final Set<String> _customPreferences = <String>{};
+  final Set<String> _customAvoid = <String>{};
+  List<String> get _allPreferences => [
+    ..._preferenceOptions,
+    ..._customPreferences,
+  ];
+  List<String> get _allAvoid => [..._avoidOptions, ..._customAvoid];
 
   bool _saving = false;
 
@@ -68,6 +75,10 @@ class _ProfilePageState extends State<ProfilePage> {
       _avoid
         ..clear()
         ..addAll(p.avoid);
+      _customPreferences.addAll(
+        p.preferences.where((v) => !_preferenceOptions.contains(v)),
+      );
+      _customAvoid.addAll(p.avoid.where((v) => !_avoidOptions.contains(v)));
       _tools
         ..clear()
         ..addAll(p.tools);
@@ -185,13 +196,75 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  /// 进「本周菜单」二级页面（不是切 tab）。
-  ///
-  /// 这一页（完整方案 + 买菜清单）此前没有任何入口 —— 底部导航里没有它，
-  /// 也没有按钮指向它，而上面那张档案卡和保存提示都在说「菜单已重算」。
-  void _openMenu() {
-    Navigator.of(context)
-        .push<void>(MaterialPageRoute<void>(builder: (_) => const MenuPage()));
+  Future<void> _addCustomChoice({
+    required String title,
+    required Set<String> selected,
+    required Set<String> custom,
+    required List<String> defaults,
+  }) async {
+    final formKey = GlobalKey<FormState>();
+    var value = '';
+    final item = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        void submit() {
+          if (formKey.currentState!.validate()) {
+            Navigator.pop(dialogContext, value.trim());
+          }
+        }
+
+        return AlertDialog(
+          title: Text('添加$title'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              autofocus: true,
+              maxLength: 16,
+              decoration: const InputDecoration(labelText: '自定义项目'),
+              onChanged: (text) => value = text,
+              onFieldSubmitted: (_) => submit(),
+              validator: (text) => (text ?? '').trim().isEmpty ? '请输入内容' : null,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(onPressed: submit, child: const Text('添加')),
+          ],
+        );
+      },
+    );
+    if (!mounted || item == null) return;
+    setState(() {
+      if (!defaults.contains(item)) custom.add(item);
+      selected.add(item);
+    });
+  }
+
+  Future<void> _addPreference() => _addCustomChoice(
+    title: '口味偏好',
+    selected: _preferences,
+    custom: _customPreferences,
+    defaults: _preferenceOptions,
+  );
+  Future<void> _addAvoid() => _addCustomChoice(
+    title: '忌口与过敏',
+    selected: _avoid,
+    custom: _customAvoid,
+    defaults: _avoidOptions,
+  );
+
+  void _deleteCustomChoice(
+    String value,
+    Set<String> selected,
+    Set<String> custom,
+  ) {
+    setState(() {
+      selected.remove(value);
+      custom.remove(value);
+    });
   }
 
   Future<void> _editChoices({
@@ -199,6 +272,8 @@ class _ProfilePageState extends State<ProfilePage> {
     required String subtitle,
     required List<String> options,
     required Set<String> selected,
+    required Set<String> custom,
+    required Future<void> Function() onAddCustom,
     bool warning = false,
   }) async {
     await showModalBottomSheet<void>(
@@ -255,6 +330,15 @@ class _ProfilePageState extends State<ProfilePage> {
                       selected: selected.contains(option),
                       selectedColor: warning ? orange100 : green100,
                       checkmarkColor: warning ? orange : green700,
+                      onDeleted: custom.contains(option)
+                          ? () {
+                              _deleteCustomChoice(option, selected, custom);
+                              options.remove(option);
+                              setSheetState(() {});
+                            }
+                          : null,
+                      deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                      deleteButtonTooltipMessage: '删除$option',
                       onSelected: (_) {
                         setState(() {
                           selected.contains(option)
@@ -264,6 +348,18 @@ class _ProfilePageState extends State<ProfilePage> {
                         setSheetState(() {});
                       },
                     ),
+                  ActionChip(
+                    avatar: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('自定义'),
+                    onPressed: () async {
+                      await onAddCustom();
+                      if (!context.mounted) return;
+                      options.addAll(
+                        selected.where((value) => !options.contains(value)),
+                      );
+                      setSheetState(() {});
+                    },
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -309,22 +405,23 @@ class _ProfilePageState extends State<ProfilePage> {
               onPreferencesTap: () => _editChoices(
                 title: '编辑口味偏好',
                 subtitle: '用于调整推荐顺序，不会覆盖健康约束',
-                options: const ['家常', '清淡', '少油', '高蛋白', '素食'],
+                options: _allPreferences,
                 selected: _preferences,
+                custom: _customPreferences,
+                onAddCustom: _addPreference,
               ),
               onAvoidTap: () => _editChoices(
                 title: '编辑忌口与过敏',
                 subtitle: '选中的食材会从菜单推荐中排除',
-                options: const ['辛辣', '花生', '海鲜', '乳制品', '香菜'],
+                options: _allAvoid,
                 selected: _avoid,
+                custom: _customAvoid,
+                onAddCustom: _addAvoid,
                 warning: true,
               ),
             ),
             const SizedBox(height: 18),
             _WeeklyCard(onTap: _showProfileSummary),
-            const SizedBox(height: 12),
-            // 档案卡说「菜单已按新约束重算」，那就得有个地方真的能点进去看。
-            MenuEntryCard(onTap: _openMenu),
             const SizedBox(height: 24),
             const _SectionTitle(
               icon: Icons.tune,
@@ -389,8 +486,12 @@ class _ProfilePageState extends State<ProfilePage> {
             _ChoiceCard(
               title: '口味偏好',
               subtitle: '用于推荐排序，不会覆盖健康约束',
-              options: const ['家常', '清淡', '少油', '高蛋白', '素食'],
+              options: _allPreferences,
               selected: _preferences,
+              custom: _customPreferences,
+              onDeleteCustom: (value) =>
+                  _deleteCustomChoice(value, _preferences, _customPreferences),
+              onAddCustom: _addPreference,
               onChanged: (value) => setState(() {
                 _preferences.contains(value)
                     ? _preferences.remove(value)
@@ -401,25 +502,17 @@ class _ProfilePageState extends State<ProfilePage> {
             _ChoiceCard(
               title: '忌口与过敏',
               subtitle: '选中项会被求解器完全排除',
-              options: const ['辛辣', '花生', '海鲜', '乳制品', '香菜'],
+              options: _allAvoid,
               selected: _avoid,
+              custom: _customAvoid,
+              onDeleteCustom: (value) =>
+                  _deleteCustomChoice(value, _avoid, _customAvoid),
+              onAddCustom: _addAvoid,
               warning: true,
               onChanged: (value) => setState(() {
                 _avoid.contains(value)
                     ? _avoid.remove(value)
                     : _avoid.add(value);
-              }),
-            ),
-            const SizedBox(height: 12),
-            _ChoiceCard(
-              title: '可用厨具',
-              subtitle: '不会推荐家里无法完成的做法',
-              options: const ['炒锅', '汤锅', '烤箱', '空气炸锅', '电饭煲'],
-              selected: _tools,
-              onChanged: (value) => setState(() {
-                _tools.contains(value)
-                    ? _tools.remove(value)
-                    : _tools.add(value);
               }),
             ),
             const SizedBox(height: 14),
@@ -1190,6 +1283,9 @@ class _ChoiceCard extends StatelessWidget {
   final List<String> options;
   final Set<String> selected;
   final ValueChanged<String> onChanged;
+  final VoidCallback onAddCustom;
+  final Set<String> custom;
+  final ValueChanged<String> onDeleteCustom;
   final bool warning;
 
   const _ChoiceCard({
@@ -1198,6 +1294,9 @@ class _ChoiceCard extends StatelessWidget {
     required this.options,
     required this.selected,
     required this.onChanged,
+    required this.onAddCustom,
+    required this.custom,
+    required this.onDeleteCustom,
     this.warning = false,
   });
 
@@ -1216,20 +1315,32 @@ class _ChoiceCard extends StatelessWidget {
           Wrap(
             spacing: 7,
             runSpacing: 7,
-            children: options.map((item) {
-              final isSelected = selected.contains(item);
-              return FilterChip(
-                label: Text(item),
-                selected: isSelected,
-                selectedColor: warning ? orange100 : green100,
-                checkmarkColor: warning ? orange : green700,
-                labelStyle: TextStyle(
-                  color: isSelected ? (warning ? orange : green700) : muted,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                ),
-                onSelected: (_) => onChanged(item),
-              );
-            }).toList(),
+            children: [
+              ...options.map((item) {
+                final isSelected = selected.contains(item);
+                return FilterChip(
+                  label: Text(item),
+                  selected: isSelected,
+                  selectedColor: warning ? orange100 : green100,
+                  checkmarkColor: warning ? orange : green700,
+                  onDeleted: custom.contains(item)
+                      ? () => onDeleteCustom(item)
+                      : null,
+                  deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                  deleteButtonTooltipMessage: '删除$item',
+                  labelStyle: TextStyle(
+                    color: isSelected ? (warning ? orange : green700) : muted,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                  onSelected: (_) => onChanged(item),
+                );
+              }),
+              ActionChip(
+                avatar: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('自定义'),
+                onPressed: onAddCustom,
+              ),
+            ],
           ),
         ],
       ),

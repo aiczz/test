@@ -86,7 +86,12 @@ class HomePicks {
   ///   卡片本来就有一行小字在显示 `recipe.desc`（菜谱简介）。
   ///   把理由放进这一行，**不用改任何布局**就能让用户看到
   ///   「为什么今天推这道菜」—— 而布局不动，就不会碰坏既有的交互测试。
-  factory HomePicks.fromFeed(HomeFeed feed, FamilyProfile profile) {
+  factory HomePicks.fromFeed(
+    HomeFeed feed,
+    FamilyProfile profile, {
+    List<Recipe>? recipePool,
+    int limit = 3,
+  }) {
     final notes = <String>[
       '${profile.cookMinutes.round()} 分钟内',
       if (profile.avoid.isNotEmpty) '忌${profile.avoid.join('、')}',
@@ -94,7 +99,16 @@ class HomePicks {
       if (feed.weather != null) feed.weather!.emoji,
     ];
 
-    final recipes = feed.recipes
+    // 内容库已验证配图资源；首页独立接口也必须使用同样的检查。
+    final validImages = recipePool?.map((recipe) => recipe.image).toSet();
+    bool hasImage(Recipe recipe) =>
+        recipe.image.trim().isNotEmpty &&
+        (validImages == null || validImages.contains(recipe.image));
+    final visiblePicks = feed.recipes
+        .where((pick) => hasImage(pick.item))
+        .take(limit)
+        .toList();
+    final recipes = visiblePicks
         .map(
           (pick) => pick.reason.isEmpty
               ? pick.item
@@ -114,6 +128,25 @@ class HomePicks {
         )
         .toList();
 
+    // 缺图位置用有图菜谱补齐，不放宽忌口与烹饪时间约束。
+    if (recipePool != null && recipes.length < limit) {
+      final candidates =
+          recipePool
+              .where(
+                (recipe) =>
+                    hasImage(recipe) &&
+                    !_hitsAvoid(recipe, profile.avoid) &&
+                    _minutesOf(recipe) <= profile.cookMinutes,
+              )
+              .toList()
+            ..sort((a, b) => _score(b, profile).compareTo(_score(a, profile)));
+      final ids = recipes.map((recipe) => recipe.id).toSet();
+      for (final recipe in candidates) {
+        if (recipes.length >= limit) break;
+        if (ids.add(recipe.id)) recipes.add(recipe);
+      }
+    }
+
     return HomePicks(
       foods: feed.foods.map((pick) => pick.item).toList(),
       recipes: recipes,
@@ -127,7 +160,7 @@ class HomePicks {
       weatherLine: feed.weatherLine.isEmpty ? null : feed.weatherLine,
       foodReasons: {for (final pick in feed.foods) pick.item.name: pick.reason},
       recipeReasons: {
-        for (final pick in feed.recipes) pick.item.name: pick.reason,
+        for (final pick in visiblePicks) pick.item.name: pick.reason,
       },
       aiTipTitle: feed.aiTipTitle.isEmpty ? null : feed.aiTipTitle,
       aiTipBody: feed.aiTip.isEmpty ? null : feed.aiTip,

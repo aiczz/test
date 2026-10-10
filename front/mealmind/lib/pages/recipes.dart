@@ -94,7 +94,9 @@ class _RecipesPageState extends State<RecipesPage> {
   }
 
   List<Recipe> get _visible {
-    Iterable<Recipe> list = ContentStore.instance.recipes;
+    Iterable<Recipe> list = ContentStore.instance.recipes.where(
+      (recipe) => recipe.image.trim().isNotEmpty,
+    );
 
     if (_category != '全部') {
       // 分类名和后端返回的规范标签是同一个字符串（后端已经把「家常」「家常菜」
@@ -140,7 +142,9 @@ class _RecipesPageState extends State<RecipesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final today = TodayMenuStore.instance.items;
+    final today = TodayMenuStore.instance.items
+        .where((recipe) => recipe.image.trim().isNotEmpty)
+        .toList();
     // 今日菜单是按用户挑的顺序原样显示的，不再过分类/搜索那两道筛子。
     final list = _showTodayMenu ? today : _visible;
 
@@ -175,6 +179,14 @@ class _RecipesPageState extends State<RecipesPage> {
                       child: _RecipeListCard(
                         recipe: r,
                         favorite: _favorites.contains(r.id),
+                        inTodayMenu: TodayMenuStore.instance.contains(r.id),
+                        onToggleMenu: () {
+                          if (TodayMenuStore.instance.contains(r.id)) {
+                            TodayMenuStore.instance.remove(r.id);
+                          } else {
+                            TodayMenuStore.instance.add(r);
+                          }
+                        },
                         onFavorite: () => unawaited(_toggleFavorite(r.id)),
                         onOpen: () => openRecipeDetail(context, r),
                       ),
@@ -471,7 +483,7 @@ class _RecipesPageState extends State<RecipesPage> {
           const SizedBox(height: 12),
           Text(
             _showTodayMenu
-                ? '今日菜单还是空的\n去「全部菜谱」点开一道菜，选「加入今日菜单」'
+                ? '今日菜单还是空的\n点击菜谱卡片右下角的「＋」添加菜品'
                 : (_query.isEmpty
                       ? '「$_category」下面还没有菜谱'
                       : '没有找到和「$_query」匹配的菜谱'),
@@ -862,12 +874,16 @@ class _CategoryChip extends StatelessWidget {
 class _RecipeListCard extends StatelessWidget {
   final Recipe recipe;
   final bool favorite;
+  final bool inTodayMenu;
+  final VoidCallback onToggleMenu;
   final VoidCallback onFavorite;
   final VoidCallback onOpen;
 
   const _RecipeListCard({
     required this.recipe,
     required this.favorite,
+    required this.inTodayMenu,
+    required this.onToggleMenu,
     required this.onFavorite,
     required this.onOpen,
   });
@@ -878,7 +894,7 @@ class _RecipeListCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(rCard),
       onTap: onOpen,
       child: Container(
-        height: 136,
+        height: 164,
         clipBehavior: Clip.antiAlias,
         decoration: cardDeco(),
         child: Row(
@@ -964,22 +980,42 @@ class _RecipeListCard extends StatelessWidget {
                     const Spacer(),
                     Row(
                       children: [
-                        const Icon(Icons.schedule, size: 12, color: muted),
-                        const SizedBox(width: 3),
-                        Text(
-                          recipe.time,
-                          style: const TextStyle(fontSize: 11, color: muted),
+                        Expanded(
+                          child: Text(
+                            recipe.metaLine,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, color: muted),
+                          ),
                         ),
-                        const SizedBox(width: 10),
-                        const Icon(
-                          Icons.people_outline,
-                          size: 12,
-                          color: muted,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          recipe.metaLine,
-                          style: const TextStyle(fontSize: 11, color: muted),
+                        const SizedBox(width: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: IconButton(
+                            tooltip: inTodayMenu
+                                ? '从今日菜单移除${recipe.name}'
+                                : '将${recipe.name}加入今日菜单',
+                            onPressed: onToggleMenu,
+                            style: IconButton.styleFrom(
+                              backgroundColor: inTodayMenu ? orange : orange100,
+                              foregroundColor: inTodayMenu
+                                  ? Colors.white
+                                  : orange700,
+                              minimumSize: const Size(36, 36),
+                              maximumSize: const Size(36, 36),
+                              padding: EdgeInsets.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            icon: Icon(
+                              inTodayMenu
+                                  ? Icons.delete_outline_rounded
+                                  : Icons.add_rounded,
+                              size: 21,
+                            ),
+                          ),
                         ),
                       ],
                     ),

@@ -2,7 +2,7 @@
 {{flutter_build_config}}
 
 // Version both scripts: a query on index.html alone does not refresh main.dart.js.
-const buildVersion = 'food-photo-wide-20260926-v1';
+const buildVersion = 'delete-custom-choices-20261010-v9';
 for (const build of _flutter.buildConfig.builds) {
   if (build.mainJsPath) build.mainJsPath += '?v=' + buildVersion;
 }

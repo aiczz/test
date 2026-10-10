@@ -10,6 +10,7 @@
 //    界面照常能用，只是数据来源不同（sourceLabel 会如实说明）。
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 
 import '../data/mock.dart';
 import '../models/content.dart';
@@ -69,11 +70,15 @@ class ContentStore extends ChangeNotifier {
       // 菜谱要翻页：清洗库有 10000 道，只拉第一页的话「全部菜谱」永远只有 50 道。
       final allRecipes = await BackendApi.instance.fetchAllRecipes();
 
-      // ⚠️ 这里曾经只保留「有实拍图」的 481 道菜（怕列表里大片重复的兜底图）。
-      //    现在没有配图的菜会显示「暂无配图」占位块，不再盗用别的菜的图，
-      //    所以没有理由再砍掉 95% 的菜 —— 砍掉的直接后果就是分类点进去是空的
-      //    （分类数由全库算，列表却只有 481 道，两边对不上）。
-      final recipes = allRecipes;
+      // 只展示有真实配图的菜谱，同时排除资源路径存在但文件缺失的情况。
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final assets = manifest.listAssets().toSet();
+      final recipes = allRecipes
+          .where(
+            (recipe) =>
+                recipe.image.trim().isNotEmpty && assets.contains(recipe.image),
+          )
+          .toList();
 
       // 时令要单独拉一次：/api/foods 返回的 FoodBrief 只带 season_score、
       // 不带季节名，光靠它没法判断「这个月」哪些是当季的。
@@ -86,15 +91,44 @@ class ContentStore extends ChangeNotifier {
       // 后端返回空列表时【不】覆盖本地数据 ——
       // 空白界面比假数据更糟，演示时尤其明显。
       _foods = foods.isEmpty ? mockFoods : foods;
-      _recipes = recipes.isEmpty ? mockRecipes : recipes;
+      _recipes = allRecipes.isEmpty
+          ? mockRecipes
+                .where((recipe) => assets.contains(recipe.image))
+                .toList()
+          : recipes;
       _seasonalIds = seasonalIds;
-      _recipeTagGroups = tagGroups;
-      _fromBackend = foods.isNotEmpty || recipes.isNotEmpty;
+      _recipeTagGroups = _visibleTagGroups(tagGroups, _recipes);
+      _fromBackend = foods.isNotEmpty || allRecipes.isNotEmpty;
       notifyListeners();
     } catch (error) {
       debugPrint('[ContentStore] 后端内容加载失败，降级到本地数据：$error');
       _useLocal();
     }
+  }
+
+  /// 分类数量和展示菜谱使用同一集合，隐藏没有有图菜谱的分类。
+  List<RecipeTagGroup> _visibleTagGroups(
+    List<RecipeTagGroup> groups,
+    List<Recipe> recipes,
+  ) {
+    final counts = <String, int>{};
+    for (final recipe in recipes) {
+      for (final tag in recipe.tags.toSet()) {
+        counts[tag] = (counts[tag] ?? 0) + 1;
+      }
+    }
+    return [
+      for (final group in groups)
+        if (group.tags.any((tag) => (counts[tag.name] ?? 0) > 0))
+          RecipeTagGroup(
+            group: group.group,
+            tags: [
+              for (final tag in group.tags)
+                if ((counts[tag.name] ?? 0) > 0)
+                  RecipeTag(name: tag.name, count: counts[tag.name]!),
+            ],
+          ),
+    ];
   }
 
   /// 时令食材拉取失败【不】让整次加载失败 ——
