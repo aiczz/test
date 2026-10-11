@@ -10,6 +10,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../state/app_state.dart';
+import '../state/today_menu.dart';
 import 'api_config.dart';
 
 /// 当前登录的用户。
@@ -96,7 +98,10 @@ class AuthStore extends ChangeNotifier {
   AuthUser? _user;
   bool _restored = false;
 
-  /// 一次性提示（目前用于「登录已失效」），由登录页取走后清空。
+  /// 一次性提示，由登录页取走后清空。两种来源：
+  ///   · 登录失效（token 过期 / 账号被封禁，见 [expireSession]）
+  ///   · 注销成功（见 [deleteAccount]）
+  /// 两者都是「界面已经切回登录页了，但用户需要知道刚才发生了什么」。
   String? _notice;
 
   String? get token => _token;
@@ -140,7 +145,14 @@ class AuthStore extends ChangeNotifier {
 
   // 统一走 createApiDio：它会挂上 401 拦截器。
   // 自己 new 一个 Dio 就会漏掉「封禁 / token 过期」的处理。
-  Dio get _dio => createApiDio();
+  //
+  // 测试可以先用 [debugUseDio] 换掉它 —— 注销是真删，用例不能真连后端。
+  Dio get _dio => _debugDio ?? createApiDio();
+
+  Dio? _debugDio;
+
+  @visibleForTesting
+  void debugUseDio(Dio? dio) => _debugDio = dio;
 
   /// 启动时从本地恢复登录状态。token 过期不在这里校验 ——
   /// 等真正调接口时后端返回 401，那时再清理。
@@ -473,6 +485,56 @@ class AuthStore extends ChangeNotifier {
     await prefs.remove(_kToken);
     await prefs.remove(_kUser);
     notifyListeners();
+  }
+
+  /// 注销账号：让后端【真正删掉】这个人和他名下的全部数据，然后就地退登。
+  ///
+  /// 和 [logout] 的区别是量级：logout 只是本机退出，换台设备登录数据还在；
+  /// 这个是服务端的收藏 / 菜单 / 购物清单 / 口味偏好**一并消失，不可恢复**。
+  /// 所以调用方必须先做二次确认（见 profile.dart 的注销弹窗），
+  /// 这个函数只负责「把请求发出去、把后端的话原样带回来」。
+  ///
+  /// 失败一律抛 [AuthException]，`message` 就是后端的 detail。管理员 / 演示
+  /// 账号会拿到 403 —— 那句说明必须原样透出去：用户得知道「不是我操作错了，
+  /// 是这类账号不让自助注销」，自己编一句「注销失败」只会让人反复重试。
+  ///
+  /// 成功后调 [logout]：服务端已经没有这个人了，本地再留着 token 只会让
+  /// App 停在一个「显示着已登录、调什么接口都 401」的状态。
+  Future<void> deleteAccount() async {
+    final token = _token;
+    if (token == null) {
+      throw const AuthException('未登录，无法注销账号');
+    }
+
+    try {
+      await _dio.delete<void>(
+        '/api/auth/me',
+        options: Options(
+          headers: <String, String>{'Authorization': 'Bearer $token'},
+        ),
+      );
+    } on DioException catch (e) {
+      throw _toAuthException(e);
+    }
+
+    // 注销会连同门禁一起把界面切回登录页。登录页只显示 [notice]，
+    // 不留一句话的话，用户看到的就是「点了确认，然后莫名其妙回到登录页」——
+    // 到底删成功没有，只能靠猜。
+    _notice = '账号已注销，你的数据已经永久删除';
+
+    // 服务端删干净了，本机也得跟上：只清 token 的话，上一个人的家庭档案
+    // 还躺在这台设备上 —— 换另一个账号登进来就会看到别人的家庭人数和忌口，
+    // 而且那份残留还会在保存时被推给新账号。
+    //
+    // ★ 顺序是刻意的，必须在 logout() **之前**清：logout() 一返回，登录门禁
+    //   就会把登录页带出来，用户下一秒就可能用另一个账号登进去 —— 那时
+    //   AppState.load() 会先读本机缓存，读到的还是上一个人的档案。
+    await AppState.instance.clearLocalCache();
+    // 今日菜单（用户一道道挑进来的菜）同样是个人数据。它单独一个 store、
+    // 只活在内存里，所以不跟着 AppState 走，得单独清一次。
+    TodayMenuStore.instance.clear();
+
+    await logout();
   }
 
   /// 带 token 的请求头。别的接口层要用。

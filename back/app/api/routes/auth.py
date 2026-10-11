@@ -3,12 +3,13 @@
 POST /api/auth/register
 POST /api/auth/login
 GET  /api/auth/me
+DELETE /api/auth/me     注销账号（真删，管理员/演示账号 403）
 
 POST /api/auth/sms/*    手机号 + 固定演示码（仅演示，见 auth_service._verify_demo_sms）
 POST /api/auth/email/*  邮箱 + 真实验证码（随机码、有过期与限流，见 verification_service）
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlmodel import Session
 
 from app.core.config import settings
@@ -85,6 +86,21 @@ def login_sms(
 @router.get("/me", response_model=UserPublic, summary="当前登录用户")
 def me(user: User = Depends(get_current_user)) -> User:
     return user
+
+
+@router.delete("/me", status_code=204, summary="注销账号（真正删除）")
+def delete_me(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    """★ 真删，不是停用：账号和它名下的收藏 / 菜单 / 购物清单 / 口味偏好
+    一并从库里消失，不可恢复。
+
+    ★ 管理员与演示账号会被 403 拒绝 —— 演示账号删掉，评委就进不来了。
+    具体顺序与理由见 auth_service.delete_account。
+    """
+    auth_service.delete_account(session, user)
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------- 邮箱验证码

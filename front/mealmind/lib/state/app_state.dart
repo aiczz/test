@@ -271,6 +271,36 @@ class AppState extends ChangeNotifier {
     await saveProfile(const FamilyProfile());
   }
 
+  /// 注销账号时用：把「这个人留在这台设备上」的档案清掉 ——
+  /// 内存复位成默认值，同时删掉本机缓存那一条。**不发任何网络请求。**
+  ///
+  /// ★ 为什么不能用 [resetProfile]（这条是重点，别图省事改回去）：
+  ///   [resetProfile] 内部走的是 [saveProfile]，而 saveProfile 最后会把档案
+  ///   `PUT /api/profile` 推给账号。注销时账号已经没了，这个请求只会吃一个
+  ///   401 —— 而 401 会被 Dio 拦截器翻译成「登录已失效，请重新登录」，
+  ///   正好把刚写好的「账号已注销」顶掉。用户明明注销成功了，看到的却是
+  ///   「我的账号出了问题」。清本机数据这件事本身不该产生任何请求。
+  ///
+  /// ★ 缓存那条用 `remove` 而不是写一份默认值进去：要的是「这台设备上不再
+  ///   留着这份档案」，而不是「把它改成默认值继续留着」。写默认值会让
+  ///   「到底清没清」这件事变得没法验证（读出来永远是合法的档案）。
+  ///
+  /// ⚠️ 今日菜单不在这个类里（它有自己的 store，见 today_menu.dart），
+  ///    注销时要一起清 —— 那个调用点见 AuthStore.deleteAccount。
+  Future<void> clearLocalCache() async {
+    // 先复位内存并通知：菜单页 / 首页靠 [revision] 判断要不要按新约束重算
+    _profile = const FamilyProfile();
+    _revision++;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kCacheKey);
+    } catch (error) {
+      debugPrint('[AppState] 家庭档案本机缓存清除失败：$error');
+    }
+  }
+
   /// 仅供测试：只清掉内存里的档案，**不碰本机缓存**。
   ///
   /// 为什么需要它：测试要模拟「重启 App」，也就是「内存空、缓存还在」。

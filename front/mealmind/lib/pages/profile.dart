@@ -616,6 +616,11 @@ class _ProfilePageState extends State<ProfilePage> {
                 );
               },
             ),
+            // ★ 危险操作放在整页最底部，是【有意】的：
+            //   它不该出现在用户顺手往下滑就能碰到的地方。
+            //   （管理员入口当初放在这个位置被吐槽过，但那个是「找不到」，
+            //   这个恰恰是「不该容易找到」。）
+            const _DangerZone(),
           ],
         ),
       ),
@@ -1136,17 +1141,22 @@ class _SectionTitle extends StatelessWidget {
   final String title;
   final String subtitle;
 
+  /// 图标与标题的颜色。默认主色橙；危险操作区传 [danger]，
+  /// 让「这一区的东西会不可恢复」在标题上就看得出来。
+  final Color color;
+
   const _SectionTitle({
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.color = orange700,
   });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: orange700),
+        Icon(icon, color: color),
         const SizedBox(width: 9),
         Expanded(
           child: Column(
@@ -1154,9 +1164,10 @@ class _SectionTitle extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
+                  color: color,
                 ),
               ),
               Text(
@@ -1368,6 +1379,274 @@ class _MenuRow extends StatelessWidget {
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
         trailing: const Icon(Icons.chevron_right),
       ),
+    );
+  }
+}
+
+// =====================================================================
+// 危险操作区：注销账号（真删）
+//
+// ★ 为什么不和上面那些设置行放在一张卡里：
+//   「退出」和「注销」只差一个字，后果却差着量级 —— 退出只是本机退登，
+//   换台设备登录数据还在；注销是服务端把人整个删掉，不可恢复。
+//   两个按钮挨在一起，用户很容易点错（而且点错之后没有后悔的机会）。
+//   所以这里单独成区、单独一张红卡，和普通设置行物理隔开。
+// =====================================================================
+
+class _DangerZone extends StatelessWidget {
+  const _DangerZone();
+
+  Future<void> _startDelete(BuildContext context) async {
+    final deleted = await showDialog<bool>(
+      context: context,
+      builder: (context) => const _DeleteAccountDialog(),
+    );
+    if (deleted != true) return;
+    if (!context.mounted) return;
+    // ⚠️ 正常情况下走不到这里：注销成功后 AuthStore 会通知门禁，
+    //    整棵树已经切回登录页，那句话由登录页的 notice 显示。
+    //    留着它是为了「门禁之外单独用 ProfilePage」的场景（比如测试）。
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('账号已注销，数据已永久删除'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: danger,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: AuthStore.instance,
+      builder: (context, _) {
+        // 未登录就没有账号可注销。空在一个红色入口只会让人不敢往下滑。
+        if (!AuthStore.instance.isLoggedIn) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 26),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _SectionTitle(
+                icon: Icons.report_gmailerrorred_outlined,
+                title: '危险操作',
+                subtitle: '这一区的操作不可恢复',
+                color: danger,
+              ),
+              const SizedBox(height: 12),
+              _DangerAction(
+                icon: Icons.person_remove_outlined,
+                title: '注销账号',
+                subtitle: '删除账号与全部数据，不可恢复',
+                onTap: () => _startDelete(context),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                '注销后，账号和你的收藏、菜单、购物清单、口味偏好都会被永久删除，'
+                '无法恢复。只是想换个账号登录的话，请用上面的「退出」。',
+                style: TextStyle(fontSize: 11, height: 1.5, color: muted),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 危险区的入口：红框红字，和上面的普通设置行一眼分得开。
+class _DangerAction extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _DangerAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(rCard),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(rCard),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+          decoration: BoxDecoration(
+            border: Border.all(color: danger),
+            borderRadius: BorderRadius.circular(rCard),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: danger),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: danger,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(fontSize: 11, color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: danger),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 注销的二次确认弹窗。
+///
+/// ★ 为什么要求手打「注销」两个字，而不是「确定 / 取消」：
+///   不可恢复的操作不能靠「别点错」来保证安全。「取消」和「确定」是两个
+///   并排的按钮，用户想关掉弹窗时手一滑就点成了确定 —— 而这种错一次就够。
+///   打两个字必须是有意识的动作，误触基本不可能；顺带还逼用户把「注销」
+///   这两个字读一遍。
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  /// 必须原样打出来的确认词（前后空格不算数）
+  static const String _confirmWord = '注销';
+
+  final TextEditingController _input = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  bool get _canSubmit => !_submitting && _input.text.trim() == _confirmWord;
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_canSubmit) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
+    try {
+      await AuthStore.instance.deleteAccount();
+    } on AuthException catch (e) {
+      // 后端说了什么就显示什么。管理员 / 演示账号那条 403 尤其重要：用户得
+      // 知道「不是我操作错了，是这类账号不让自助注销」，否则只会反复重试。
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = e.message;
+      });
+      return;
+    }
+
+    // 成功的话 store 已经退登、门禁通常也把这棵树换掉了，
+    // 那时 mounted 已经是 false，弹窗跟着一起消失即可。
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(rBlock)),
+      title: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: danger),
+          SizedBox(width: 8),
+          Text('注销账号'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '账号和你的收藏、菜单、购物清单、口味偏好都会被永久删除，无法恢复。',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              fontWeight: FontWeight.w700,
+              color: danger,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _input,
+            enabled: !_submitting,
+            autofocus: true,
+            // 每次输入都重建：确认按钮的可用状态跟着输入走
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: '输入「$_confirmWord」两个字以确认',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: const TextStyle(fontSize: 12, height: 1.4, color: danger),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          child: const Text('取消', style: TextStyle(color: muted)),
+        ),
+        FilledButton(
+          // 确认词没打对就直接禁用 —— 比「点了再弹一句提示」更早挡住误触
+          onPressed: _canSubmit ? _submit : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: danger,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: danger100,
+            disabledForegroundColor: muted,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          ),
+          child: _submitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text(
+                  '确认注销',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+        ),
+      ],
     );
   }
 }
