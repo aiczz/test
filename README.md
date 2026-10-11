@@ -405,6 +405,30 @@ CI 已配好：push 到 `main` 会自动跑 analyze → test → build，并发�
 
 **预期地址**：`https://aiczz.github.io/test/`
 
+> ### 🚨 2026-10-11 这个地址又被覆盖成 README 了 —— 请先修好
+>
+> **现象**：打开 `https://aiczz.github.io/test/` 显示的是一份 README 文档，
+> 不是 App（页面 `<title>` 是「食时 · 顺应时令的智慧饮食助手 | test」，
+> HTML 里带 `Begin Jekyll SEO tag` 注释）。而 Actions 里 `Deploy Web` 是绿的。
+>
+> **原因**：Settings → Pages 的 **Source 仍是 "Deploy from a branch"**。
+> 这个设置下 GitHub 会额外跑一个 `pages build and deployment`（Jekyll），
+> 把 `README.md` 渲染成站点，和 `deploy-pages.yml` 抢同一个地址，
+> **谁后跑完谁生效**。这一次是提交里改了 `docs/` 下的文件把它触发的。
+> （下面「首次启用」第 2 条 2026-09 就写过这个坑，但它是**设置项不是代码**，
+> 所以只能人工确认 —— 显然没确认住。）
+>
+> **修复（2 步，只需做一次）**：
+>
+> 1. Settings → **Pages → Source 改成 "GitHub Actions"**
+>    —— 改完 Jekyll 那条 workflow 就再也不会出现；
+> 2. Actions → **Deploy Web (Flutter → GitHub Pages)** → **Run workflow**，
+>    重新发布一次。
+>
+> ⚠️ **在改完 Source 之前，任何改动 `docs/` 或根目录文件的提交都可能再次把
+> Pages 站点覆盖成 README。** 判断方法很简单：Actions 列表里只要出现了
+> `pages build and deployment` 这一条，站点就危险了。
+
 ### 首次启用（只需做一次）
 
 1. Settings → General → 拉到底 → **Change visibility → Make public**

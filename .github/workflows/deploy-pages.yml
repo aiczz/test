@@ -21,6 +21,16 @@
 #         现象：https://aiczz.github.io/test/ 打开是一份 README 文档，
 #         而不是 App；而两个 workflow 的日志全是绿的，很难查。
 #      改回 GitHub Actions 后，那个 Jekyll workflow 就不再出现了。
+#
+#   ★ 2026-10-11 又中了一次（说明这个设置项没人盯着）：
+#     那次提交只改了 docs/ 和 README.md，没碰 front/mealmind/**，
+#     所以本 workflow 根本没跑；但 `pages build and deployment` 跑了，
+#     把 README.md 渲染成站点，于是 https://aiczz.github.io/test/
+#     打开的是一份文档而不是 App。
+#     → 只要 Source 还是 "Deploy from a branch"，**任何改动 docs/ 或根目录
+#       文件的提交都可能把站点覆盖掉**。这不是代码能修的，只能去
+#       Settings → Pages → Source 选 "GitHub Actions"。
+#     → 自查：Actions 列表里出现 `pages build and deployment` 就是中招了。
 # =====================================================================
 
 name: Deploy Web (Flutter → GitHub Pages)
