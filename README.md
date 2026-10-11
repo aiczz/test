@@ -9,26 +9,36 @@
 
 回答两个问题：**今天吃什么**、**该买什么菜**。
 
+> ### 🔎 评审专家请从这里开始
+>
+> 👉 **[`docs/开放成果与体验入口.md`](docs/开放成果与体验入口.md)**
+>
+> 一页索引：在线体验地址、Android 安装包、源码、许可证、复现步骤、
+> 可核验的效果证据、第三方资源与数据授权边界。
+
 ---
 
 ## 〇、谁该看哪份文档
 
 | 你是 | 看这个 |
 |---|---|
+| **评审专家** | [`docs/开放成果与体验入口.md`](docs/开放成果与体验入口.md) —— 一页拿到全部入口与证据 |
 | **要 push 代码的人** | [`docs/交付说明.md`](docs/交付说明.md) —— 一条命令 + push 前体检 |
 | **要部署到服务器的人（运维）** | [`deploy/README.md`](deploy/README.md) —— 完整运维手册 |
+| **要录演示视频的人** | [`docs/演示视频分镜脚本.md`](docs/演示视频分镜脚本.md) —— 逐字稿 + 操作指令 |
 | 想看算法 / AI 怎么设计的 | [`docs/算法与AI设计.md`](docs/算法与AI设计.md) |
+| 想看数据从哪来、能公开到哪一步 | [`sql/数据授权与再分发边界.md`](sql/数据授权与再分发边界.md) |
 | 想看这次改了什么 / 部署要注意什么 | [`CHANGELOG.md`](CHANGELOG.md) |
 | 想知道哪些还没做（如实清单） | 本文档「六、当前进度」末尾 |
 
-**交付状态**（截至 v1.0.0）：
+**交付状态**（当前 `main` 分支）：
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `python -m pytest` | 190 passed |
+| 后端 `python -m pytest` | 197 passed |
 | 后端 `ruff --select F821,F811,F401,F841` | 干净 |
 | 前端 `dart analyze lib test` | 干净 |
-| 前端 `flutter test` | 10 passed |
+| 前端 `flutter test` | 20 passed |
 | 验收脚本（49 项断言，逐条对应设计要求） | 全过 |
 | 仓库体检 `python back/scripts/repo_health.py` | 无密钥泄漏、工作区干净 |
 
@@ -48,7 +58,7 @@
 │   │   │   ├── models/                           数据模型
 │   │   │   ├── pages/                            页面
 │   │   │   └── services/                         接口层 + 本地约束派生
-│   │   ├── test/widget_test.dart               交互测试（CI 里会真的跑）
+│   │   ├── test/                               20 个交互与单元测试用例（CI 里会真的跑）
 │   │   ├── assets/                             图片素材 + 菜单假数据
 │   │   ├── web/ · android/ · ios/ …            各平台工程
 │   │   └── README.md                           前端开发说明
@@ -64,12 +74,12 @@
 │   ├── app/                                  FastAPI 应用
 │   │   ├── main.py                             入口 + CORS + 建表 & 灌种子
 │   │   ├── core/                               配置 / 数据库 / 安全 / 依赖注入
-│   │   ├── api/routes/                         38 个接口，按业务分文件
+│   │   ├── api/routes/                         36 个接口路径 / 41 个操作，按业务分文件
 │   │   ├── models/                             16 张表（SQLModel）
 │   │   ├── schemas/ · repositories/ · services/ 响应模型 / 数据访问层 / 业务逻辑层
 │   │   ├── ai/                               ★ 大模型客户端（DeepSeek / OpenAI 兼容）
 │   │   └── data/seed.py                        种子数据（幂等）
-│   ├── tests/                                120 个 pytest 用例 —— CI 里真的会跑
+│   ├── tests/                                197 个 pytest 用例 —— CI 里真的会跑
 │   ├── scripts/verify_ai_features.py         ★ 验收脚本（49 项断言，给运维自检用）
 │   ├── data_tools/                           数据清洗辅助脚本
 │   ├── requirements.txt · README.md
@@ -163,6 +173,9 @@ flutter build web --release --base-href "/test/"   # 网页版（演示保底）
 
 | 文档 | 内容 |
 |---|---|
+| [`docs/开放成果与体验入口.md`](docs/开放成果与体验入口.md) | **★ 评审入口**（在线体验 / 安装包 / 复现步骤 / 效果证据 / 数据授权边界） |
+| [`docs/演示视频分镜脚本.md`](docs/演示视频分镜脚本.md) | 演示视频：逐字旁白稿 + 操作指令 + 交片前打勾清单 |
+| [`sql/数据授权与再分发边界.md`](sql/数据授权与再分发边界.md) | 数据来源、授权状态与再分发边界 |
 | [`deploy/README.md`](deploy/README.md) | **★ 部署手册**（运维照这份做：一键脚本 / nginx / systemd / 排错对照表） |
 | [`front/README.md`](front/README.md) | 前端子目录详细说明（结构 / 启动 / 进度 / 部署） |
 | [`front/goat/front指南.txt`](front/goat/front指南.txt) | 需求与页面结构（原始版，1643 行） |

@@ -95,3 +95,53 @@
 - **不需要**重导数据（`deploy.sh` 会检测表是否存在，已导入就跳过）
 - 前端有改动时，**必须等 CI 出完新的 Release 产物再部署**，
   否则页面还是旧的
+
+---
+
+## 未发布 —— `main` 上已合入（待打版本号）
+
+> `VERSION` 仍是 `1.0.0`，所以下面是**在 v1.0.0 之后合入但还没发版**的内容。
+> 部署方式不变：`git pull` + 重启 `shishi`，**不需要重导数据**。
+
+### 新增
+
+- **注销账号**：`DELETE /api/auth/me` + 「我的 → 危险操作 → 注销账号」入口。
+  真删账号及其全部个人数据（菜单、购物清单、收藏、储物柜、口味偏好、登录记录）；
+  删除顺序按外键依赖排列，失败整体回滚。`demo` 与 `admin` 受保护，不可删。
+- **品牌启动图**：登录后的闪屏换成品牌图（绿底 + 食时 + 「顺应时令 · 智慧饮食」）。
+
+### 修复
+
+- **★ Release APK 一直连不上后端**：`android.permission.INTERNET` 此前只存在于
+  `src/debug` 与 `src/profile` 清单里，release 包**没有联网权限**。
+  已补进 `src/main/AndroidManifest.xml`，并显式打开 `usesCleartextTraffic`
+  （后端走 HTTP 明文）。
+  → ⚠️ **这是必须换包的一次修复**：v1.0.0 那个 release APK 装上后所有接口都发不出去。
+- 启动屏在宽视口被放大裁切（`BoxFit.cover` 换成 `Center(AspectRatio(...))`）。
+- 启动图在 Windows 上重复构建报 `PathExistsException`。
+
+### 移除
+
+- 「我的 → 意见反馈」入口 —— 后端从来没有这个接口，点了只是弹一句提示。
+
+### 工程
+
+- `android/key.properties` 驱动的 release 正式签名（文件缺失时自动退回 debug 签名）。
+- 补 `.gitignore` 的 Python 规则；清掉误提交的 `sql/scripts/__pycache__/`、
+  根目录的 `back.zip` 与 `sql/cleaned_v2.zip`（后两者与已有目录内容重复）。
+- 管理员初始密码改由 `ADMIN_INITIAL_PASSWORD` / `DEBUG` 决定，不再无条件使用
+  代码里那个公开的演示口令（详见 `deploy/README.md` 第 3 节）。
+- 文档数字与实际对齐：后端用例 197、前端用例 20、接口 36 条路径 / 41 个操作。
+- 新增 [`docs/开放成果与体验入口.md`](docs/开放成果与体验入口.md)（评审一页索引）、
+  [`docs/演示视频分镜脚本.md`](docs/演示视频分镜脚本.md)、
+  [`sql/数据授权与再分发边界.md`](sql/数据授权与再分发边界.md)。
+
+### 测试状态（当前 `main`）
+
+| 检查 | 结果 |
+|---|---|
+| 后端 `pytest` | **197 passed** |
+| 后端 `ruff --select F821,F811,F401,F841` | 干净 |
+| 前端 `dart analyze lib test` | 干净 |
+| 前端 `flutter test` | **20 passed** |
+| 验收脚本 `verify_ai_features.py` | 49 项全过 |

@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 天，比赛演示期够用
 
+    # ---- 种子账号（说明书 §26）----
+    # 管理员的初始密码。**生产部署请在 .env 里显式设置 ADMIN_INITIAL_PASSWORD。**
+    #
+    # 为什么要有这个开关：本项目是公开仓库。如果把管理员口令写死在
+    # `app/data/seed.py` 里，任何 clone 自建的人都会得到一个「已知密码的管理员」。
+    # 所以留空时按 debug 分两种行为（见 seed.py 的 `_resolve_admin_password`）：
+    #   · debug=true（本地开发 / pytest）—— 用公开的演示密码，
+    #     否则测试拿不到已知口令，没法登录管理员接口；
+    #   · debug=false（生产）—— 生成随机密码并打到启动日志，只打这一次。
+    admin_initial_password: str = ""
+
     # ---- 验证码（邮箱 / 手机号通用）----
     # 机制和下发通道是解耦的：码本身是随机的、有有效期、有重发间隔和次数上限，
     # 通道只负责把它送出去。换通道不用动业务代码。

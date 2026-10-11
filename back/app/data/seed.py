@@ -9,8 +9,11 @@
 演示账号：答辩时评委不用注册就能进去。
 """
 
+import secrets
+
 from sqlmodel import Session, select
 
+from app.core.config import settings
 from app.core.database import engine
 from app.core.security import hash_password
 from app.models.food import Food, FoodSeason
@@ -27,10 +30,41 @@ DEMO_NICKNAME = "演示用户"
 DEMO_FAMILY_SIZE = 3
 
 # 管理员账号：能封禁其他账号、看用户统计和登录记录。
-# ⚠️ 这是【演示用】密码，已写进 back/README.md。真实部署前必须改掉，
-#    或者用 .env 覆盖（见 README 第七节）。
 ADMIN_USERNAME = "admin"
+
+# ⚠️ 这是【本地开发与测试】的默认口令，**不是生产口令**。
+#
+#    它是公开的（写在公开仓库里），所以只在 `settings.debug` 为真时才会被用到；
+#    生产环境走 .env 的 ADMIN_INITIAL_PASSWORD，没配就随机生成 —— 见下面的
+#    `_resolve_admin_password()`。
+#
+#    测试也依赖这个常量：tests/ 里需要拿一个已知口令去登管理员接口。
 ADMIN_PASSWORD = "admin123456"
+
+
+def _resolve_admin_password() -> str:
+    """决定首次播种时给 admin 用什么密码。
+
+    优先级：`.env` 的 `ADMIN_INITIAL_PASSWORD` > 本地默认值（仅 debug）> 随机值。
+
+    最后一档是给生产用的：**绝不让公开仓库里写死的口令跑到真实部署上**。
+    随机密码只在首次建库时用一次，会打到启动日志里提醒运维去改。
+
+    注意：`_seed_user` 是幂等的 —— 库里已经有 admin 时这个函数根本不会被调用，
+    所以改这里的逻辑**不会**动到已经存在的账号。
+    """
+    configured = settings.admin_initial_password.strip()
+    if configured:
+        return configured
+    if settings.debug:
+        return ADMIN_PASSWORD
+    generated = secrets.token_urlsafe(16)
+    print(
+        "[seed] 未配置 ADMIN_INITIAL_PASSWORD，已为管理员账号生成随机密码："
+        f"{generated}\n"
+        "[seed] 请登录后立即修改，或在 .env 里设置 ADMIN_INITIAL_PASSWORD 后重建数据库。"
+    )
+    return generated
 
 # =====================================================================
 # 食材
@@ -277,7 +311,7 @@ def _seed_users(session: Session) -> None:
     _seed_user(
         session,
         username=ADMIN_USERNAME,
-        password=ADMIN_PASSWORD,
+        password=_resolve_admin_password(),
         nickname="管理员",
         family_size=3,
         is_admin=True,

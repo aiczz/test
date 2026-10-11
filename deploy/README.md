@@ -61,7 +61,7 @@ sudo bash deploy/deploy.sh
 
 ---
 
-## 3. 两个密钥，必须自己填
+## 3. 三个值，必须自己填
 
 编辑 `/opt/test/back/.env`：
 
@@ -70,7 +70,14 @@ sudo bash deploy/deploy.sh
 #    生成方法：python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 SECRET_KEY=<换成一串随机值>
 
-# ② AI 大模型的 key（默认用 DeepSeek，也可以换任何兼容 OpenAI 协议的服务）
+# ② 关掉调试模式，并给管理员设一个密码
+#    DEBUG=false 有两个作用：不在响应里暴露内部错误，
+#    以及让种子数据【不再使用】代码里那个公开的演示口令（admin123456），
+#    改为随机生成并打印到启动日志。见 app/data/seed.py。
+DEBUG=false
+ADMIN_INITIAL_PASSWORD=<自己定一个，别用 admin123456>
+
+# ③ AI 大模型的 key（默认用 DeepSeek，也可以换任何兼容 OpenAI 协议的服务）
 #    ⚠️ 这个值不在仓库里，必须单独问项目负责人要，不要提交到 git
 AI_ENABLED=true
 AI_BASE_URL=https://api.deepseek.com
@@ -81,6 +88,10 @@ AI_JSON_MODE=true
 # 天气（Open-Meteo，免费且不需要 key），保持 true 即可
 WEATHER_ENABLED=true
 ```
+
+> ⚠️ 在**演示/答辩现场**如果要让评委登管理员界面，记得 `ADMIN_INITIAL_PASSWORD`
+> 跟 `DEBUG=false` 是一起生效的：账号已经建好的话，改 .env 不会改密码，
+> 得用登录后的「修改密码」或者在库里重建该账号。
 
 **`AI_API_KEY` 不填也能跑**：首页推荐和 AI 助手会自动退回确定性算法，
 只是没有 AI 润色和候选内的智能挑选。所以「忘了配」不是事故，只是少个亮点。
