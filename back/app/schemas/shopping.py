@@ -10,6 +10,7 @@ class GenerateShoppingListRequest(BaseModel):
 
 
 class ShoppingItemPublic(BaseModel):
+    needs_confirmation: bool = False
     id: int
     food_id: int | None = None
     name: str
@@ -25,6 +26,7 @@ class ShoppingCategoryGroup(BaseModel):
 
 
 class ShoppingListResponse(BaseModel):
+    warnings: list[str] = []
     id: int
     title: str
     menu_plan_id: int | None = None

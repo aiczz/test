@@ -1,5 +1,6 @@
 """菜单（说明书 §16 / §17）。"""
 
+from datetime import date
 from pydantic import BaseModel, Field
 
 from app.schemas.recipe import RecipeBrief
@@ -11,6 +12,12 @@ class TodayMenuGenerateRequest(BaseModel):
         default_factory=lambda: ["breakfast", "lunch", "dinner"]
     )
     preferences: list[str] = Field(default_factory=list)
+
+
+class TodayMenuSaveRequest(BaseModel):
+    recipe_ids: list[int] = Field(default_factory=list, max_length=20)
+    people: int = Field(default=3, ge=1, le=20)
+    menu_date: date | None = None
 
 
 class MenuPlanRequest(BaseModel):
@@ -28,6 +35,7 @@ class MenuMeals(BaseModel):
 
 
 class TodayMenuResponse(BaseModel):
+    menu_date: date | None = None
     id: int
     title: str
     people: int

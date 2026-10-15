@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.data.seed import seed_all
 from app.main import app
 from app.services import weather_service
+from app.ai import client as ai_client
 
 # 本机生产配置可以强制 CONTENT_MODE=compact；测试同时覆盖旧演示表和六表适配器，
 # 因此必须按每个临时数据库的实际表结构自动识别。
@@ -33,11 +34,17 @@ def _hermetic_externals():
         settings.ai_enabled,
         settings.ai_api_key,
         settings.weather_enabled,
+        settings.recipe_images_only,
     )
     settings.ai_enabled = False
     settings.ai_api_key = ""
     settings.weather_enabled = False
+    # Other algorithm fixtures deliberately contain unillustrated recipes.
+    # Image-specific tests explicitly enable the product filter.
+    settings.recipe_images_only = False
     weather_service.reset_cache()
+    ai_client.clear_cache()
+    ai_client.clear_failure_cooldowns()
     try:
         yield
     finally:
@@ -45,8 +52,11 @@ def _hermetic_externals():
             settings.ai_enabled,
             settings.ai_api_key,
             settings.weather_enabled,
+            settings.recipe_images_only,
         ) = saved
         weather_service.reset_cache()
+        ai_client.clear_cache()
+        ai_client.clear_failure_cooldowns()
 
 
 @pytest.fixture(name="engine")

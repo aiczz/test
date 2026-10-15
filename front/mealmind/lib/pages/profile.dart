@@ -112,7 +112,7 @@ class _ProfilePageState extends State<ProfilePage> {
       SnackBar(
         content: Text(result.message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: result.synced ? orange900 : muted,
+        backgroundColor: result.synced ? brand900 : muted,
       ),
     );
   }
@@ -328,8 +328,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     FilterChip(
                       label: Text(option),
                       selected: selected.contains(option),
-                      selectedColor: warning ? orange100 : green100,
-                      checkmarkColor: warning ? orange : green700,
+                      selectedColor: warning ? brand100 : green100,
+                      checkmarkColor: warning ? brand600 : green700,
                       onDeleted: custom.contains(option)
                           ? () {
                               _deleteCustomChoice(option, selected, custom);
@@ -371,7 +371,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     _saveProfile();
                   },
                   style: FilledButton.styleFrom(
-                    backgroundColor: warning ? orange : green700,
+                    backgroundColor: warning ? brand600 : green700,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   icon: const Icon(Icons.check_rounded),
@@ -463,7 +463,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       value: _lowSodium,
-                      activeThumbColor: orange700,
+                      activeThumbColor: brand700,
                       title: const Text(
                         '低钠约束',
                         style: TextStyle(fontWeight: FontWeight.w800),
@@ -474,7 +474,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       secondary: const Icon(
                         Icons.favorite_outline,
-                        color: orange700,
+                        color: brand700,
                       ),
                       onChanged: (value) => setState(() => _lowSodium = value),
                     ),
@@ -521,7 +521,7 @@ class _ProfilePageState extends State<ProfilePage> {
               child: FilledButton.icon(
                 onPressed: _saveProfile,
                 style: FilledButton.styleFrom(
-                  backgroundColor: orange,
+                  backgroundColor: brand600,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: const StadiumBorder(),
                 ),
@@ -561,10 +561,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     SwitchListTile.adaptive(
                       contentPadding: const EdgeInsets.fromLTRB(16, 3, 12, 3),
                       value: _reminders,
-                      activeThumbColor: orange700,
+                      activeThumbColor: brand700,
                       secondary: const Icon(
                         Icons.notifications_none,
-                        color: orange700,
+                        color: brand700,
                       ),
                       title: const Text(
                         '用餐与时令提醒',
@@ -636,7 +636,7 @@ class _ProfileHero extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [orange50, Color(0xFFFFF5E5)]),
+        gradient: const LinearGradient(colors: [brand50, Color(0xFFF0F7EB)]),
         borderRadius: BorderRadius.circular(rBlock),
       ),
       child: Row(
@@ -671,7 +671,7 @@ class _ProfileHero extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 21,
                         fontWeight: FontWeight.w900,
-                        color: orange900,
+                        color: brand900,
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -709,7 +709,7 @@ class _AccountCard extends StatelessWidget {
         const SnackBar(
           content: Text('登录成功 —— 家庭档案与收藏已同步'),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: orange900,
+          backgroundColor: brand700,
         ),
       );
     }
@@ -733,13 +733,13 @@ class _AccountCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: orange100,
+                    color: brand100,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
                     Icons.login_rounded,
                     size: 18,
-                    color: orange700,
+                    color: brand700,
                   ),
                 ),
                 const SizedBox(width: 11),
@@ -766,7 +766,7 @@ class _AccountCard extends StatelessWidget {
                 FilledButton(
                   onPressed: () => _openLogin(context),
                   style: FilledButton.styleFrom(
-                    backgroundColor: orange700,
+                    backgroundColor: brand700,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 9,
@@ -793,13 +793,13 @@ class _AccountCard extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: orange100,
+                  color: brand100,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.verified_user_outlined,
                   size: 18,
-                  color: orange700,
+                  color: brand700,
                 ),
               ),
               const SizedBox(width: 11),
@@ -837,7 +837,7 @@ class _AccountCard extends StatelessWidget {
                 TextButton(
                   onPressed: () => AdminPage.open(context),
                   style: TextButton.styleFrom(
-                    foregroundColor: orange700,
+                    foregroundColor: brand700,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: const Size(0, 34),
                     visualDensity: VisualDensity.compact,
@@ -855,7 +855,7 @@ class _AccountCard extends StatelessWidget {
                       const SnackBar(
                         content: Text('已退出登录'),
                         behavior: SnackBarBehavior.floating,
-                        backgroundColor: orange900,
+                        backgroundColor: brand700,
                       ),
                     );
                   }
@@ -883,7 +883,7 @@ class _LocalOnlyBadge extends StatelessWidget {
       decoration: tagDeco(),
       child: const Text(
         '本地匿名档案',
-        style: TextStyle(fontSize: 10, color: orange700),
+        style: TextStyle(fontSize: 10, color: brand700),
       ),
     );
   }
@@ -902,14 +902,14 @@ class _OfflineDemoBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF1E0),
+        color: const Color(0xFFEEF3E8),
         borderRadius: BorderRadius.circular(99),
       ),
       child: const Text(
         '离线演示 · 个人数据不会保存',
         style: TextStyle(
           fontSize: 10,
-          color: orange,
+          color: brand600,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1039,7 +1039,7 @@ class _StatsRowState extends State<_StatsRow> {
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       child: Column(
                         children: [
-                          Icon(stats[i].$1, size: 18, color: orange700),
+                          Icon(stats[i].$1, size: 18, color: brand700),
                           const SizedBox(height: 4),
                           Text(
                             stats[i].$2,
@@ -1094,12 +1094,12 @@ class _WeeklyCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(17),
             decoration: BoxDecoration(
-              color: orange50,
+              color: brand50,
               borderRadius: BorderRadius.circular(rBlock),
             ),
             child: Row(
               children: [
-                const Icon(Icons.bar_chart_rounded, color: orange700, size: 30),
+                const Icon(Icons.bar_chart_rounded, color: brand700, size: 30),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1126,7 +1126,7 @@ class _WeeklyCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: orange700),
+                const Icon(Icons.chevron_right, color: brand700),
               ],
             ),
           ),
@@ -1141,7 +1141,7 @@ class _SectionTitle extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  /// 图标与标题的颜色。默认主色橙；危险操作区传 [danger]，
+  /// 图标与标题的颜色。默认品牌绿；危险操作区传 [danger]，
   /// 让「这一区的东西会不可恢复」在标题上就看得出来。
   final Color color;
 
@@ -1149,7 +1149,7 @@ class _SectionTitle extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.color = orange700,
+    this.color = brand700,
   });
 
   @override
@@ -1201,7 +1201,7 @@ class _CounterRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: orange700),
+        Icon(icon, color: brand700),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -1254,7 +1254,7 @@ class _SliderSetting extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, color: orange700),
+            Icon(icon, color: brand700),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -1265,7 +1265,7 @@ class _SliderSetting extends StatelessWidget {
             Text(
               value,
               style: const TextStyle(
-                color: orange700,
+                color: brand700,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1276,7 +1276,7 @@ class _SliderSetting extends StatelessWidget {
           max: max,
           divisions: divisions,
           value: sliderValue,
-          activeColor: orange700,
+          activeColor: brand700,
           onChanged: onChanged,
         ),
       ],
@@ -1328,15 +1328,15 @@ class _ChoiceCard extends StatelessWidget {
                 return FilterChip(
                   label: Text(item),
                   selected: isSelected,
-                  selectedColor: warning ? orange100 : green100,
-                  checkmarkColor: warning ? orange : green700,
+                  selectedColor: warning ? brand100 : green100,
+                  checkmarkColor: warning ? brand600 : green700,
                   onDeleted: custom.contains(item)
                       ? () => onDeleteCustom(item)
                       : null,
                   deleteIcon: const Icon(Icons.close_rounded, size: 16),
                   deleteButtonTooltipMessage: '删除$item',
                   labelStyle: TextStyle(
-                    color: isSelected ? (warning ? orange : green700) : muted,
+                    color: isSelected ? (warning ? brand600 : green700) : muted,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                   ),
                   onSelected: (_) => onChanged(item),
@@ -1374,7 +1374,7 @@ class _MenuRow extends StatelessWidget {
       color: Colors.transparent,
       child: ListTile(
         onTap: onTap,
-        leading: Icon(icon, color: orange700),
+        leading: Icon(icon, color: brand700),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
         trailing: const Icon(Icons.chevron_right),
@@ -1574,7 +1574,9 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(rBlock)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(rBlock),
+      ),
       title: const Row(
         children: [
           Icon(Icons.warning_amber_rounded, color: danger),
@@ -1619,7 +1621,9 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('取消', style: TextStyle(color: muted)),
         ),
         FilledButton(

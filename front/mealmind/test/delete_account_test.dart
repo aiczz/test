@@ -269,7 +269,7 @@ void main() {
       const Recipe(
         id: 'leftover',
         name: '上一个人加的菜',
-        image: '',
+        image: 'assets/images/tomato-egg.jpg',
         desc: '',
         time: '',
         people: '',

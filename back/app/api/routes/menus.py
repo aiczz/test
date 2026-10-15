@@ -7,6 +7,8 @@ POST /api/menu/plan
 ★ 全部需要登录（说明书 §12 把「菜单」列在需要登录的接口里）。
 """
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
@@ -17,6 +19,7 @@ from app.schemas.menu import (
     MenuPlanRequest,
     MenuPlanResponse,
     TodayMenuGenerateRequest,
+    TodayMenuSaveRequest,
     TodayMenuResponse,
 )
 from app.services import menu_service
@@ -26,10 +29,11 @@ router = APIRouter(prefix="/menu", tags=["菜单"])
 
 @router.get("/today", response_model=TodayMenuResponse, summary="今日菜单")
 def get_today(
+    menu_date: date | None = None,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> TodayMenuResponse:
-    result = menu_service.get_today(session, user.id)
+    result = menu_service.get_today(session, user.id, menu_date)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -58,3 +62,9 @@ def generate_plan(
     session: Session = Depends(get_session),
 ) -> MenuPlanResponse:
     return menu_service.generate_plan(session, user.id, payload)
+
+
+@router.put("/today", response_model=TodayMenuResponse, summary="保存指定日期的手选菜单")
+def save_today(payload: TodayMenuSaveRequest, user: User = Depends(get_current_user),
+               session: Session = Depends(get_session)) -> TodayMenuResponse:
+    return menu_service.save_today(session, user.id, payload)

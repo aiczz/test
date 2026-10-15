@@ -64,6 +64,11 @@ def add_item(
             session, user_id, payload.food_id
         )
         if existing is not None:
+            if existing.unit != payload.unit:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"已有库存单位为{existing.unit}，请使用相同单位添加",
+                )
             existing.amount += payload.amount
             if payload.expire_hint:
                 existing.expire_hint = payload.expire_hint

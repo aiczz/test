@@ -29,6 +29,7 @@ _CATEGORY_ORDER = ["蔬菜", "肉蛋", "水产", "豆制品", "主食", "调味"
 
 def _to_public(item: ShoppingItem) -> ShoppingItemPublic:
     return ShoppingItemPublic(
+        needs_confirmation=item.amount <= 0 or item.unit == "份",
         id=item.id,
         food_id=item.food_id,
         name=item.name,
@@ -61,6 +62,9 @@ def _build_response(
     ]
 
     return ShoppingListResponse(
+        warnings=["用量沿用原菜谱份量，未按人数自动缩放。",
+                  "库存只抵扣单位可换算且数量明确的部分；其他需求保留，请核对实际库存。",
+                  "待确认的用量不表示无需购买。"],
         id=shopping_list.id,
         title=shopping_list.title,
         menu_plan_id=shopping_list.menu_plan_id,
@@ -82,38 +86,36 @@ def generate(
 
     plan_items = menu_repository.get_items(session, plan.id)
 
-    # ---- 1. 合并相同食材 ----
-    # key 用 (名称, 单位)：同样是"盐"，一个按"克"一个按"适量"不能直接相加
-    merged: dict[tuple[str, str], dict] = {}
+    merged: dict[tuple, dict] = {}
     for plan_item in plan_items:
-        for ingredient in recipe_repository.list_ingredients(
-            session, plan_item.recipe_id
-        ):
-            key = (ingredient.ingredient_name, ingredient.unit or "")
-            entry = merged.get(key)
-            if entry is None:
-                merged[key] = {
-                    "food_id": ingredient.food_id,
-                    "name": ingredient.ingredient_name,
-                    "amount": ingredient.amount,
-                    "unit": ingredient.unit or "份",
-                    "category": ingredient.category or "其他",
-                }
-            elif ingredient.amount is not None and entry["amount"] is not None:
-                entry["amount"] += ingredient.amount
-
-    # ---- 2. 扣除用户已有食材（可选）----
+        for ingredient in recipe_repository.list_ingredients(session, plan_item.recipe_id):
+            unit, scale = normalize_unit(ingredient.unit or "份")
+            identity = ("id", ingredient.food_id) if ingredient.food_id else ("name", ingredient.ingredient_name.strip())
+            key = (identity, unit)
+            amount = ingredient.amount * scale if ingredient.amount is not None and ingredient.amount > 0 else None
+            if key not in merged:
+                merged[key] = {"food_id": ingredient.food_id, "name": ingredient.ingredient_name,
+                               "amount": amount, "unit": unit, "category": ingredient.category or "其他"}
+            else:
+                prior = merged[key]["amount"]
+                merged[key]["amount"] = prior + amount if prior is not None and amount is not None else None
     if payload.subtract_my_foods:
-        owned = {
-            item.food_id
-            for item in my_food_repository.list_for_user(session, user_id)
-            if item.food_id
-        }
-        merged = {
-            key: value
-            for key, value in merged.items()
-            if value["food_id"] not in owned
-        }
+        stock: dict[tuple, float] = {}
+        for item in my_food_repository.list_for_user(session, user_id):
+            if item.amount <= 0 or item.unit.strip() in {"份", "适量", "少许", "少量"}:
+                continue
+            unit, scale = normalize_unit(item.unit)
+            identity = ("id", item.food_id) if item.food_id else ("name", (item.custom_name or "").strip())
+            key = (identity, unit)
+            stock[key] = stock.get(key, 0) + item.amount * scale
+        for key, entry in list(merged.items()):
+            if entry["amount"] is None:
+                continue
+            used = min(entry["amount"], stock.get(key, 0))
+            entry["amount"] -= used
+            stock[key] = stock.get(key, 0) - used
+            if entry["amount"] <= 1e-9:
+                del merged[key]
 
     # ---- 3. 落库 ----
     shopping_list = shopping_repository.create_list(
@@ -165,3 +167,11 @@ def update_item(
         )
     item.checked = payload.checked
     return _to_public(shopping_repository.save_item(session, item))
+
+
+def normalize_unit(unit: str) -> tuple[str, float]:
+    units = {"g": ("克", 1), "克": ("克", 1), "kg": ("克", 1000), "千克": ("克", 1000),
+             "公斤": ("克", 1000), "斤": ("克", 500), "毫升": ("毫升", 1), "ml": ("毫升", 1),
+             "升": ("毫升", 1000), "l": ("毫升", 1000)}
+    value = unit.strip().lower()
+    return units.get(value, (value or "份", 1))

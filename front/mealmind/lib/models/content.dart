@@ -97,6 +97,7 @@ class Recipe {
   final List<String> ingredients; // 所需食材，含用量文案，如「莲藕 1节」
   final List<String> steps; // 做法步骤
   final String difficulty; // 简单 / 中等
+  final String durationNote;
 
   const Recipe({
     required this.id,
@@ -109,6 +110,7 @@ class Recipe {
     this.ingredients = const <String>[],
     this.steps = const <String>[],
     this.difficulty = '简单',
+    this.durationNote = '',
   });
 
   factory Recipe.fromJson(Map<String, dynamic> j) => Recipe(
@@ -122,6 +124,7 @@ class Recipe {
     ingredients: _strList(j['ingredients']),
     steps: _strList(j['steps']),
     difficulty: j['difficulty'] as String? ?? '简单',
+    durationNote: j['duration_note'] as String? ?? '',
   );
 
   /// 一行元信息：「时长 · 份量」。

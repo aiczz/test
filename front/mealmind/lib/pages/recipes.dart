@@ -1,3 +1,5 @@
+import '../widgets/menu_actions.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -142,13 +144,20 @@ class _RecipesPageState extends State<RecipesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final today = TodayMenuStore.instance.items
-        .where((recipe) => recipe.image.trim().isNotEmpty)
-        .toList();
+    final today = TodayMenuStore.instance.items;
     // 今日菜单是按用户挑的顺序原样显示的，不再过分类/搜索那两道筛子。
     final list = _showTodayMenu ? today : _visible;
 
     return Scaffold(
+      bottomNavigationBar: _showTodayMenu
+          ? const SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: MenuActions(),
+              ),
+            )
+          : null,
       body: SafeArea(
         bottom: false,
         // ⚠️ 这里必须是 CustomScrollView + SliverList.builder，不能是
@@ -160,12 +169,16 @@ class _RecipesPageState extends State<RecipesPage> {
           slivers: [
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              sliver: SliverList.list(children: _headerSlivers(today, list)),
+              sliver: SliverList.list(
+                children: [..._headerSlivers(today, list)],
+              ),
             ),
             if (list.isEmpty)
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-                sliver: SliverToBoxAdapter(child: _emptyState()),
+                sliver: SliverToBoxAdapter(
+                  child: Column(children: [_emptyState()]),
+                ),
               )
             else
               SliverPadding(
@@ -208,7 +221,7 @@ class _RecipesPageState extends State<RecipesPage> {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [orange50, Color(0xFFFFF3DF)],
+            colors: [brand50, Color(0xFFEEF3E8)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -242,7 +255,7 @@ class _RecipesPageState extends State<RecipesPage> {
                             Icon(
                               Icons.local_dining_rounded,
                               size: 15,
-                              color: orange700,
+                              color: brand700,
                             ),
                             SizedBox(width: 6),
                             Text(
@@ -250,7 +263,7 @@ class _RecipesPageState extends State<RecipesPage> {
                               style: TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w800,
-                                color: orange700,
+                                color: brand700,
                                 letterSpacing: .4,
                               ),
                             ),
@@ -262,7 +275,7 @@ class _RecipesPageState extends State<RecipesPage> {
                           style: TextStyle(
                             fontSize: 29,
                             fontWeight: FontWeight.w900,
-                            color: orange900,
+                            color: brand900,
                             height: 1.05,
                             letterSpacing: -1,
                           ),
@@ -308,7 +321,7 @@ class _RecipesPageState extends State<RecipesPage> {
                       ),
                       boxShadow: const [
                         BoxShadow(
-                          color: Color(0x2A6A5A36),
+                          color: Color(0x2A1B512C),
                           blurRadius: 16,
                           offset: Offset(0, 7),
                         ),
@@ -389,7 +402,7 @@ class _RecipesPageState extends State<RecipesPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: orange700, width: 1.5),
+              borderSide: const BorderSide(color: brand700, width: 1.5),
             ),
           ),
         ),
@@ -412,37 +425,38 @@ class _RecipesPageState extends State<RecipesPage> {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: orange100,
+              color: brand100,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               _showTodayMenu ? Icons.playlist_add_check_rounded : Icons.eco,
               size: 18,
-              color: orange700,
+              color: brand700,
             ),
           ),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _showTodayMenu
-                    ? '今日菜单'
-                    : (_category == '全部' ? '全部菜谱' : _category),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: ink,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _showTodayMenu
+                      ? '今日菜单'
+                      : (_category == '全部' ? '全部菜谱' : _category),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _showTodayMenu ? '你挑的菜 · 想好了就去做' : '时令鲜味 · 家常好做',
-                style: const TextStyle(fontSize: 12, color: muted),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  _showTodayMenu ? '你挑的菜 · 想好了就去做' : '时令鲜味 · 家常好做',
+                  style: const TextStyle(fontSize: 12, color: muted),
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
           if (_showTodayMenu && list.isNotEmpty)
             TextButton(
               onPressed: () => TodayMenuStore.instance.clear(),
@@ -499,7 +513,7 @@ class _RecipesPageState extends State<RecipesPage> {
               icon: const Icon(Icons.menu_book_rounded, size: 16),
               label: const Text('去全部菜谱挑几道'),
               style: TextButton.styleFrom(
-                foregroundColor: orange700,
+                foregroundColor: brand700,
                 textStyle: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
@@ -516,7 +530,7 @@ class _RecipesPageState extends State<RecipesPage> {
               icon: const Icon(Icons.refresh, size: 16),
               label: const Text('清空筛选，看全部菜谱'),
               style: TextButton.styleFrom(
-                foregroundColor: orange700,
+                foregroundColor: brand700,
                 textStyle: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
@@ -547,13 +561,13 @@ class _RecipeHeaderTag extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: orange700),
+          Icon(icon, size: 12, color: brand700),
           const SizedBox(width: 4),
           Text(
             text,
             style: const TextStyle(
               fontSize: 10.5,
-              color: orange700,
+              color: brand700,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -638,14 +652,14 @@ class _RecipeTab extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           decoration: BoxDecoration(
-            color: selected ? orange700 : Colors.transparent,
+            color: selected ? brand700 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           alignment: Alignment.center,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 17, color: selected ? Colors.white : orange700),
+              Icon(icon, size: 17, color: selected ? Colors.white : brand700),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
@@ -797,7 +811,7 @@ class _CategoryIndexState extends State<_CategoryIndex> {
             ),
             label: Text(_expanded ? '收起分类' : '展开全部分类（共 ${flat.length} 个）'),
             style: TextButton.styleFrom(
-              foregroundColor: orange700,
+              foregroundColor: brand700,
               padding: const EdgeInsets.symmetric(horizontal: 4),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -834,8 +848,8 @@ class _CategoryChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
         decoration: BoxDecoration(
-          color: active ? orange700 : Colors.white,
-          border: Border.all(color: active ? orange700 : line),
+          color: active ? brand700 : Colors.white,
+          border: Border.all(color: active ? brand700 : line),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(
@@ -894,7 +908,7 @@ class _RecipeListCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(rCard),
       onTap: onOpen,
       child: Container(
-        height: 164,
+        height: 164 + (MediaQuery.textScalerOf(context).scale(1) - 1) * 150,
         clipBehavior: Clip.antiAlias,
         decoration: cardDeco(),
         child: Row(
@@ -941,7 +955,7 @@ class _RecipeListCard extends StatelessWidget {
                           ),
                           icon: Icon(
                             favorite ? Icons.favorite : Icons.favorite_border,
-                            color: favorite ? orange : muted,
+                            color: favorite ? brand600 : muted,
                           ),
                         ),
                       ],
@@ -964,14 +978,14 @@ class _RecipeListCard extends StatelessWidget {
                               vertical: 3,
                             ),
                             decoration: tagDeco(
-                              bg: i == 0 ? orange100 : green100,
+                              bg: i == 0 ? brand100 : green100,
                             ),
                             child: Text(
                               recipe.tags[i],
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                color: i == 0 ? orange : green700,
+                                color: i == 0 ? brand600 : green700,
                               ),
                             ),
                           ),
@@ -997,10 +1011,12 @@ class _RecipeListCard extends StatelessWidget {
                                 : '将${recipe.name}加入今日菜单',
                             onPressed: onToggleMenu,
                             style: IconButton.styleFrom(
-                              backgroundColor: inTodayMenu ? orange : orange100,
+                              backgroundColor: inTodayMenu
+                                  ? brand600
+                                  : brand100,
                               foregroundColor: inTodayMenu
                                   ? Colors.white
-                                  : orange700,
+                                  : brand700,
                               minimumSize: const Size(36, 36),
                               maximumSize: const Size(36, 36),
                               padding: EdgeInsets.zero,
@@ -1190,7 +1206,7 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: orange700,
+                      color: brand700,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -1227,15 +1243,13 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                             horizontal: 9,
                             vertical: 5,
                           ),
-                          decoration: tagDeco(
-                            bg: i == 0 ? orange100 : green100,
-                          ),
+                          decoration: tagDeco(bg: i == 0 ? brand100 : green100),
                           child: Text(
                             recipe.tags[i],
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: i == 0 ? orange : green700,
+                              color: i == 0 ? brand600 : green700,
                             ),
                           ),
                         ),
@@ -1261,6 +1275,17 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                   const SizedBox(height: 24),
 
                   // ---- 所需食材 ----
+                  if (recipe.durationNote.isNotEmpty) ...[
+                    Text(
+                      recipe.durationNote,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: muted,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (recipe.ingredients.isNotEmpty) ...[
                     const _SectionTitle(text: '所需食材'),
                     const SizedBox(height: 10),
@@ -1275,7 +1300,7 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: orange50,
+                              color: brand50,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -1306,7 +1331,7 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                               height: 26,
                               alignment: Alignment.center,
                               decoration: const BoxDecoration(
-                                color: orange700,
+                                color: brand700,
                                 shape: BoxShape.circle,
                               ),
                               child: Text(
@@ -1361,7 +1386,7 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                       },
                       icon: const Icon(Icons.playlist_add_rounded, size: 19),
                       style: FilledButton.styleFrom(
-                        backgroundColor: orange700,
+                        backgroundColor: brand700,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: const StadiumBorder(),
                       ),
@@ -1414,12 +1439,12 @@ class _Fact extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
-          color: orange50,
+          color: brand50,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 17, color: orange700),
+            Icon(icon, size: 17, color: brand700),
             const SizedBox(height: 6),
             Text(
               label,
@@ -1442,7 +1467,7 @@ void _snack(BuildContext context, String message) {
       content: Text(message),
       duration: const Duration(milliseconds: 1400),
       behavior: SnackBarBehavior.floating,
-      backgroundColor: orange900,
+      backgroundColor: brand700,
       shape: const StadiumBorder(),
     ),
   );

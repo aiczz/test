@@ -9,10 +9,14 @@
   · 同一天内不重复上同一道菜
 """
 
-from sqlmodel import Session
+from datetime import date, datetime, timezone, timedelta
+from fastapi import HTTPException
+from sqlmodel import Session, select
 
 from app.models.menu import MenuPlan, MenuPlanItem
 from app.models.recipe import Recipe
+from app.core.config import settings
+from app.data.dish_images import has_image
 from app.repositories import menu_repository, recipe_repository
 from app.schemas.menu import (
     MenuDay,
@@ -20,6 +24,7 @@ from app.schemas.menu import (
     MenuPlanRequest,
     MenuPlanResponse,
     TodayMenuGenerateRequest,
+    TodayMenuSaveRequest,
     TodayMenuResponse,
 )
 from app.services import recipe_service
@@ -52,6 +57,8 @@ def _pick(
     recipes, _ = recipe_repository.list_recipes(
         session, max_duration=max_minutes, offset=0, limit=50
     )
+    if settings.recipe_images_only:
+        recipes = [r for r in recipes if has_image(r.name) or (r.image_url or '').strip()]
     # 排除今天已经上过的；全被排掉时退回完整列表（宁可重复也不上空白菜单）
     pool = [r for r in recipes if r.id not in exclude] or recipes
 
@@ -114,10 +121,11 @@ def generate_today(
         MenuPlan(
             user_id=user_id,
             title="今日菜单",
+            start_date=_today(),
             plan_type="today",
             people=payload.people,
             days=1,
-            source="ai",
+            source="algorithm",
         ),
     )
     _persist_items(
@@ -127,6 +135,7 @@ def generate_today(
     return TodayMenuResponse(
         id=plan.id,
         title=plan.title,
+        menu_date=plan.start_date,
         people=plan.people,
         meals=MenuMeals(
             breakfast=meals.get("breakfast", []),
@@ -136,9 +145,9 @@ def generate_today(
     )
 
 
-def get_today(session: Session, user_id: int) -> TodayMenuResponse | None:
+def get_today(session: Session, user_id: int, menu_date: date | None = None) -> TodayMenuResponse | None:
     """取最近一次生成的今日菜单。没生成过返回 None（路由层转 404）。"""
-    plan = menu_repository.get_latest(session, user_id, "today")
+    plan = _dated_plan(session, user_id, menu_date or _today())
     if plan is None:
         return None
 
@@ -159,6 +168,7 @@ def get_today(session: Session, user_id: int) -> TodayMenuResponse | None:
     return TodayMenuResponse(
         id=plan.id,
         title=plan.title,
+        menu_date=plan.start_date,
         people=plan.people,
         meals=MenuMeals(**meals),
     )
@@ -198,7 +208,7 @@ def generate_plan(
             plan_type="three_day" if payload.days == 3 else "custom",
             people=payload.people,
             days=payload.days,
-            source="ai",
+            source="algorithm",
         ),
     )
     _persist_items(session, plan.id, groups)
@@ -209,3 +219,39 @@ def generate_plan(
         people=plan.people,
         days=days,
     )
+
+
+def _today() -> date:
+    return datetime.now(timezone(timedelta(hours=8))).date()
+
+
+def _dated_plan(session: Session, user_id: int, day: date) -> MenuPlan | None:
+    return session.exec(select(MenuPlan).where(
+        MenuPlan.user_id == user_id, MenuPlan.plan_type == "today", MenuPlan.start_date == day,
+    ).order_by(MenuPlan.id.desc())).first()
+
+
+def save_today(session: Session, user_id: int, payload: TodayMenuSaveRequest) -> TodayMenuResponse:
+    ids = list(dict.fromkeys(payload.recipe_ids))
+    recipes = {r.id: r for r in recipe_repository.list_by_ids(session, ids)}
+    if set(ids) != set(recipes):
+        raise HTTPException(status_code=422, detail="菜单包含不存在的菜谱，请刷新菜谱后再保存")
+    day = payload.menu_date or _today()
+    plan = _dated_plan(session, user_id, day)
+    try:
+        if plan is None:
+            plan = MenuPlan(user_id=user_id, title="今日菜单", plan_type="today", start_date=day, days=1)
+            session.add(plan)
+            session.flush()
+        plan.people = payload.people
+        plan.source = "manual"
+        session.add(plan)
+        for item in menu_repository.get_items(session, plan.id):
+            session.delete(item)
+        for order, recipe_id in enumerate(ids):
+            session.add(MenuPlanItem(menu_plan_id=plan.id, recipe_id=recipe_id, meal_type="dinner", sort_order=order))
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return get_today(session, user_id, day)

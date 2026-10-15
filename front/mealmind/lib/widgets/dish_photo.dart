@@ -50,7 +50,7 @@ class _DishPhotoPlaceholder extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFF7F2EA), Color(0xFFEFE7DB)],
+          colors: [Color(0xFFF3F9EF), Color(0xFFE5EEDF)],
         ),
       ),
       child: Center(

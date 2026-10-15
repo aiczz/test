@@ -238,7 +238,7 @@ class _AdminPageState extends State<AdminPage> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: orange900,
+        backgroundColor: brand700,
       ),
     );
   }
@@ -258,7 +258,7 @@ class _AdminPageState extends State<AdminPage> {
               width: 34,
               height: 34,
               decoration: BoxDecoration(
-                color: orange700,
+                color: brand700,
                 borderRadius: BorderRadius.circular(11),
               ),
               child: const Icon(
@@ -291,7 +291,7 @@ class _AdminPageState extends State<AdminPage> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: orange700))
+          ? const Center(child: CircularProgressIndicator(color: brand700))
           : _error != null
           ? _errorView()
           : SafeArea(
@@ -317,7 +317,7 @@ class _AdminPageState extends State<AdminPage> {
   Widget _statusPill() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
     decoration: BoxDecoration(
-      color: _demoMode ? _softGold : orange100,
+      color: _demoMode ? _softGold : brand100,
       borderRadius: BorderRadius.circular(20),
     ),
     child: Row(
@@ -327,7 +327,7 @@ class _AdminPageState extends State<AdminPage> {
           width: 7,
           height: 7,
           decoration: BoxDecoration(
-            color: _demoMode ? _gold : orange700,
+            color: _demoMode ? _gold : brand700,
             shape: BoxShape.circle,
           ),
         ),
@@ -335,7 +335,7 @@ class _AdminPageState extends State<AdminPage> {
         Text(
           _demoMode ? '演示数据' : '服务在线',
           style: TextStyle(
-            color: _demoMode ? _gold : orange700,
+            color: _demoMode ? _gold : brand700,
             fontSize: 10,
             fontWeight: FontWeight.w800,
           ),
@@ -354,7 +354,7 @@ class _AdminPageState extends State<AdminPage> {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: orange50,
+        color: brand50,
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
@@ -388,15 +388,19 @@ class _AdminPageState extends State<AdminPage> {
                       Icon(
                         items[index].$1,
                         size: 16,
-                        color: _section == index ? orange700 : muted,
+                        color: _section == index ? brand700 : muted,
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        items[index].$2,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: _section == index ? orange700 : muted,
+                      Flexible(
+                        child: Text(
+                          items[index].$2,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: _section == index ? brand700 : muted,
+                          ),
                         ),
                       ),
                     ],
@@ -413,7 +417,7 @@ class _AdminPageState extends State<AdminPage> {
     final stats = _stats!;
     final name = AuthStore.instance.user?.displayName ?? '管理员';
     return RefreshIndicator(
-      color: orange700,
+      color: brand700,
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 30),
@@ -436,8 +440,8 @@ class _AdminPageState extends State<AdminPage> {
           const SizedBox(height: 10),
           _attentionCard(
             icon: Icons.gpp_maybe_rounded,
-            iconColor: orange,
-            iconBackground: orange100,
+            iconColor: brand600,
+            iconBackground: brand100,
             title: '${stats.failedLoginsToday} 次失败登录',
             description: '建议检查短时间内重复失败的账号',
             action: '查看记录',
@@ -465,13 +469,13 @@ class _AdminPageState extends State<AdminPage> {
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(24),
       gradient: const LinearGradient(
-        colors: <Color>[orange900, orange700],
+        colors: <Color>[brand900, brand700],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
       boxShadow: const <BoxShadow>[
         BoxShadow(
-          color: Color(0x33D2601F),
+          color: Color(0x3350765B),
           blurRadius: 24,
           offset: Offset(0, 10),
         ),
@@ -520,12 +524,14 @@ class _AdminPageState extends State<AdminPage> {
                       size: 14,
                     ),
                     SizedBox(width: 6),
-                    Text(
-                      '账号服务运行正常',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
+                    Flexible(
+                      child: Text(
+                        '账号服务运行正常',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -555,7 +561,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget _statsGrid(AdminStats stats) {
     final cells = <(String, int, IconData, Color, Color)>[
-      ('全部用户', stats.totalUsers, Icons.groups_2_rounded, orange700, orange100),
+      ('全部用户', stats.totalUsers, Icons.groups_2_rounded, brand700, brand100),
       ('今日活跃', stats.activeUsersToday, Icons.bolt_rounded, _blue, _softBlue),
       (
         '今日新增',
@@ -564,7 +570,7 @@ class _AdminPageState extends State<AdminPage> {
         _gold,
         _softGold,
       ),
-      ('受限账号', stats.bannedUsers, Icons.block_rounded, orange, orange100),
+      ('受限账号', stats.bannedUsers, Icons.block_rounded, brand600, brand100),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -722,7 +728,7 @@ class _AdminPageState extends State<AdminPage> {
                 child: Text(
                   '${users.length} 位',
                   style: const TextStyle(
-                    color: orange700,
+                    color: brand700,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
@@ -733,7 +739,7 @@ class _AdminPageState extends State<AdminPage> {
         ),
         Expanded(
           child: RefreshIndicator(
-            color: orange700,
+            color: brand700,
             onRefresh: _load,
             child: users.isEmpty
                 ? ListView(
@@ -761,15 +767,15 @@ class _AdminPageState extends State<AdminPage> {
           height: 44,
           decoration: BoxDecoration(
             color: user.isAdmin
-                ? orange700
-                : (user.isBanned ? orange100 : green100),
+                ? brand700
+                : (user.isBanned ? brand100 : green100),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Icon(
             user.isAdmin ? Icons.shield_rounded : Icons.person_rounded,
             color: user.isAdmin
                 ? Colors.white
-                : (user.isBanned ? orange : green700),
+                : (user.isBanned ? brand600 : green700),
             size: 21,
           ),
         ),
@@ -791,8 +797,8 @@ class _AdminPageState extends State<AdminPage> {
                       ),
                     ),
                   ),
-                  if (user.isAdmin) _badge('管理员', orange100, orange700),
-                  if (user.isBanned) _badge('已封禁', orange100, orange),
+                  if (user.isAdmin) _badge('管理员', brand100, brand700),
+                  if (user.isBanned) _badge('已封禁', brand100, brand600),
                 ],
               ),
               const SizedBox(height: 4),
@@ -818,7 +824,7 @@ class _AdminPageState extends State<AdminPage> {
                   height: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: orange700,
+                    color: brand700,
                   ),
                 )
               : PopupMenuButton<String>(
@@ -834,7 +840,7 @@ class _AdminPageState extends State<AdminPage> {
                                 ? Icons.lock_open_rounded
                                 : Icons.block_rounded,
                             size: 18,
-                            color: user.isBanned ? green700 : orange,
+                            color: user.isBanned ? green700 : brand600,
                           ),
                           const SizedBox(width: 9),
                           Text(user.isBanned ? '解除封禁' : '封禁账号'),
@@ -860,7 +866,7 @@ class _AdminPageState extends State<AdminPage> {
             decoration: cardDeco(radius: 16),
             child: Row(
               children: <Widget>[
-                const Icon(Icons.security_rounded, color: orange700, size: 19),
+                const Icon(Icons.security_rounded, color: brand700, size: 19),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -879,11 +885,11 @@ class _AdminPageState extends State<AdminPage> {
                     setState(() => _onlyFailed = value);
                     if (!_demoMode) _load();
                   },
-                  selectedColor: orange100,
-                  checkmarkColor: orange,
-                  side: BorderSide(color: _onlyFailed ? orange : line),
+                  selectedColor: brand100,
+                  checkmarkColor: brand600,
+                  side: BorderSide(color: _onlyFailed ? brand600 : line),
                   labelStyle: TextStyle(
-                    color: _onlyFailed ? orange : muted,
+                    color: _onlyFailed ? brand600 : muted,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -894,7 +900,7 @@ class _AdminPageState extends State<AdminPage> {
         ),
         Expanded(
           child: RefreshIndicator(
-            color: orange700,
+            color: brand700,
             onRefresh: _load,
             child: logs.isEmpty
                 ? ListView(
@@ -924,12 +930,12 @@ class _AdminPageState extends State<AdminPage> {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: log.success ? green100 : orange100,
+            color: log.success ? green100 : brand100,
             borderRadius: BorderRadius.circular(11),
           ),
           child: Icon(
             log.success ? Icons.login_rounded : Icons.warning_amber_rounded,
-            color: log.success ? green700 : orange,
+            color: log.success ? green700 : brand600,
             size: 17,
           ),
         ),
@@ -955,7 +961,7 @@ class _AdminPageState extends State<AdminPage> {
                 const SizedBox(height: 4),
                 Text(
                   log.detail!,
-                  style: const TextStyle(color: orange, fontSize: 10),
+                  style: const TextStyle(color: brand600, fontSize: 10),
                 ),
               ],
             ],
@@ -963,8 +969,8 @@ class _AdminPageState extends State<AdminPage> {
         ),
         _badge(
           log.success ? '正常' : '异常',
-          log.success ? green100 : orange100,
-          log.success ? green700 : orange,
+          log.success ? green100 : brand100,
+          log.success ? green700 : brand600,
         ),
       ],
     ),
@@ -1011,7 +1017,7 @@ class _AdminPageState extends State<AdminPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Icon(Icons.lock_outline_rounded, color: orange, size: 38),
+          const Icon(Icons.lock_outline_rounded, color: brand600, size: 38),
           const SizedBox(height: 12),
           Text(
             _error!,

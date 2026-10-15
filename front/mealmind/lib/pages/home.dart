@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/brand_wordmark.dart';
+
 import '../data/mock.dart';
 import '../models/content.dart';
 import '../services/api_config.dart';
@@ -183,10 +185,10 @@ class _ConstraintBar extends StatelessWidget {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: orange100,
+                    color: brand100,
                     borderRadius: BorderRadius.circular(11),
                   ),
-                  child: const Icon(Icons.tune, size: 18, color: orange700),
+                  child: const Icon(Icons.tune, size: 18, color: brand700),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -214,11 +216,11 @@ class _ConstraintBar extends StatelessWidget {
                   '去修改',
                   style: TextStyle(
                     fontSize: 11,
-                    color: orange700,
+                    color: brand700,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const Icon(Icons.chevron_right, size: 16, color: orange700),
+                const Icon(Icons.chevron_right, size: 16, color: brand700),
               ],
             ),
             const SizedBox(height: 9),
@@ -254,7 +256,7 @@ class _ConstraintBar extends StatelessWidget {
                             height: 12,
                             child: CircularProgressIndicator(
                               strokeWidth: 1.6,
-                              color: orange700,
+                              color: brand700,
                             ),
                           )
                         else
@@ -263,7 +265,7 @@ class _ConstraintBar extends StatelessWidget {
                                 ? Icons.auto_awesome
                                 : Icons.calculate_outlined,
                             size: 13,
-                            color: picks.fromBackend ? orange700 : muted,
+                            color: picks.fromBackend ? brand700 : muted,
                           ),
                         const SizedBox(width: 5),
                         Expanded(
@@ -274,7 +276,7 @@ class _ConstraintBar extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w600,
-                              color: picks.fromBackend ? orange700 : muted,
+                              color: picks.fromBackend ? brand700 : muted,
                             ),
                           ),
                         ),
@@ -282,14 +284,14 @@ class _ConstraintBar extends StatelessWidget {
                           '推荐依据',
                           style: TextStyle(
                             fontSize: 10.5,
-                            color: orange700,
+                            color: brand700,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const Icon(
                           Icons.chevron_right,
                           size: 14,
-                          color: orange700,
+                          color: brand700,
                         ),
                       ],
                     );
@@ -364,13 +366,13 @@ class _SourceSheet extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: orange100,
+                  color: brand100,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.account_tree_outlined,
                   size: 19,
-                  color: orange700,
+                  color: brand700,
                 ),
               ),
               const SizedBox(width: 10),
@@ -460,7 +462,7 @@ class _SourceBlock extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w800,
-              color: orange900,
+              color: brand900,
             ),
           ),
           const SizedBox(height: 8),
@@ -507,8 +509,8 @@ class _NotConnectedBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF1E0),
-        border: Border.all(color: orange, width: 1.2),
+        color: const Color(0xFFEEF3E8),
+        border: Border.all(color: brand600, width: 1.2),
         borderRadius: BorderRadius.circular(rCard),
       ),
       child: Column(
@@ -516,7 +518,7 @@ class _NotConnectedBanner extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.cloud_off_rounded, size: 17, color: orange900),
+              const Icon(Icons.cloud_off_rounded, size: 17, color: brand900),
               const SizedBox(width: 7),
               const Expanded(
                 child: Text(
@@ -524,7 +526,7 @@ class _NotConnectedBanner extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: orange900,
+                    color: brand900,
                   ),
                 ),
               ),
@@ -545,7 +547,7 @@ class _NotConnectedBanner extends StatelessWidget {
             '启动后端：cd back && python -m uvicorn app.main:app --port 8000',
             style: TextStyle(
               fontSize: 10.5,
-              color: orange900,
+              color: brand900,
               fontFamily: 'monospace',
               fontWeight: FontWeight.w600,
               backgroundColor: Colors.white.withValues(alpha: 0.6),
@@ -566,63 +568,65 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '食时',
-              style: TextStyle(
-                fontSize: 31,
-                fontWeight: FontWeight.w900,
-                color: orange900,
-                letterSpacing: -1.5,
-                height: 1,
-              ),
-            ),
-            SizedBox(height: 5),
-            Text(
-              '顺应时令 · 智慧饮食',
-              style: TextStyle(
-                fontSize: 10,
-                color: orange700,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ),
-        const Spacer(),
-        // 天气 pill —— 后端拿到了实时天气才有，取不到就不显示（不占位、不假装）
-        ListenableBuilder(
-          listenable: HomeFeedStore.instance,
-          builder: (context, _) {
-            final weather = HomeFeedStore.instance.feed?.weather;
-            if (weather == null) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _Pill(
-                icon: Icons.wb_sunny_outlined,
-                text: weather.temperatureC == null
-                    ? weather.description
-                    : '${weather.temperatureC!.round()}°C',
-              ),
-            );
-          },
-        ),
-        // 位置 pill —— 以前是个写死的死标签，现在点了能换城市
-        ListenableBuilder(
-          listenable: CityStore.instance,
-          builder: (context, _) => _Pill(
-            icon: Icons.location_on,
-            text: CityStore.instance.city.name,
-            onTap: () => showCityPicker(context),
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          BrandWordmark(
+            width: constraints.maxWidth < 340 ? 100 : 116,
+            backgroundColor: page,
           ),
-        ),
-        const SizedBox(width: 8),
-        _Pill(icon: Icons.eco, text: currentSeason),
-      ],
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ListenableBuilder(
+                      listenable: HomeFeedStore.instance,
+                      builder: (context, _) {
+                        final weather = HomeFeedStore.instance.feed?.weather;
+                        if (weather == null) return const SizedBox.shrink();
+                        return Tooltip(
+                          message: weather.description,
+                          child: _Pill(
+                            icon: Icons.wb_sunny_outlined,
+                            text: weather.temperatureC == null
+                                ? '季节参考'
+                                : '${weather.temperatureC!.round()}°C',
+                          ),
+                        );
+                      },
+                    ),
+                    ListenableBuilder(
+                      listenable: CityStore.instance,
+                      builder: (context, _) => _Pill(
+                        icon: Icons.location_on,
+                        text: CityStore.instance.city.name,
+                        onTap: () => showCityPicker(context),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  currentSeason,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: muted,
+                    height: 1.3,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -639,7 +643,8 @@ class _Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      constraints: const BoxConstraints(maxWidth: 160),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: line),
@@ -648,9 +653,16 @@ class _Pill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: orange700),
+          Icon(icon, size: 13, color: brand700),
           const SizedBox(width: 4),
-          Text(text, style: const TextStyle(fontSize: 12, color: ink)),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: ink),
+            ),
+          ),
           // 可点的 pill 加个小箭头，暗示这里能操作
           if (onTap != null) ...[
             const SizedBox(width: 2),
@@ -768,14 +780,14 @@ class _HomeCarouselState extends State<_HomeCarousel> {
         buttonText: '打开 AI 助手',
         buttonIcon: Icons.auto_awesome_rounded,
         onTap: widget.onOpenAi,
-        backgroundColors: const [orange50, Color(0xFFFFE7C5)],
+        backgroundColors: const [brand50, Color(0xFFE4ECDB)],
       ),
     ];
 
     return Column(
       children: [
         SizedBox(
-          height: 252,
+          height: 252 + (MediaQuery.textScalerOf(context).scale(1) - 1) * 200,
           // Listener 只负责感知「用户碰了它」：一碰就让自动播放让路，
           // 不能和用户抢方向盘。
           child: Listener(
@@ -809,7 +821,7 @@ class _HomeCarouselState extends State<_HomeCarousel> {
                 height: 7,
                 margin: const EdgeInsets.symmetric(horizontal: 3),
                 decoration: BoxDecoration(
-                  color: active ? orange : const Color(0xFFE3D8CB),
+                  color: active ? brand600 : const Color(0xFFDDE6D8),
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
@@ -832,7 +844,7 @@ class _Hero extends StatelessWidget {
       height: 252,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xFFF8EEDC),
+        color: const Color(0xFFEAF3E3),
         borderRadius: BorderRadius.circular(rHero),
         boxShadow: cardShadow,
       ),
@@ -851,10 +863,10 @@ class _Hero extends StatelessWidget {
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
                 colors: [
-                  Color(0xFFFFF8E9),
-                  Color(0xF7FFF8E9),
-                  Color(0xB8FFF8E9),
-                  Color(0x00FFF8E9),
+                  Color(0xFFF3F9EF),
+                  Color(0xF7F3F9EF),
+                  Color(0xB8F3F9EF),
+                  Color(0x00F3F9EF),
                 ],
                 stops: [0, .34, .58, .82],
               ),
@@ -870,7 +882,7 @@ class _Hero extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: orange700,
+                    color: brand700,
                     letterSpacing: 0.6,
                   ),
                 ),
@@ -880,7 +892,7 @@ class _Hero extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 33,
                     fontWeight: FontWeight.w900,
-                    color: orange900,
+                    color: brand900,
                     height: 1.05,
                     letterSpacing: -1.4,
                   ),
@@ -890,7 +902,7 @@ class _Hero extends StatelessWidget {
                   width: 112,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: orange,
+                    color: brand600,
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -908,7 +920,7 @@ class _Hero extends StatelessWidget {
                 FilledButton(
                   onPressed: onOpenRecipes,
                   style: FilledButton.styleFrom(
-                    backgroundColor: orange,
+                    backgroundColor: brand600,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 18,
                       vertical: 11,
@@ -948,7 +960,7 @@ class _FeatureHero extends StatelessWidget {
     required this.buttonText,
     required this.buttonIcon,
     required this.onTap,
-    this.backgroundColors = const [Color(0xFFFFF5DF), Color(0xFFF5E7C8)],
+    this.backgroundColors = const [Color(0xFFEEF7E8), Color(0xFFE4ECDB)],
   });
 
   @override
@@ -982,7 +994,7 @@ class _FeatureHero extends StatelessWidget {
               child: Icon(
                 Icons.auto_awesome_rounded,
                 size: 170,
-                color: orange700.withValues(alpha: 0.10),
+                color: brand700.withValues(alpha: 0.10),
               ),
             ),
           DecoratedBox(
@@ -993,10 +1005,10 @@ class _FeatureHero extends StatelessWidget {
                 colors: image == null
                     ? const [Color(0x00FFFFFF), Color(0x00FFFFFF)]
                     : const [
-                        Color(0xFFFFF8E9),
-                        Color(0xF8FFF8E9),
-                        Color(0xC8FFF8E9),
-                        Color(0x22FFF8E9),
+                        Color(0xFFF3F9EF),
+                        Color(0xF8F3F9EF),
+                        Color(0xC8F3F9EF),
+                        Color(0x22F3F9EF),
                       ],
                 stops: image == null ? null : const [0, .38, .62, 1],
               ),
@@ -1009,14 +1021,14 @@ class _FeatureHero extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(buttonIcon, size: 16, color: orange700),
+                    Icon(buttonIcon, size: 16, color: brand700),
                     const SizedBox(width: 6),
                     Text(
                       eyebrow,
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: orange700,
+                        color: brand700,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -1028,7 +1040,7 @@ class _FeatureHero extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
-                    color: orange900,
+                    color: brand900,
                     height: 1.08,
                     letterSpacing: -1.1,
                   ),
@@ -1049,7 +1061,7 @@ class _FeatureHero extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onTap,
                   style: FilledButton.styleFrom(
-                    backgroundColor: orange,
+                    backgroundColor: brand600,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 10,
@@ -1098,26 +1110,31 @@ class _SectionHeader extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: orange100,
+            color: brand100,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, size: 19, color: orange700),
+          child: Icon(icon, size: 19, color: brand700),
         ),
         const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: ink,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: ink,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(subtitle, style: const TextStyle(fontSize: 12, color: muted)),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 12, color: muted),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -1139,7 +1156,8 @@ class _FoodRow extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const spacing = 10.0;
-        const contentHeight = 76.0;
+        final contentHeight =
+            80.0 + (MediaQuery.textScalerOf(context).scale(1) - 1) * 80;
         final cardWidth =
             (constraints.maxWidth - spacing * (foods.length - 1)) /
             foods.length;
@@ -1218,7 +1236,7 @@ class _FoodCard extends StatelessWidget {
   /// 不做兜底的话 79% 的卡片下面就是一块空白，跟旁边有标签的卡片放在一起很怪。
   ({String text, Color color}) get _chip {
     if (food.tags.isNotEmpty) {
-      return (text: food.tags.first, color: orange700);
+      return (text: food.tags.first, color: brand700);
     }
     return (text: food.category, color: muted);
   }
@@ -1362,28 +1380,13 @@ class _RecipeCard extends StatelessWidget {
                     style: const TextStyle(fontSize: 10, color: muted),
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.schedule, size: 11, color: muted),
-                      const SizedBox(width: 3),
-                      Expanded(
-                        child: Text(
-                          recipe.time,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 9, color: muted),
-                        ),
-                      ),
-                      const Icon(Icons.people_outline, size: 11, color: muted),
-                      const SizedBox(width: 2),
-                      // 份量：清洗库没有这个数据时后端给空串，这时整段不显示
-                      // （不能拿常量「3人份」顶上 —— 那会让用户以为改了人数没生效）
-                      if (recipe.people.isNotEmpty)
-                        Text(
-                          recipe.people,
-                          style: const TextStyle(fontSize: 9, color: muted),
-                        ),
-                    ],
+                  Text(
+                    recipe.people.isEmpty
+                        ? recipe.time
+                        : '${recipe.time} · ${recipe.people}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9, color: muted),
                   ),
                 ],
               ),
@@ -1418,7 +1421,7 @@ class _AiTipBar extends StatelessWidget {
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [orange50, Color(0xFFFBF7E9)],
+            colors: [brand50, Color(0xFFF3F9EF)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -1431,7 +1434,7 @@ class _AiTipBar extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: orange700,
+                color: brand700,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(
@@ -1466,7 +1469,7 @@ class _AiTipBar extends StatelessWidget {
               ),
             ),
             // 右侧箭头暗示这里可以点
-            const Icon(Icons.chevron_right, size: 18, color: orange700),
+            const Icon(Icons.chevron_right, size: 18, color: brand700),
           ],
         ),
       ),
@@ -1516,19 +1519,19 @@ class _QuickActions extends StatelessWidget {
           child: OutlinedButton(
             onPressed: () => _openQuickMealPicker(context),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: orange100),
+              side: const BorderSide(color: brand100),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: const StadiumBorder(),
             ),
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.casino_outlined, size: 17, color: orange700),
+                Icon(Icons.casino_outlined, size: 17, color: brand700),
                 SizedBox(width: 6),
                 Text(
                   '快速选一餐',
                   style: TextStyle(
-                    color: orange700,
+                    color: brand700,
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
                   ),
@@ -1542,7 +1545,7 @@ class _QuickActions extends StatelessWidget {
           child: FilledButton(
             onPressed: onOpenFoods,
             style: FilledButton.styleFrom(
-              backgroundColor: orange,
+              backgroundColor: brand600,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: const StadiumBorder(),
             ),
@@ -1637,13 +1640,13 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: orange100,
+                  color: brand100,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.auto_awesome_rounded,
                   size: 19,
-                  color: orange700,
+                  color: brand700,
                 ),
               ),
               const SizedBox(width: 10),
@@ -1668,7 +1671,7 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
               IconButton(
                 onPressed: _next,
                 tooltip: '换一个推荐',
-                icon: const Icon(Icons.refresh_rounded, color: orange700),
+                icon: const Icon(Icons.refresh_rounded, color: brand700),
               ),
             ],
           ),
@@ -1749,7 +1752,7 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
                   label: const Text('换一个'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 13),
-                    foregroundColor: orange700,
+                    foregroundColor: brand700,
                   ),
                 ),
               ),
@@ -1762,7 +1765,7 @@ class _QuickMealSheetState extends State<_QuickMealSheet> {
                   label: const Text('查看做法'),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 13),
-                    backgroundColor: orange,
+                    backgroundColor: brand600,
                   ),
                 ),
               ),
@@ -1821,13 +1824,13 @@ class _MealMeta extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: orange700),
+          Icon(icon, size: 13, color: brand700),
           const SizedBox(width: 4),
           Text(
             text.isEmpty ? '待补充' : text,
             style: const TextStyle(
               fontSize: 11,
-              color: orange700,
+              color: brand700,
               fontWeight: FontWeight.w700,
             ),
           ),

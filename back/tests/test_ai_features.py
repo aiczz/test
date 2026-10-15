@@ -175,6 +175,68 @@ def _weather(kind: str = "dry") -> WeatherContext:
     )
 
 
+@pytest.mark.parametrize(
+    ("avoid", "ingredient"),
+    [("海鲜", "蚝油"), ("花生", "花生酱"), ("乳制品", "黄油"), ("香菜", "芫荽")],
+)
+def test_avoid_checks_seasonings_not_only_main_ingredients(compact_session, avoid, ingredient):
+    """调味料没有匹配食材ID、也不是主料时，仍应执行忌口。"""
+    compact_session.execute(
+        text("INSERT INTO dish_ingredients (id,dish_id,raw_name,role,grams) "
+             "VALUES (999,102,:name,'seasoning',5)"), {"name": ingredient},
+    )
+    compact_session.commit()
+    kwargs = dict(month=10, weather=_weather(), region="杭州",
+                  date_key="2026-10-12", candidate_ids=[102], limit=3)
+    assert scoring_service.score_dishes(compact_session, constraints=HardConstraints(), **kwargs)
+    rejected = []
+    assert scoring_service.score_dishes(
+        compact_session, constraints=HardConstraints(avoid=(avoid,)),
+        rejected_names=rejected, **kwargs,
+    ) == []
+    assert ingredient in rejected[0] or any(word in rejected[0] for word in ("蚝", "花生", "黄油", "芫荽"))
+
+
+def test_avoid_checks_raw_ingredient_text(compact_session):
+    compact_session.execute(text("ALTER TABLE dish_ingredients ADD COLUMN raw_text TEXT"))
+    compact_session.execute(text(
+        "INSERT INTO dish_ingredients (id,dish_id,raw_name,raw_text,role) "
+        "VALUES (999,102,'调味料','蚝油一勺','seasoning')"
+    ))
+    compact_session.commit()
+    assert scoring_service.score_dishes(
+        compact_session, month=10, weather=_weather(), region="杭州",
+        date_key="2026-10-12", candidate_ids=[102],
+        constraints=HardConstraints(avoid=("海鲜",)), limit=3,
+    ) == []
+
+
+def test_full_ingredient_safety_does_not_change_main_ingredient_scoring(compact_session):
+    from app.repositories.catalog_insight_repository import dish_insights
+    compact_session.execute(text(
+        "INSERT INTO dish_ingredients (id,dish_id,raw_name,role) "
+        "VALUES (999,102,'蚝油','seasoning')"
+    ))
+    compact_session.commit()
+    insight = dish_insights(compact_session, [102])[102]
+    assert insight.main_ingredients == ["山药"]
+    assert "蚝油" in insight.all_ingredient_names
+
+
+def test_legacy_free_text_seasoning_is_filtered(session):
+    from app.models.recipe import Recipe, RecipeIngredient
+    recipe = Recipe(name="蒸南瓜", tags=["清淡"], duration_minutes=15)
+    session.add(recipe)
+    session.commit()
+    session.refresh(recipe)
+    session.add(RecipeIngredient(recipe_id=recipe.id, ingredient_name="蚝油", food_id=None, category="调味"))
+    session.commit()
+    assert scoring_service.score_dishes(
+        session, month=10, weather=_weather(), candidate_ids=[recipe.id],
+        constraints=HardConstraints(avoid=("海鲜",)), limit=3,
+    ) == []
+
+
 # =====================================================================
 # 1. 综合打分算法：稳定 + 可解释 + 跨天轮换
 # =====================================================================
@@ -458,7 +520,7 @@ def test_mentioned_food_drives_recall(client):
 
     「莲藕怎么做」如果只当成普通推荐，会推一堆当季菜，跟莲藕没关系。
     """
-    body = client.post("/api/ai/chat", json={"message": "莲藕怎么做"}).json()
+    body = client.post("/api/ai/chat", json={"message": "莲藕怎么做", "cook_minutes": 240}).json()
     assert body["intent"] != "general"
     summary = " ".join(step["summary"] for step in body["trace"])
     assert "点名" in summary and "莲藕" in summary, summary
@@ -552,7 +614,7 @@ def test_duration_is_extracted_from_instruction_text():
     assert _duration_from_text("排骨焯水。小火炖 30 分钟。出锅前腌制 10 分钟。") == 30
     assert _duration_from_text("大火煮开，转小火 20-30分钟") == 30
     assert _duration_from_text("炖 1.5 小时即可") == 90
-    assert _duration_from_text("腌制 12 小时") == 180  # 有上限，避免离谱值
+    assert _duration_from_text("腌制 12 小时") == 720  # 保留原文长等待，不能截短成可用时间
     assert _duration_from_text("洗净切块，下锅炒熟") is None
     assert _duration_from_text("") is None
     assert _duration_from_text(None) is None
@@ -952,7 +1014,7 @@ def test_follow_up_keeps_recommending_and_avoids_repeats(client):
       2. 已经展示过的菜会被避开（否则轮换因子固定，重问还是那三道）
     """
     first = client.post(
-        "/api/ai/chat", json={"message": "三个人今晚吃什么"}
+        "/api/ai/chat", json={"message": "三个人今晚吃什么", "cook_minutes": 240}
     ).json()
     assert first["intent"] == "meal_recommendation"
     assert len(first["recipes"]) == 3
@@ -962,6 +1024,7 @@ def test_follow_up_keeps_recommending_and_avoids_repeats(client):
         "/api/ai/chat",
         json={
             "message": "换一批呢",
+            "cook_minutes": 240,
             "last_intent": "meal_recommendation",
             "recent_recipe_ids": shown,
         },

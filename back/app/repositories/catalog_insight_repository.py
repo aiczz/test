@@ -108,6 +108,8 @@ class DishInsight:
     matched_ratio: float | None = None
     # 主料（菜名里出现的、决定这道菜是什么的食材）
     main_ingredients: list[str] = field(default_factory=list)
+    # 硬约束使用完整配料，包括未匹配ID的调味料；不能复用打分用的主料。
+    all_ingredient_names: list[str] = field(default_factory=list)
     ingredient_ids: list[int] = field(default_factory=list)
     # 是否被时令日历直接关联（101 条 seasonal_dish_links）
     season_linked: bool = False
@@ -345,42 +347,7 @@ _DISH_COLUMNS = [
     "instruction_text",
 ]
 
-# 「30分钟」「30 分钟」「炖 1.5 小时」「20-30分钟」都要能抽到
-_DURATION_PATTERNS = (
-    re.compile(r"(\d+)\s*[-~至到]\s*(\d+)\s*分钟"),
-    re.compile(r"(\d+)\s*分钟"),
-    re.compile(r"(\d+(?:\.\d+)?)\s*个?\s*小时"),
-)
-
-
-def _duration_from_text(text: str | None) -> int | None:
-    """从做法文本里抽烹饪时长（分钟）。
-
-    取**所有提到的时间里的最大值** —— 做法里「腌制 10 分钟…小火炖 30 分钟」
-    总共要 40 分钟，取最大那个更接近「这道菜要占你多久」。
-    抽不到返回 None（调用方退回估算，并标注为估算）。
-    """
-    if not text:
-        return None
-    values: list[float] = []
-    for pattern in _DURATION_PATTERNS:
-        for match in pattern.finditer(text):
-            groups = [g for g in match.groups() if g]
-            try:
-                numbers = [float(g) for g in groups]
-            except ValueError:
-                continue
-            if not numbers:
-                continue
-            value = max(numbers)
-            # 小时 → 分钟
-            if "小时" in match.group(0):
-                value *= 60
-            values.append(value)
-    if not values:
-        return None
-    # 上限 180 分钟：数据里偶尔有「腌制 12 小时」，那不是烹饪时长
-    return int(min(max(values), 180))
+from app.utils.recipe_duration import duration_from_text as _duration_from_text
 
 
 def _dish_from_row(row: Mapping[str, Any]) -> DishInsight:
@@ -485,6 +452,32 @@ def _main_ingredients_legacy(
     }
 
 
+def _all_ingredient_names(session: Session, dish_ids: list[int], *, compact: bool) -> dict[int, list[str]]:
+    """批量读取完整配料原文，避免逐菜查询，也不按role或匹配ID过滤。"""
+    if not dish_ids:
+        return {}
+    table = "dish_ingredients" if compact else "recipe_ingredients"
+    key = "dish_id" if compact else "recipe_id"
+    available = _columns(session, table)
+    if key not in available:
+        return {}
+    name_columns = _pick(available, ["raw_name", "raw_text"] if compact else ["ingredient_name"])
+    if not name_columns:
+        return {}
+    marks, params = _placeholders("aid", dish_ids)
+    rows = session.execute(text(
+        f"SELECT {', '.join([key, *name_columns])} FROM {table} WHERE {key} IN ({marks})"
+    ), params).mappings()
+    result: dict[int, list[str]] = {}
+    for row in rows:
+        names = result.setdefault(_i(row[key]), [])
+        for column in name_columns:
+            value = str(row.get(column) or "").strip()
+            if value and value not in names:
+                names.append(value)
+    return result
+
+
 def dish_insights(
     session: Session, recipe_ids: list[int], *, season: str | None = None
 ) -> dict[int, DishInsight]:
@@ -522,6 +515,10 @@ def dish_insights(
         if recipe_id in result:
             result[recipe_id].main_ingredients = names
             result[recipe_id].ingredient_ids = ingredient_ids
+
+    all_names = _all_ingredient_names(session, list(result), compact=compact)
+    for recipe_id, insight in result.items():
+        insight.all_ingredient_names = all_names.get(recipe_id, [])
 
     # 时令关联：清洗库只有 101 条显式链接，信号很稀，所以只当作加分项
     linked = seasonal_linked_dish_ids(session, season) if season else set()

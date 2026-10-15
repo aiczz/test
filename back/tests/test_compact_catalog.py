@@ -102,6 +102,8 @@ def test_compact_catalog_food_recipe_and_parent_inference():
         assert detail.ingredients[0].food_id == 2
         assert detail.ingredients[0].amount == "200"
         assert len(detail.steps) == 2
+        assert [step.step_no for step in detail.steps] == [1, 2]
+        assert [step.description for step in detail.steps] == ["鸡胸肉切片", "煎至熟透"]
 
         food_detail = food_service.get_detail(session, 1)
         assert food_detail is not None

@@ -13,6 +13,7 @@ from weakref import WeakKeyDictionary
 
 from sqlalchemy import inspect, text
 from sqlmodel import Session
+from app.utils.recipe_steps import parse_recipe_steps
 
 from app.data.catalog_types import (
     FoodRecord,
@@ -641,16 +642,13 @@ def list_recipe_ingredients(
     ]
 
 
-_STEP_SPLIT = re.compile(r"(?:\r?\n)+|(?=第?[一二三四五六七八九十\d]+[、.．步：:])")
-
-
 def list_recipe_steps(session: Session, recipe_id: int) -> list[RecipeStepRecord]:
     instruction = session.execute(
         text("SELECT instruction_text FROM dishes WHERE id = :id"), {"id": recipe_id}
     ).scalar_one_or_none()
     if not instruction:
         return []
-    parts = [part.strip() for part in _STEP_SPLIT.split(str(instruction)) if part.strip()]
+    parts = parse_recipe_steps(str(instruction))
     return [
         RecipeStepRecord(
             id=recipe_id * 1000 + index,

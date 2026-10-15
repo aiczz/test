@@ -40,6 +40,7 @@ from typing import Any
 from sqlmodel import Session
 
 from app.data.dish_images import has_image
+from app.core.config import settings
 from app.repositories import food_repository, recipe_repository
 from app.repositories.catalog_insight_repository import (
     DishInsight,
@@ -170,6 +171,8 @@ _SODIUM_PER_MEAL_TARGET_MG = 800.0
 class HardConstraints:
     """家庭硬约束 —— 和前端 FamilyProfile 一一对应。"""
 
+    excluded_categories: tuple[str, ...] = ()
+    require_known_time: bool = False
     people: int = 3
     cook_minutes: float = 45
     low_sodium: bool = False
@@ -182,6 +185,8 @@ class HardConstraints:
         if profile is None:
             return cls()
         return cls(
+            excluded_categories=tuple(getattr(profile, "excluded_categories", ()) or ()),
+            require_known_time=bool(getattr(profile, "require_known_time", False)),
             people=max(int(getattr(profile, "people", 3) or 3), 1),
             cook_minutes=float(getattr(profile, "cook_minutes", 45) or 45),
             low_sodium=bool(getattr(profile, "low_sodium", False)),
@@ -765,15 +770,27 @@ def score_dishes(
             continue
         insight = insights.get(recipe_id)
         name = str(getattr(raw, "name", "") or (insight.name if insight else ""))
+        if settings.recipe_images_only and not (
+            has_image(name) or str(getattr(raw, "image_url", "") or "").strip()
+        ):
+            continue
         tags = list(getattr(raw, "tags", None) or (insight.tags if insight else []))
 
         # ---- 推荐准入：抓取来的页面标题不进推荐位（库里保留，列表/搜索照旧）----
         if not is_recommendable_dish_name(name):
             continue
 
+        if "汤羹" in constraints.excluded_categories and (
+            "汤" in name or any("汤" in tag for tag in tags)
+        ):
+            if rejected_names is not None:
+                rejected_names.append(f"{name}（已排除汤羹）")
+            continue
+
         # ---- 硬约束 1：忌口 ----
         hit = _hits_avoid(
-            avoid_terms, name, tags, getattr(insight, "main_ingredients", None)
+            avoid_terms, name, tags, getattr(insight, "main_ingredients", None),
+            getattr(insight, "all_ingredient_names", None),
         )
         if hit:
             if rejected_names is not None:
@@ -803,6 +820,10 @@ def score_dishes(
         #    「小火炖 30 分钟」，剩下的只能估。拿一个估出来的数字去**否决**
         #    一道菜，等于用编的数据删候选 —— 那不算确定性约束，那叫瞎猜。
         #    所以：有依据 → 硬筛；没依据 → 降权（排后面，但不消失）。
+        if constraints.require_known_time and not duration_reliable:
+            if rejected_names is not None:
+                rejected_names.append(f"{name}（时长不详，无法核验时间条件）")
+            continue
         if duration > constraints.cook_minutes:
             if duration_reliable:
                 if rejected_names is not None:

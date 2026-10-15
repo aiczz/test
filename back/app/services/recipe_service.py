@@ -1,6 +1,7 @@
 """菜谱业务逻辑（说明书 §11）。"""
 
 from sqlmodel import Session
+from app.utils.recipe_steps import clean_step_description
 
 from app.core.database import uses_compact_catalog
 from app.models.recipe import Recipe
@@ -40,6 +41,11 @@ def to_brief(recipe: Recipe) -> RecipeBrief:
         # 旧演示表（recipes）真的有时长列 → False（有依据）；
         # 清洗库（dishes）没有时长列 → 由评分层按「做法文本里抽没抽到」回填
         duration_estimated=bool(getattr(recipe, "duration_estimated", False)),
+        duration_source=('unknown' if getattr(recipe, 'duration_estimated', False) else
+                         'text' if getattr(recipe, 'instruction_text', None) else 'table'),
+        duration_note=('原文步骤中的最长明确计时，包含腌制或浸泡等等待；不是完整烹饪总耗时。'
+                       if getattr(recipe, 'instruction_text', None) and not getattr(recipe, 'duration_estimated', False)
+                       else '原文未提供可核验时长。' if getattr(recipe, 'duration_estimated', False) else ''),
         servings=f"{servings}人份" if servings else None,
         difficulty=recipe.difficulty,
         tags=list(recipe.tags or []),
@@ -112,14 +118,19 @@ def get_detail(
         for item in recipe_repository.list_ingredients(session, recipe_id)
     ]
 
+    cleaned_steps = [
+        (step, description)
+        for step in recipe_repository.list_steps(session, recipe_id)
+        if (description := clean_step_description(step.description or ""))
+    ]
     steps = [
         StepPublic(
-            step_no=step.step_no,
+            step_no=index,
             title=step.title,
-            description=step.description,
+            description=description,
             image=step.image_url,
         )
-        for step in recipe_repository.list_steps(session, recipe_id)
+        for index, (step, description) in enumerate(cleaned_steps, start=1)
     ]
 
     return RecipeDetail(

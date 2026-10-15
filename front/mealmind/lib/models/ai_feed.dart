@@ -175,6 +175,7 @@ class RecipeRecommendation {
 
 /// AI 配菜的完整结果。
 class AiComposeResult {
+  final Map<String, dynamic> mealSummary;
   final String answer;
   final List<RecipeRecommendation> recommendations;
   final List<AgentStep> trace;
@@ -186,6 +187,7 @@ class AiComposeResult {
   final List<String> filteredOut;
 
   const AiComposeResult({
+    this.mealSummary = const <String, dynamic>{},
     required this.answer,
     required this.recommendations,
     this.trace = const <AgentStep>[],

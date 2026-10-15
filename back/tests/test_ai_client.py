@@ -105,3 +105,14 @@ def test_unconfigured_returns_skipped_instead_of_raising(monkeypatch):
     assert result.ok is False
     assert result.called is False
     assert "未配置" in (result.error or "")
+
+
+@pytest.mark.parametrize("error,expected", [
+    ("HTTP 503", "繁忙"), ("HTTP 401", "认证失败"),
+    ("HTTP 402", "额度不足"), ("HTTP 429", "过于频繁"),
+    ("超时", "超时"), ("交互时间预算已用完", "超时"),
+    ("未配置 AI_API_KEY", "尚未配置"), ("回复不是合法 JSON", "格式异常"),
+])
+def test_connection_failure_messages_are_specific(error, expected):
+    result = ai_client.AiResult(ok=False, error=error)
+    assert expected in ai_client.failure_message(result)

@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     app_name: str = "食时 API"
     api_prefix: str = "/api"
     debug: bool = True
+    # Product recommendations only include recipes with an image.
+    recipe_images_only: bool = True
+    ai_response_cache_seconds: int = 300
+    ai_interactive_budget_seconds: int = 18
+    ai_routing_timeout_seconds: float = 3
+    ai_failure_cooldown_seconds: int = 30
 
     # ---- 数据库 ----
     # SQLite：本机零配置就能跑。切换 PostgreSQL 只改这一行

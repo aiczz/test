@@ -18,6 +18,12 @@ import json
 import logging
 import re
 import time
+import copy
+import hashlib
+from collections import OrderedDict
+from contextlib import contextmanager
+from contextvars import ContextVar
+from threading import RLock
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -44,14 +50,113 @@ class AiResult:
     error: str | None = None
     # 是否真的发起了网络请求（缓存命中时为 False）
     called: bool = True
+    cached: bool = False
 
     @staticmethod
     def skipped(reason: str) -> AiResult:
         return AiResult(ok=False, error=reason, called=False)
 
 
+_request = ContextVar('ai_request', default=(True, None))
+_cache: OrderedDict[str, tuple[float, AiResult]] = OrderedDict()
+_cache_lock = RLock()
+_failures: OrderedDict[str, tuple[float, str]] = OrderedDict()
+
+
+@contextmanager
+def request_options(*, enabled: bool = True, budget: float | None = None):
+    deadline = time.monotonic() + budget if budget is not None else None
+    token = _request.set((enabled, deadline))
+    try:
+        yield
+    finally:
+        _request.reset(token)
+
+
+def clear_cache() -> None:
+    with _cache_lock:
+        _cache.clear()
+
+
+def clear_failure_cooldowns() -> None:
+    with _cache_lock:
+        _failures.clear()
+
+
 def is_configured() -> bool:
-    return settings.ai_configured
+    return settings.ai_configured and _request.get()[0]
+
+
+def failure_message(result: AiResult) -> str:
+    """User-facing connection status without exposing raw provider errors."""
+    error = result.error or ""
+    if '冷却中' in error:
+        reason = failure_message(AiResult.skipped(error.split('；', 1)[0]))
+        return reason + '已暂缓重复连接，请稍后再试。'
+    if "HTTP 503" in error or "HTTP 502" in error:
+        return "模型服务暂时繁忙，请稍后重试。"
+    if "HTTP 401" in error or "HTTP 403" in error:
+        return "模型服务认证失败，请检查后端的模型密钥和权限。"
+    if "HTTP 402" in error:
+        return "模型服务额度不足，请检查服务账户余额。"
+    if "HTTP 429" in error:
+        return "模型请求过于频繁或额度受限，请稍后重试。"
+    if "超时" in error or "预算" in error:
+        return "模型响应超时，请稍后重试。"
+    if "未配置" in error:
+        return "后端尚未配置模型服务，请检查模型配置。"
+    if "JSON" in error:
+        return "模型返回格式异常，请重试。"
+    return "暂时无法连接模型服务，请稍后重试。"
+
+
+def complete_json(messages, *, max_tokens=None, temperature=None, timeout=None) -> AiResult:
+    if not is_configured():
+        return AiResult.skipped('模型未配置或本次请求使用算法预览')
+    deadline = _request.get()[1]
+    remaining = deadline - time.monotonic() if deadline is not None else None
+    if remaining is not None and remaining <= 0:
+        return AiResult.skipped('交互时间预算已用完')
+    payload = build_payload(messages, max_tokens=max_tokens, temperature=temperature)
+    key = hashlib.sha256(json.dumps([
+        settings.ai_base_url, settings.ai_api_key, payload,
+    ], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    provider_key = hashlib.sha256(json.dumps([
+        settings.ai_base_url, settings.ai_api_key, settings.ai_model,
+    ]).encode()).hexdigest()
+    with _cache_lock:
+        entry = _cache.get(key)
+        if settings.ai_response_cache_seconds > 0 and entry and entry[0] > time.monotonic():
+            _cache.move_to_end(key)
+            result = copy.deepcopy(entry[1])
+            result.called, result.cached, result.elapsed_ms = False, True, 0
+            return result
+        failure = _failures.get(provider_key)
+        if settings.ai_failure_cooldown_seconds > 0 and failure and failure[0] > time.monotonic():
+            return AiResult.skipped(failure[1] + '；模型服务冷却中，稍后自动重试')
+    effective_timeout = timeout or settings.ai_timeout_seconds
+    if remaining is not None:
+        effective_timeout = min(effective_timeout, max(.1, remaining))
+    result = _network_complete_json(messages, max_tokens=max_tokens, temperature=temperature, timeout=effective_timeout)
+    with _cache_lock:
+        if result.ok:
+            _failures.pop(provider_key, None)
+        elif result.called and settings.ai_failure_cooldown_seconds > 0 and any(
+            marker in (result.error or '') for marker in (
+                '超时', 'HTTP 429', 'HTTP 500', 'HTTP 502', 'HTTP 503', 'HTTP 504',
+                'HTTP 401', 'HTTP 402', 'HTTP 403', 'ConnectError', 'ProxyError',
+            )
+        ):
+            _failures[provider_key] = (time.monotonic() + settings.ai_failure_cooldown_seconds, result.error or '')
+            _failures.move_to_end(provider_key)
+            while len(_failures) > 128:
+                _failures.popitem(last=False)
+    if result.ok and settings.ai_response_cache_seconds > 0:
+        with _cache_lock:
+            _cache[key] = (time.monotonic() + settings.ai_response_cache_seconds, copy.deepcopy(result))
+            while len(_cache) > 128:
+                _cache.popitem(last=False)
+    return result
 
 
 def _extract_json(text: str) -> dict[str, Any] | None:
@@ -113,7 +218,7 @@ def build_payload(
     return payload
 
 
-def complete_json(
+def _network_complete_json(
     messages: list[dict[str, str]],
     *,
     max_tokens: int | None = None,

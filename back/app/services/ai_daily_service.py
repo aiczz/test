@@ -327,7 +327,18 @@ def _fallback(
 # =====================================================================
 
 
-def enhance_home(
+def enhance_home(*args, **kwargs):
+    from app.services.explanation_guard import checked_text
+    result = _enhance_home(*args, **kwargs)
+    if result.source in {'ai', 'cached'}:
+        result.tip_title = checked_text(result.tip_title, '当季食材建议')[0]
+        result.tip_body = checked_text(result.tip_body, '根据当季食材与家庭条件筛选，份量与实际烹饪时间请按菜谱核对。')[0]
+        result.food_notes = {key: checked_text(value, '')[0] for key, value in result.food_notes.items()}
+        result.dish_notes = {key: checked_text(value, '')[0] for key, value in result.dish_notes.items()}
+    return result
+
+
+def _enhance_home(
     session: Session,
     *,
     region: str,

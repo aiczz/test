@@ -26,6 +26,22 @@ def _register(client, username: str) -> dict:
 # ---------------------------------------------------------------- §13 我的食材
 
 
+def test_my_foods_rejects_mixed_unit_addition(client):
+    header = _auth(client)
+    first = client.post('/api/my-foods', headers=header, json={
+        'food_id': 1, 'amount': 200, 'unit': '克',
+    })
+    assert first.status_code == 201
+    mismatch = client.post('/api/my-foods', headers=header, json={
+        'food_id': 1, 'amount': 1, 'unit': '个',
+    })
+    assert mismatch.status_code == 409
+    items = client.get('/api/my-foods', headers=header).json()
+    assert len(items) == 1
+    assert items[0]['amount'] == 200
+    assert items[0]['unit'] == '克'
+
+
 def test_my_foods_requires_login(client):
     assert client.get("/api/my-foods").status_code == 401
 
@@ -345,7 +361,7 @@ def test_ai_chat_with_my_inventory(client):
     header = _auth(client)
     client.post("/api/my-foods", json={"food_id": 1}, headers=header)  # 莲藕
     body = client.post(
-        "/api/ai/chat", json={"message": "用我的食材做什么"}, headers=header
+        "/api/ai/chat", json={"message": "用我的食材做什么", "cook_minutes": 240}, headers=header
     ).json()
     assert body["intent"] == "cook_with_my_foods"
     assert any(r["name"] == "莲藕排骨汤" for r in body["recipes"])

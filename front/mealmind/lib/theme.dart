@@ -1,52 +1,29 @@
 import 'package:flutter/material.dart';
 
-/// =====================================================================
-/// 食时 · 设计 token
-///
-/// ⚠️ 这些值原本逐字抄自队友的 `team/dist/styles.css` 的 `:root`。
-///    改这里之前，先确认队友那边是不是也改了 —— 两边必须一致，
-///    否则 Flutter App 和网页原型会长得不一样。
-///
-/// ★ 暖化调整（2026-09）：中性色从「冷绿灰」调成「暖米」——
-///   页面背景、正文、次级文字、边框，外加 green50（原来是最浅的绿）。
-///   目的只是把整体色温调暖，**品牌绿（green900/700/600/100）和
-///   橙色（orange/orange100）一个都没动**，所以绿色的品牌识别还在。
-///
-///   ⚠️ 这意味着 theme.dart 与 `dist/styles.css` 的 `:root` 不再逐字一致。
-///   要和网页原型同步的话，得把下面这几个值也搬过去。
-/// =====================================================================
+/// 食时共享配色：低饱和草木绿，搭配米白背景。
+const green900 = Color(0xFF355C45);
+const green700 = Color(0xFF50765B);
+const green600 = Color(0xFF72916C);
+const green100 = Color(0xFFEDF3E9);
+const green50 = Color(0xFFF5F7F0);
 
-// ---- 橙色系（★ 方案 B：从「点缀色」升为「主色」）----
-// 原来这里只有两个值，注释还写着「只用于 CTA / 季节标签，不要大面积用」。
-// 现在暖色成为主色，所以补齐了整个色阶。
-const orange900 = Color(0xFF8A3D12); // 深焦糖：品牌、hero 标题、深色区块
-const orange700 = Color(0xFFD2601F); // ★ 主色：按钮、选中态、CTA
-const orange = Color(0xFFF5742E); // 亮橙：强调、季节标签
-const orange100 = Color(0xFFFFF0E4); // 浅橙：标签底色
-const orange50 = Color(0xFFF6F1E9); // 次级区域底：暖砂
+// 品牌色用于按钮、标签、导航与重点区域。
+const brand900 = green900;
+const brand700 = green700;
+const brand600 = green600;
+const brand100 = green100;
+const brand50 = green50;
 
-// ---- 绿色（★ 已降为「语义色」）----
-// 只留给「当季 / 新鲜 / 健康」这类真正需要绿色的含义。
-// ⚠️ 新的主色位置一律用 orange700，不要再往 green700 上加调用点了。
-const green900 = Color(0xFF0B532F);
-const green700 = Color(0xFF17733D);
-const green600 = Color(0xFF2E8B43);
-const green100 = Color(0xFFE8F5E3); // 浅绿：至今仍是「当季」类标签的底色
-const green50 = Color(0xFFF3F9EF);
-
-// ---- 中性色（★ 暖化重点：原本都是带绿调的冷色）----
-const ink = Color(0xFF2A241E); // 正文：暖黑（原 #172019 是绿黑）
-const muted = Color(0xFF7C7168); // 次级文字：暖灰（原 #687069 偏冷）
-const line = Color(0xFFF0E7DE); // 边框：暖灰（原 #E5EBE3 偏冷）
-const cream = Color(0xFFFFFCF6); // 米白
-const page = Color(0xFFFBF7F1); // 页面背景：暖米（★ 原 #F4F7F1 是冷绿灰）
+const ink = Color(0xFF2D3830);
+const muted = Color(0xFF747D72);
+const line = Color(0xFFE7EBE2);
+const cream = Color(0xFFFEFEFA);
+const page = Color(0xFFFAFAF5);
 
 // ---- 危险色（★ 只给「永久删除」这一类不可恢复的操作）----
-// 全站此前没有红色：主色是橙、语义色是绿。注销账号是第一个真正不可恢复的
-// 操作，而橙色在这套配色里承担的是「主按钮 / 强调」——继续用橙色的话，
-// 「保存」和「永久删除」长得一模一样，用户分不出哪个点下去就回不来了。
+// 危险操作保留独立红色，避免与保存等常规按钮混淆。
 // ⚠️ 不要把它当第二个强调色用：这个颜色出现得越少，它挡误触的作用越大。
-const danger = Color(0xFFC0392B); // 红棕：与暖色调同族，不会显得突兀
+const danger = Color(0xFFC0392B); // 危险操作
 const danger100 = Color(0xFFFDECEA); // 浅红：危险区块底 / 禁用态按钮底
 
 // ---- 圆角规范 ----
@@ -56,10 +33,9 @@ const rBlock = 24.0; // 大区块 / 弹层
 const rHero = 28.0; // hero 区
 
 // ---- 卡片阴影（原来对应 CSS 的 0 8px 24px rgba(27,81,44,.07)）----
-// 阴影色从带绿的 0x1B512C 换成暖棕 0x4A3423 ——
-// 冷色阴影压在暖色底上会发灰发脏。
+// 使用淡绿色阴影，与品牌配色保持一致。
 const cardShadow = <BoxShadow>[
-  BoxShadow(color: Color(0x144A3423), blurRadius: 24, offset: Offset(0, 8)),
+  BoxShadow(color: Color(0x0C355C45), blurRadius: 24, offset: Offset(0, 8)),
 ];
 
 // ---- 可直接复用的装饰 ----
@@ -72,7 +48,7 @@ BoxDecoration cardDeco({double radius = rCard}) => BoxDecoration(
   boxShadow: cardShadow,
 );
 
-/// 浅橙标签（默认）。
+/// 浅绿标签（默认）。
 /// 需要「当季 / 新鲜」这类绿色语义时，显式传 `bg: green100`。
-BoxDecoration tagDeco({Color bg = orange100}) =>
+BoxDecoration tagDeco({Color bg = brand100}) =>
     BoxDecoration(color: bg, borderRadius: BorderRadius.circular(rTag));

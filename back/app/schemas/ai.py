@@ -9,6 +9,7 @@
 （召回了多少候选、过滤掉多少、模型耗时多少），不是前端写死的文案。
 """
 
+from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.schemas.home import HomeFoodItem
@@ -36,9 +37,38 @@ class AiContext(BaseModel):
     city: str | None = None
 
 
+class AiChatMessage(BaseModel):
+    role: Literal['user', 'assistant']
+    content: str = Field(max_length=1000)
+
+
+class AiConversationState(BaseModel):
+    """Only explicit conversation overrides; profile defaults remain independent."""
+
+    people: int | None = Field(default=None, ge=1, le=20)
+    recommendation_count: int | None = Field(default=None, ge=1, le=10)
+    last_recommended_food_ids: list[int] = Field(default_factory=list, max_length=20)
+    last_recommended_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
+    history: list[AiChatMessage] = Field(default_factory=list, max_length=8)
+    cook_minutes: float | None = Field(default=None, ge=5, le=240)
+    low_sodium: bool | None = None
+    preferences: list[str] | None = None
+    avoid_added: list[str] = Field(default_factory=list, max_length=100)
+    avoid_removed: list[str] = Field(default_factory=list, max_length=100)
+    excluded_categories: list[str] = Field(default_factory=list, max_length=20)
+
+
 class AiChatRequest(AiContext):
+    context_food_ids: list[int] = Field(default_factory=list, max_length=20)
+    context_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
+    history: list[AiChatMessage] = Field(default_factory=list, max_length=8)
+    recommendation_count: int = Field(default=3, ge=1, le=10)
+    use_ai: bool = True
     message: str = Field(min_length=1, max_length=500)
     conversation_id: int | None = None
+    conversation_state: AiConversationState | None = None
+    excluded_categories: list[str] = []
+    require_known_time: bool = False
 
     # ---- 会话上下文（本次新增）----
     # 【为什么需要】
@@ -66,6 +96,13 @@ class AiMenuSummary(BaseModel):
 
 
 class AiChatResponse(BaseModel):
+    requested_count: int | None = None
+    returned_count: int = 0
+    needs_clarification: bool = False
+    ai_available: bool = False
+    conversation_state: AiConversationState | None = None
+    effective_context: AiContext | None = None
+    excluded_categories: list[str] = []
     answer: str
     intent: str
     # 说明书 §20：前端靠这个展示"多智能体用了哪些工具"
@@ -104,6 +141,7 @@ class AiChatResponse(BaseModel):
 
 
 class AiRecommendRequest(AiContext):
+    meal_goal: Literal["balanced", "quick", "fewer_purchases", "pantry"] = "balanced"
     """配菜请求。
 
     前端把「用户选好的食材」和「今日菜单里已有的菜」一起传上来，
@@ -114,6 +152,7 @@ class AiRecommendRequest(AiContext):
     food_ids: list[int] = []
     # 今日菜单里已有的菜 —— 必须排除，不能重复推荐已经定下来的菜
     menu_recipe_ids: list[int] = []
+    excluded_recipe_ids: list[int] = Field(default_factory=list, max_length=100)
     # 想配哪一餐，只影响文案措辞
     meal: str = "dinner"
     # 用户自由输入的一句话（可空），如「想吃点热乎的」
@@ -134,6 +173,7 @@ class AiRecipePick(BaseModel):
 
 
 class AiRecommendResponse(BaseModel):
+    meal_summary: dict = {}
     answer: str
     recommendations: list[AiRecipePick] = []
     trace: list[AiTraceStep] = []

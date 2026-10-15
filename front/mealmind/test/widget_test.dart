@@ -78,7 +78,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('莲藕'), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('1 份'), findsOneWidget);
     expect(find.textContaining('节'), findsNothing);
     expect(find.byTooltip('删除莲藕'), findsOneWidget);
   });
@@ -515,20 +515,15 @@ void main() {
     await tester.enterText(input, '今晚吃什么');
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.send_rounded));
-    // 轨迹是一步一步「长」出来的（每步 380ms），而且还要等一次网络失败。
-    // 只 pumpAndSettle 会在轨迹还没画完时就返回，断言自然是空的。
-    await tester.pump(const Duration(seconds: 5));
+    // 请求完成即可展示，不再等待模拟轨迹。
+    await tester.pump();
     await tester.pumpAndSettle();
 
     final aiText = tester
         .widgetList<Text>(find.byType(Text))
         .map((t) => t.data ?? '')
         .join(' | ');
-    expect(
-      aiText.contains('5 人'),
-      isTrue,
-      reason: 'AI 页用的还是旧的家庭人数（轨迹里应出现「5 人」）',
-    );
+    expect(aiText.contains('本次条件：5人'), isTrue, reason: 'AI 条件标签必须显示保存后的5人');
 
     // ---- 真的存住了：本机缓存里有，重开 App 也能恢复 ----
     final prefs = await SharedPreferences.getInstance();

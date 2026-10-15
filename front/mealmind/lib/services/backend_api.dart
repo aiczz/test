@@ -51,6 +51,7 @@ class BackendApi {
   BackendApi._();
 
   static final BackendApi instance = BackendApi._();
+  final ValueNotifier<int> pantryChanges = ValueNotifier<int>(0);
 
   // 统一走 createApiDio：它会挂上 401 拦截器（token 失效 / 账号被封禁）。
   // 自己 new 一个 Dio 就会漏掉这一步。
@@ -374,6 +375,12 @@ class BackendApi {
             id: json['id'] as int? ?? 0,
             foodId: json['food_id'] as int?,
             name: json['name'] as String? ?? '',
+            image: _foodImageForName(
+              json['name'] as String? ?? '',
+              json['image'],
+              json['category'] as String?,
+            ),
+            category: _categoryFromBackend[json['category']] ?? '',
             amount: (json['amount'] as num?)?.toDouble() ?? 1,
             unit: json['unit'] as String? ?? '份',
             expireHint: json['expire_hint'] as String?,
@@ -398,6 +405,7 @@ class BackendApi {
       options: _auth,
     );
     final json = res.data ?? const <String, dynamic>{};
+    pantryChanges.value++;
     return MyFoodEntry(
       id: json['id'] as int? ?? 0,
       foodId: json['food_id'] as int?,
@@ -411,6 +419,7 @@ class BackendApi {
   /// DELETE /api/my-foods/{id} —— 需要登录
   Future<void> removeMyFood(int itemId) async {
     await _dio.delete<void>('/api/my-foods/$itemId', options: _auth);
+    pantryChanges.value++;
   }
 
   /// GET /api/favorites —— 需要登录，只取总数（「我的」页的统计数字用）
@@ -430,6 +439,8 @@ class BackendApi {
   /// 真的筛候选；返回里也多了 trace（后端真实发生的协作轨迹）与 source。
   Future<AiChatResult> chat(
     String message, {
+    bool useAi = true,
+    CancelToken? cancelToken,
     String? city,
     int people = 3,
     double cookMinutes = 45,
@@ -443,6 +454,10 @@ class BackendApi {
     //   lastIntent       —— 追问时继承
     //   recentRecipeIds  —— 「换一批」要避开这些
     String? lastIntent,
+    Map<String, dynamic>? conversationState,
+    List<int> contextFoodIds = const <int>[],
+    List<int> contextRecipeIds = const <int>[],
+    List<Map<String, dynamic>> history = const <Map<String, dynamic>>[],
     List<int> recentRecipeIds = const <int>[],
     // 推荐食材那条链路要排除的食材。
     // ⚠️ 不能复用 recentRecipeIds —— 食材 id 和菜品 id 是两套空间，混用会误排除。
@@ -452,22 +467,29 @@ class BackendApi {
       '/api/ai/chat',
       data: <String, dynamic>{
         'message': message,
+        'use_ai': useAi,
         if (city != null && city.isNotEmpty) 'city': city,
         'people': people,
         'cook_minutes': cookMinutes,
         'low_sodium': lowSodium,
         'preferences': preferences,
         'avoid': avoid,
+        'conversation_state': ?conversationState,
+        'context_food_ids': contextFoodIds,
+        'context_recipe_ids': contextRecipeIds,
+        'history': history,
         'last_intent': ?lastIntent,
         if (recentRecipeIds.isNotEmpty) 'recent_recipe_ids': recentRecipeIds,
         if (recentFoodIds.isNotEmpty) 'recent_food_ids': recentFoodIds,
       },
       options: _auth,
+      cancelToken: cancelToken,
     );
     final data = res.data ?? const <String, dynamic>{};
     final recipes = (data['recipes'] as List?) ?? const <dynamic>[];
     final foods = (data['foods'] as List?) ?? const <dynamic>[];
     return AiChatResult(
+      aiAvailable: data['ai_available'] == true,
       answer: data['answer'] as String? ?? '',
       intent: data['intent'] as String? ?? 'general',
       toolsUsed: ((data['tools_used'] as List?) ?? const <dynamic>[])
@@ -476,6 +498,7 @@ class BackendApi {
       recipes: recipes
           .whereType<Map<String, dynamic>>()
           .map(_recipeFromJson)
+          .where((recipe) => recipe.image.trim().isNotEmpty)
           .toList(),
       // ★ 推荐食材（intent == 'recommend_foods' 时才有）。
       //   和 recipes 是对称的两条链路：菜谱 ← meal_recommendation，食材 ← recommend_foods。
@@ -488,6 +511,11 @@ class BackendApi {
       model: data['model'] as String?,
       // 意图是「按语义判的」还是「关键词匹配的」—— 界面上如实标出来
       intentSource: data['intent_source'] as String? ?? 'rules',
+      conversationState: data['conversation_state'] as Map<String, dynamic>?,
+      effectiveContext: data['effective_context'] as Map<String, dynamic>?,
+      excludedCategories: ((data['excluded_categories'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toList(),
     );
   }
 
@@ -499,6 +527,8 @@ class BackendApi {
   Future<AiComposeResult> recommendRecipes({
     List<int> foodIds = const <int>[],
     List<int> menuRecipeIds = const <int>[],
+    List<int> excludedRecipeIds = const <int>[],
+    String mealGoal = 'balanced',
     String meal = 'dinner',
     int count = 3,
     String? message,
@@ -514,6 +544,8 @@ class BackendApi {
       data: <String, dynamic>{
         'food_ids': foodIds,
         'menu_recipe_ids': menuRecipeIds,
+        'excluded_recipe_ids': excludedRecipeIds,
+        'meal_goal': mealGoal,
         'meal': meal,
         'count': count,
         if (message != null && message.trim().isNotEmpty)
@@ -530,11 +562,16 @@ class BackendApi {
     final data = res.data ?? const <String, dynamic>{};
     final picks = (data['recommendations'] as List?) ?? const <dynamic>[];
     return AiComposeResult(
+      mealSummary: data['meal_summary'] as Map<String, dynamic>? ?? const {},
       answer: data['answer'] as String? ?? '',
       recommendations: picks
           .whereType<Map<String, dynamic>>()
           .map(_recommendationFromJson)
-          .where((item) => item.recipe.id.isNotEmpty)
+          .where(
+            (item) =>
+                item.recipe.id.isNotEmpty &&
+                item.recipe.image.trim().isNotEmpty,
+          )
           .toList(),
       trace: _traceFromJson(data['trace']),
       source: data['source'] as String? ?? 'algorithm',
@@ -545,6 +582,76 @@ class BackendApi {
       filteredOut: ((data['filtered_out'] as List?) ?? const <dynamic>[])
           .map((e) => e.toString())
           .toList(),
+    );
+  }
+
+  Future<Map<String, dynamic>> saveTodayMenu(
+    List<String> ids, {
+    required int people,
+    required String date,
+  }) async {
+    final parsed = ids.map(int.tryParse).toList();
+    if (parsed.any((id) => id == null)) {
+      throw StateError('演示菜谱不能保存到真实菜单，请使用后端菜谱。');
+    }
+    final res = await _dio.put<Map<String, dynamic>>(
+      '/api/menu/today',
+      data: {'recipe_ids': parsed, 'people': people, 'menu_date': date},
+      options: _auth,
+    );
+    return res.data!;
+  }
+
+  Future<List<Recipe>?> fetchTodayMenu(String date) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/menu/today',
+        queryParameters: {'menu_date': date},
+        options: _auth,
+      );
+      final meals = res.data?['meals'] as Map<String, dynamic>? ?? {};
+      return [
+        for (final key in ['breakfast', 'lunch', 'dinner'])
+          ...((meals[key] as List?) ?? [])
+              .whereType<Map<String, dynamic>>()
+              .map(_recipeFromJson),
+      ];
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> generateShoppingList(
+    int planId, {
+    bool subtract = true,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/shopping-list/generate',
+      data: {'menu_plan_id': planId, 'subtract_my_foods': subtract},
+      options: _auth,
+    );
+    return res.data!;
+  }
+
+  Future<Map<String, dynamic>?> fetchShoppingList() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/shopping-list',
+        options: _auth,
+      );
+      return res.data;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  Future<void> checkShoppingItem(int id, bool checked) async {
+    await _dio.put(
+      '/api/shopping-list/items/$id',
+      data: {'checked': checked},
+      options: _auth,
     );
   }
 
@@ -617,6 +724,7 @@ class BackendApi {
               score: (json['score'] as num?)?.toDouble(),
             ),
           )
+          .where((pick) => pick.item.image.trim().isNotEmpty)
           .toList(),
       aiTipTitle: data['ai_tip_title'] as String? ?? '',
       aiTip: data['ai_tip'] as String? ?? '',
@@ -716,6 +824,7 @@ class BackendApi {
   );
 
   static Recipe _recipeFromJson(Map<String, dynamic> json) => Recipe(
+    durationNote: json['duration_note'] as String? ?? '',
     id: '${json['id']}',
     name: json['name'] as String? ?? '',
     image: _recipeImageFor(json['name']?.toString() ?? '', json['image']),
@@ -860,6 +969,8 @@ class BackendApi {
 
 /// 后端「我的食材」一条记录
 class MyFoodEntry {
+  final String image;
+  final String category;
   final int id;
   final int? foodId;
   final String name;
@@ -868,6 +979,8 @@ class MyFoodEntry {
   final String? expireHint;
 
   const MyFoodEntry({
+    this.image = '',
+    this.category = '',
     required this.id,
     this.foodId,
     required this.name,
@@ -879,6 +992,7 @@ class MyFoodEntry {
 
 /// 后端 AI 回复
 class AiChatResult {
+  final bool aiAvailable;
   final String answer;
   final String intent;
   final List<String> toolsUsed;
@@ -908,8 +1022,12 @@ class AiChatResult {
   /// 意图是怎么判出来的：ai（按语义）/ rules（关键词兜底）。
   /// 如实标注 —— 用户和评委都该知道这句话是「被理解了」还是「被匹配了」。
   final String intentSource;
+  final Map<String, dynamic>? conversationState;
+  final Map<String, dynamic>? effectiveContext;
+  final List<String> excludedCategories;
 
   const AiChatResult({
+    this.aiAvailable = false,
     required this.answer,
     required this.intent,
     this.toolsUsed = const <String>[],
@@ -919,6 +1037,9 @@ class AiChatResult {
     this.source = 'algorithm',
     this.model,
     this.intentSource = 'rules',
+    this.conversationState,
+    this.effectiveContext,
+    this.excludedCategories = const <String>[],
   });
 
   bool get fromAi => source == 'ai';

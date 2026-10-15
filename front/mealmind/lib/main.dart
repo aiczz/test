@@ -12,7 +12,9 @@ import 'services/auth_store.dart';
 import 'services/content_store.dart';
 import 'state/app_state.dart';
 import 'state/home_feed.dart';
+import 'state/today_menu.dart';
 import 'theme.dart';
+import 'widgets/brand_splash.dart';
 
 Future<void> main() async {
   // shared_preferences 需要先初始化绑定
@@ -56,6 +58,7 @@ class _BootstrapState extends State<_Bootstrap> {
     //   必须放在 probe 之后（要知道在不在线、登没登录），
     //   也必须在首页推荐之前 —— 推荐是按这套约束算的。
     await AppState.instance.load();
+    await TodayMenuStore.instance.initialize();
 
     // ★ 首页推荐流：后端按「时令 + 天气 + 营养」打分筛候选，
     //   再每天每地区问一次大模型。拿到就用，拿不到首页自动退回本地规则。
@@ -101,68 +104,17 @@ class _AuthGate extends StatelessWidget {
   }
 }
 
-/// 启动屏。
-///
-/// 用品牌图（assets/images/splash.png）铺满整屏 —— 图里已经带了
-/// logo、「食时」和「顺应时令 · 智慧饮食」，所以这里**不再重复画一遍**，
-/// 只在下方的空白处放一个转圈。
-///
-/// 两个颜色是从图里取的实际值：
-///   · 转圈用图中的墨绿 #0A4924（原先用的橙色和这张图完全不搭）
-///   · 底色用图的底色 #FEFEFA，屏幕比例和图不一致时露出来的也是它，
-///     不会出现一条色差接缝
+/// 启动页保留品牌图标，文字与首页使用相同字体。
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
-
-  static const Color _brandGreen = Color(0xFF0A4924);
-  static const Color _brandPaper = Color(0xFFFEFEFA);
-
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: _brandPaper,
-        // ⚠️ 这里**不能**直接把图 BoxFit.cover 铺满整屏。
-        //    图是竖的（941×1672，比例 0.563），而桌面浏览器视口很宽
-        //    （比如 2545×1383，比例 1.84）：cover 会为了填满宽度把图
-        //    放大 2.7 倍，高度溢出到 4516，屏幕上只剩中间那 30% ——
-        //    logo 被切掉一半、「食时」大得离谱。手机竖屏时比例接近，
-        //    所以只在网页端暴露出来。
-        //
-        //    改成用 AspectRatio 把图和转圈锁进同一个盒子：盒子按屏幕
-        //    能给的最大尺寸等比撑开（竖屏按宽度撑满、宽屏按高度撑满），
-        //    图永远不会被放大裁切。空出来的部分用图的底色 _brandPaper
-        //    填，和图片自身的背景同色，看不出接缝。
-        //    转圈也因此跟着盒子走，任何屏幕上都稳稳落在品牌文字下方。
-        body: Center(
-          child: AspectRatio(
-            aspectRatio: 941 / 1672,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  'assets/images/splash.png',
-                  fit: BoxFit.cover,
-                ),
-                const Align(
-                  alignment: Alignment(0, 0.36),
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: _brandGreen,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: const Scaffold(
+      backgroundColor: cream,
+      body: SafeArea(child: BrandSplash()),
+    ),
+  );
 }
 
 /// 食时 · 顺应时令的智慧饮食助手
@@ -178,8 +130,8 @@ class ShishiApp extends StatelessWidget {
         useMaterial3: true,
         // 主色用队友那套深绿
         colorScheme: ColorScheme.fromSeed(
-          seedColor: orange700,
-          primary: orange700,
+          seedColor: brand700,
+          primary: brand700,
         ),
         scaffoldBackgroundColor: page,
         appBarTheme: const AppBarTheme(
@@ -196,7 +148,7 @@ class ShishiApp extends StatelessWidget {
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(
-              color: selected ? orange700 : muted,
+              color: selected ? brand700 : muted,
               fontSize: 11,
               fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
             );
@@ -212,7 +164,7 @@ class ShishiApp extends StatelessWidget {
       //   2. ★ 图片不会被拉宽 —— 源图只有 230~458 px，一拉宽就糊
       builder: (context, child) {
         return ColoredBox(
-          color: orange50,
+          color: brand50,
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 430),
@@ -333,7 +285,7 @@ class _RootShellState extends State<RootShell> {
             for (final t in _tabs)
               NavigationDestination(
                 icon: Icon(t.icon, color: muted, size: 22),
-                selectedIcon: Icon(t.activeIcon, color: orange700, size: 22),
+                selectedIcon: Icon(t.activeIcon, color: brand700, size: 22),
                 label: t.label,
               ),
           ],

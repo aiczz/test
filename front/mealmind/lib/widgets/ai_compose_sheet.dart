@@ -52,6 +52,7 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
 
   bool _loadingPantry = false;
   bool _running = false;
+  String _mealGoal = 'balanced';
   String? _error;
   AiComposeResult? _result;
 
@@ -107,6 +108,7 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
 
     try {
       final result = await BackendApi.instance.recommendRecipes(
+        mealGoal: _mealGoal,
         foodIds: _selectedFoodIds.toList(),
         menuRecipeIds: menuIds,
         message: _message.text,
@@ -136,7 +138,7 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
         ),
         duration: const Duration(milliseconds: 1400),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: orange900,
+        backgroundColor: brand700,
         shape: const StadiumBorder(),
       ),
     );
@@ -179,7 +181,7 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: orange700,
+                  color: brand700,
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child: const Icon(
@@ -292,7 +294,7 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
                     hintText: '补充一句（可选）：想喝汤 / 清淡点 / 快点做完…',
                     hintStyle: const TextStyle(fontSize: 13, color: muted),
                     filled: true,
-                    fillColor: orange50,
+                    fillColor: brand50,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 12,
@@ -308,11 +310,39 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
                 if (_error != null) ...[
                   Text(
                     _error!,
-                    style: const TextStyle(fontSize: 12, color: orange900),
+                    style: const TextStyle(fontSize: 12, color: brand900),
                   ),
                   const SizedBox(height: 10),
                 ],
 
+                DropdownButtonFormField<String>(
+                  initialValue: _mealGoal,
+                  decoration: const InputDecoration(labelText: '这一餐更看重什么'),
+                  items: const [
+                    DropdownMenuItem(value: 'balanced', child: Text('荤素与做法搭配')),
+                    DropdownMenuItem(value: 'quick', child: Text('快手优先')),
+                    DropdownMenuItem(
+                      value: 'fewer_purchases',
+                      child: Text('减少补购主料'),
+                    ),
+                    DropdownMenuItem(value: 'pantry', child: Text('多用现有食材')),
+                  ],
+                  onChanged: _running
+                      ? null
+                      : (value) =>
+                            setState(() => _mealGoal = value ?? 'balanced'),
+                ),
+                const SizedBox(height: 12),
+                if (_result?.mealSummary.isNotEmpty ?? false) ...[
+                  Text(
+                    '组合检查：素菜 ${_result!.mealSummary['vegetable_dishes']} 道 · 蛋白类 ${_result!.mealSummary['protein_dishes']} 道 · 汤 ${_result!.mealSummary['soup_dishes']} 道',
+                  ),
+                  Text(
+                    _result!.mealSummary['note'] as String? ?? '',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 FilledButton.icon(
                   onPressed: _running ? null : _run,
                   icon: _running
@@ -327,7 +357,7 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
                       : const Icon(Icons.auto_awesome, size: 17),
                   label: Text(_running ? '正在配菜…' : '开始配菜'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: orange,
+                    backgroundColor: brand600,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: const StadiumBorder(),
                   ),
@@ -469,7 +499,7 @@ class _ComposeCard extends StatelessWidget {
                         icon: const Icon(Icons.menu_book_rounded, size: 16),
                         label: const Text('查看做法'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: orange700,
+                          foregroundColor: brand700,
                           padding: const EdgeInsets.symmetric(vertical: 11),
                         ),
                       ),
@@ -486,7 +516,7 @@ class _ComposeCard extends StatelessWidget {
                         ),
                         label: Text(alreadyAdded ? '已加入' : '加入今日菜单'),
                         style: FilledButton.styleFrom(
-                          backgroundColor: orange,
+                          backgroundColor: brand600,
                           padding: const EdgeInsets.symmetric(vertical: 11),
                         ),
                       ),
@@ -513,8 +543,8 @@ class _TraceView extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: orange50,
-        border: Border.all(color: orange100),
+        color: brand50,
+        border: Border.all(color: brand100),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -525,7 +555,7 @@ class _TraceView extends StatelessWidget {
               const Icon(
                 Icons.account_tree_outlined,
                 size: 15,
-                color: orange700,
+                color: brand700,
               ),
               const SizedBox(width: 6),
               const Text(
@@ -533,13 +563,13 @@ class _TraceView extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: orange900,
+                  color: brand900,
                 ),
               ),
               const Spacer(),
               Text(
                 '${steps.fold<int>(0, (sum, s) => sum + s.ms)} ms',
-                style: const TextStyle(fontSize: 10, color: orange700),
+                style: const TextStyle(fontSize: 10, color: brand700),
               ),
             ],
           ),
@@ -557,7 +587,7 @@ class _TraceView extends StatelessWidget {
                               ? Icons.info_outline
                               : Icons.check),
                     size: 12,
-                    color: step.status == 'veto' ? orange : orange700,
+                    color: step.status == 'veto' ? brand600 : brand700,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -594,7 +624,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 15, color: orange700),
+        Icon(icon, size: 15, color: brand700),
         const SizedBox(width: 6),
         Text(
           text,
@@ -638,8 +668,8 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: highlight ? orange50 : Colors.white,
-        border: Border.all(color: highlight ? orange100 : line),
+        color: highlight ? brand50 : Colors.white,
+        border: Border.all(color: highlight ? brand100 : line),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -647,7 +677,7 @@ class _Chip extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: highlight ? orange700 : ink,
+          color: highlight ? brand700 : ink,
         ),
       ),
     );
@@ -673,8 +703,8 @@ class _SelectChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? orange : Colors.white,
-          border: Border.all(color: selected ? orange : line),
+          color: selected ? brand600 : Colors.white,
+          border: Border.all(color: selected ? brand600 : line),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(

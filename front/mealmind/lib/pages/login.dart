@@ -5,6 +5,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../widgets/brand_wordmark.dart';
+
 import 'package:flutter/services.dart';
 
 import '../services/api_config.dart';
@@ -170,7 +173,7 @@ class _LoginPageState extends State<LoginPage> {
               : '后端没配邮件通道，验证码打在了服务日志里',
         ),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: orange900,
+        backgroundColor: brand700,
       ),
     );
   }
@@ -311,7 +314,7 @@ class _LoginPageState extends State<LoginPage> {
             FilledButton(
               onPressed: _busy ? null : () => _submit(),
               style: FilledButton.styleFrom(
-                backgroundColor: orange700,
+                backgroundColor: brand700,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -340,7 +343,7 @@ class _LoginPageState extends State<LoginPage> {
               onPressed: _busy ? null : _switchMode,
               child: Text(
                 _registerMode ? '已有账号？去登录' : '还没有账号？先注册',
-                style: const TextStyle(fontSize: 12, color: orange700),
+                style: const TextStyle(fontSize: 12, color: brand700),
               ),
             ),
           ],
@@ -395,8 +398,8 @@ class _LoginPageState extends State<LoginPage> {
               child: OutlinedButton(
                 onPressed: _countdown > 0 ? null : _sendCode,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: orange700,
-                  side: const BorderSide(color: orange700),
+                  foregroundColor: brand700,
+                  side: const BorderSide(color: brand700),
                   padding: EdgeInsets.zero,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -506,11 +509,11 @@ class _LoginPageState extends State<LoginPage> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(fontSize: 13, color: muted),
-        prefixIcon: Icon(icon, size: 18, color: orange700),
+        prefixIcon: Icon(icon, size: 18, color: brand700),
         suffixIcon: suffix,
         counterText: '',
         filled: true,
-        fillColor: orange50,
+        fillColor: brand50,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 14,
@@ -525,7 +528,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: orange700, width: 1.4),
+          borderSide: const BorderSide(color: brand700, width: 1.4),
         ),
       ),
     );
@@ -535,14 +538,14 @@ class _LoginPageState extends State<LoginPage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: orange100,
+        color: brand100,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: orange),
+        border: Border.all(color: brand600),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, size: 16, color: orange),
+          const Icon(Icons.error_outline, size: 16, color: brand600),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -571,33 +574,14 @@ class _Brand extends StatelessWidget {
           width: 62,
           height: 62,
           decoration: BoxDecoration(
-            color: orange700,
+            color: brand700,
             borderRadius: BorderRadius.circular(20),
             boxShadow: cardShadow,
           ),
           child: const Icon(Icons.rice_bowl, size: 32, color: cream),
         ),
         const SizedBox(height: 14),
-        const Text(
-          '食时',
-          style: TextStyle(
-            fontSize: 27,
-            fontWeight: FontWeight.w900,
-            color: orange900,
-            letterSpacing: -1.2,
-            height: 1,
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          '顺应时令 · 智慧饮食',
-          style: TextStyle(
-            fontSize: 10.5,
-            color: orange700,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.2,
-          ),
-        ),
+        const BrandWordmark(width: 210),
       ],
     );
   }
@@ -623,7 +607,7 @@ class _BackendHint extends StatelessWidget {
           return Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: orange100,
+              color: brand100,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -631,13 +615,13 @@ class _BackendHint extends StatelessWidget {
                 const Icon(
                   Icons.check_circle_outline,
                   size: 15,
-                  color: orange700,
+                  color: brand700,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '已连接后端 ${status.apiBase}',
-                    style: const TextStyle(fontSize: 11, color: orange700),
+                    style: const TextStyle(fontSize: 11, color: brand700),
                   ),
                 ),
               ],
@@ -680,14 +664,14 @@ class _BackendHint extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: orange50,
+                  color: brand50,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
                   'python -m uvicorn app.main:app --port 8000',
                   style: TextStyle(
                     fontSize: 10.5,
-                    color: orange900,
+                    color: brand900,
                     fontFamily: 'monospace',
                   ),
                 ),

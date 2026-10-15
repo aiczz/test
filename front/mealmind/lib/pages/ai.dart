@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
@@ -5,13 +6,15 @@ import '../models/content.dart';
 import '../services/api_config.dart';
 import '../services/backend_api.dart';
 import '../services/city.dart';
-import '../services/recommender.dart';
+import '../services/auth_store.dart';
+import '../services/chat_session_store.dart';
 import '../state/app_state.dart';
 import '../state/today_menu.dart';
 import '../theme.dart';
 import '../widgets/ai_compose_sheet.dart';
 import '../widgets/dish_photo.dart';
 import '../widgets/food_photo.dart';
+import '../widgets/add_food_to_pantry.dart';
 
 /// =====================================================================
 /// AI 助手页 · 小食
@@ -103,8 +106,14 @@ class _Item {
 class AiPage extends StatefulWidget {
   final String? initialPrompt;
   final int requestToken;
+  final Future<AiChatResult?> Function(String message, bool useAi)? request;
 
-  const AiPage({super.key, this.initialPrompt, this.requestToken = 0});
+  const AiPage({
+    super.key,
+    this.initialPrompt,
+    this.requestToken = 0,
+    this.request,
+  });
 
   @override
   State<AiPage> createState() => _AiPageState();
@@ -128,16 +137,280 @@ class _AiPageState extends State<AiPage> {
 
   /// 本次会话里【已经展示过】的**食材** id（推荐食材那条链路用）。
   /// 和 _shownRecipeIds 分开：食材和菜品是两套 id 空间，混用会误排除。
+  CancelToken? _chatCancel;
+  int _requestGeneration = 0;
+
+  void _stopWaiting() {
+    _requestGeneration++;
+    _chatCancel?.cancel('用户停止等待');
+    setState(() {
+      _busy = false;
+      if (_items.isNotEmpty) {
+        _items[_items.length - 1] = _Item.trace(const [], false);
+      }
+      _items.add(_Item.ai('已停止等待。你可以修改条件后重新提问。'));
+    });
+  }
+
   final Set<int> _shownFoodIds = <int>{};
 
   /// 上一轮的意图。追问（「换一批」「还有别的吗」）本身不含推荐关键词，
   /// 带上它后端才知道该继续推荐，而不是当成闲聊。
   String? _lastIntent;
+  Map<String, dynamic>? _conversationState;
+  Map<String, dynamic>? _effectiveContext;
+  List<String> _excludedCategories = <String>[];
+  String? _sessionScope;
+
+  String get _currentScope =>
+      '${BackendStatus.instance.apiBase}:${AuthStore.instance.user?.id ?? 'guest'}';
+
+  Future<void> _restoreSession() async {
+    final scope = _currentScope;
+    if (_sessionScope == scope) return;
+    Map<String, dynamic>? saved;
+    try {
+      saved = await ChatSessionStore.load(scope);
+    } catch (_) {
+      // Browsers can disable local storage; the in-tab session still works.
+      saved = null;
+    }
+    if (!mounted || _currentScope != scope) return;
+    _sessionScope = scope;
+    _conversationState = saved?['state'] as Map<String, dynamic>?;
+    _effectiveContext = saved?['effective'] as Map<String, dynamic>?;
+    _lastIntent = saved?['intent'] as String?;
+    _shownRecipeIds.clear();
+    _shownFoodIds.clear();
+    _shownRecipeIds.addAll(
+      ((saved?['recipes'] as List?) ?? []).whereType<int>(),
+    );
+    _shownFoodIds.addAll(((saved?['foods'] as List?) ?? []).whereType<int>());
+    _excludedCategories = ((saved?['categories'] as List?) ?? [])
+        .whereType<String>()
+        .toList();
+    setState(() {});
+  }
+
+  void _accountChanged() {
+    if (!mounted || _sessionScope == _currentScope) return;
+    setState(() {
+      _conversationState = null;
+      _effectiveContext = null;
+      _excludedCategories = <String>[];
+      _lastIntent = null;
+      _shownRecipeIds.clear();
+      _shownFoodIds.clear();
+      _items.clear();
+      _items.add(_Item.ai(mockAiGreeting));
+    });
+    _restoreSession();
+  }
+
+  Future<void> _newConversation() async {
+    if (_busy) return;
+    try {
+      await ChatSessionStore.clear(_currentScope);
+    } catch (_) {
+      // New conversations also work when the browser disables storage.
+    }
+    if (!mounted) return;
+    setState(() {
+      _sessionScope = _currentScope;
+      _conversationState = null;
+      _effectiveContext = null;
+      _excludedCategories = <String>[];
+      _lastIntent = null;
+      _shownRecipeIds.clear();
+      _shownFoodIds.clear();
+      _items.clear();
+      _items.add(_Item.ai(mockAiGreeting));
+    });
+  }
+
+  Future<void> _editConditions() async {
+    if (_busy) return;
+    await _restoreSession();
+    if (!mounted) return;
+    final scope = _currentScope;
+    final profile = AppState.instance.profile;
+    final current =
+        _effectiveContext ??
+        <String, dynamic>{
+          'people': profile.people,
+          'cook_minutes': profile.cookMinutes,
+          'avoid': profile.avoid.toList(),
+          'preferences': profile.preferences.toList(),
+          'low_sodium': profile.lowSodium,
+        };
+    final form = GlobalKey<FormState>();
+    var people = (current['people'] as num).toInt();
+    var minutes = (current['cook_minutes'] as num).toDouble();
+    var avoidText = ((current['avoid'] as List?) ?? []).join('、');
+    var tastesText = ((current['preferences'] as List?) ?? []).join('、');
+    var lowSodium = current['low_sodium'] == true;
+    var noSoup = _excludedCategories.contains('汤羹');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('修改本次会话条件'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: form,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    initialValue: '$people',
+                    decoration: const InputDecoration(labelText: '用餐人数（1至20）'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      final n = int.tryParse(v ?? '');
+                      return n == null || n < 1 || n > 20 ? '请输入1至20的整数' : null;
+                    },
+                    onSaved: (v) => people = int.parse(v!),
+                  ),
+                  TextFormField(
+                    initialValue: minutes.toStringAsFixed(0),
+                    decoration: const InputDecoration(
+                      labelText: '单菜时间上限（5至240分钟）',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      final n = double.tryParse(v ?? '');
+                      return n == null || !n.isFinite || n < 5 || n > 240
+                          ? '请输入5至240的分钟数'
+                          : null;
+                    },
+                    onSaved: (v) => minutes = double.parse(v!),
+                  ),
+                  TextFormField(
+                    initialValue: avoidText,
+                    decoration: const InputDecoration(
+                      labelText: '忌口（用顿号或逗号分隔）',
+                    ),
+                    onSaved: (v) => avoidText = v ?? '',
+                  ),
+                  TextFormField(
+                    initialValue: tastesText,
+                    decoration: const InputDecoration(
+                      labelText: '口味偏好（用顿号或逗号分隔）',
+                    ),
+                    onSaved: (v) => tastesText = v ?? '',
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('少盐偏好'),
+                    value: lowSodium,
+                    onChanged: (v) => update(() => lowSodium = v ?? false),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('不喝汤'),
+                    value: noSoup,
+                    onChanged: (v) => update(() => noSoup = v ?? false),
+                  ),
+                  const Text('仅修改本次会话，不改家庭档案。时间按单菜已有记录筛选，不保证整餐总时长。'),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (form.currentState!.validate()) {
+                  form.currentState!.save();
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              child: const Text('保存并推荐'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true || !mounted || scope != _currentScope) return;
+    List<String> split(String value) => value
+        .split(RegExp(r'[、,，;；]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+    final avoid = split(avoidText);
+    final oldAvoid = ((current['avoid'] as List?) ?? []).whereType<String>();
+    final removed = <String>{
+      ...((_conversationState?['avoid_removed'] as List?) ?? [])
+          .whereType<String>(),
+      ...oldAvoid.where((a) => !avoid.contains(a)),
+    }..removeAll(avoid);
+    setState(() {
+      _conversationState = <String, dynamic>{
+        ...?_conversationState,
+        'people': people,
+        'cook_minutes': minutes,
+        'low_sodium': lowSodium,
+        'preferences': split(tastesText),
+        'avoid_added': avoid,
+        'avoid_removed': removed.toList(),
+        'excluded_categories': noSoup ? ['汤羹'] : <String>[],
+      };
+      _effectiveContext = <String, dynamic>{
+        ...current,
+        'people': people,
+        'cook_minutes': minutes,
+        'low_sodium': lowSodium,
+        'preferences': split(tastesText),
+        'avoid': avoid,
+      };
+      _excludedCategories = noSoup ? ['汤羹'] : <String>[];
+    });
+    try {
+      await ChatSessionStore.save(scope, <String, dynamic>{
+        'state': _conversationState,
+        'effective': _effectiveContext,
+        'intent': _lastIntent,
+        'recipes': _shownRecipeIds.toList(),
+        'foods': _shownFoodIds.toList(),
+        'categories': _excludedCategories,
+      });
+    } catch (_) {
+      // Keep in-tab edits when storage is unavailable.
+    }
+    if (!mounted || scope != _currentScope) return;
+    await _send('按修改后的条件重新推荐晚餐，其他条件不变');
+  }
+
+  String get _conditionLabel {
+    final profile = AppState.instance.profile;
+    final c =
+        _effectiveContext ??
+        <String, dynamic>{
+          'people': profile.people,
+          'cook_minutes': profile.cookMinutes,
+          'avoid': profile.avoid.toList(),
+          'preferences': profile.preferences.toList(),
+          'low_sodium': profile.lowSodium,
+        };
+    final avoid = ((c['avoid'] as List?) ?? []).join('、');
+    final tastes = ((c['preferences'] as List?) ?? []).join('、');
+    return '本次条件：${c['people']}人 · ${c['cook_minutes']}分钟以内'
+        '${c['low_sodium'] == true ? ' · 少盐' : ''}'
+        '${tastes.isEmpty ? '' : ' · $tastes'}'
+        '${avoid.isEmpty ? '' : ' · 忌口：$avoid'}'
+        '${_excludedCategories.isEmpty ? '' : ' · 排除：${_excludedCategories.join('、')}'}';
+  }
 
   @override
   void initState() {
     super.initState();
     _items.add(_Item.ai(mockAiGreeting));
+    AuthStore.instance.addListener(_accountChanged);
+    _restoreSession();
   }
 
   @override
@@ -153,6 +426,9 @@ class _AiPageState extends State<AiPage> {
 
   @override
   void dispose() {
+    _requestGeneration++;
+    _chatCancel?.cancel('页面已关闭');
+    AuthStore.instance.removeListener(_accountChanged);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -170,21 +446,14 @@ class _AiPageState extends State<AiPage> {
     });
   }
 
-  /// 问一次 AI：先播协作轨迹，轨迹放完出结果。
-  ///
-  /// ★ 回答是**真的调后端** `/api/ai/chat` 拿的，不再是写死的字符串。
-  ///   请求和轨迹动画**并行**开始 —— 动画是给人看的节奏，等它放完，
-  ///   答案通常已经回来了，用户感觉不到在等网络。
-  ///   后端离线（线上静态站的情形）时回落本地文案，界面照常能用。
-  ///
-  /// ★ 本次改动：后端现在会返回它**真实**做了什么的轨迹
-  ///   （召回多少候选、哪些菜被忌口否决、模型耗时）。
-  ///   拿到就用后端的覆盖掉本地那份「演示轨迹」——轨迹是给评委看的，
-  ///   演的和真的必须能分清，所以界面上也会标注来源。
+  /// Show cards only after the backend has resolved this message's intent.
   Future<void> _send(String raw) async {
     final text = raw.trim();
     if (text.isEmpty || _busy) return;
 
+    final requestScope = _currentScope;
+    final generation = ++_requestGeneration;
+    _chatCancel = CancelToken();
     _input.clear();
     setState(() {
       _items.add(_Item.user(text));
@@ -192,37 +461,34 @@ class _AiPageState extends State<AiPage> {
     });
     _scrollToBottom();
 
-    // 先把请求发出去，再放动画 —— 两者并行，谁也不等谁。
-    final pending = _askBackend(text);
-
-    // ---- 协作轨迹逐步浮现 ----
     final growing = <AgentStep>[];
-    setState(() => _items.add(_Item.trace(growing, true)));
-
-    // ★ 轨迹用【真实家庭档案】生成：改了人数/预算/限钠，
-    //   第一步读到的东西、以及 Critic 会不会否决，都会跟着变。
-    for (final step in localTraceFor(AppState.instance.profile)) {
-      await Future<void>.delayed(const Duration(milliseconds: 380));
-      if (!mounted) return;
-      setState(() {
-        growing.add(step);
-        _items[_items.length - 1] = _Item.trace(
-          List<AgentStep>.from(growing),
-          true,
-        );
-      });
-      _scrollToBottom();
+    setState(
+      () => _items.add(
+        _Item.trace(const [
+          AgentStep(agent: '处理中', summary: '正在理解问题并整理回答', ms: 0),
+        ], true),
+      ),
+    );
+    final reply = await _askBackend(text, useAi: true);
+    if (!mounted ||
+        generation != _requestGeneration ||
+        _currentScope != requestScope) {
+      return;
     }
-
-    await Future<void>.delayed(const Duration(milliseconds: 420));
-    if (!mounted) return;
-
-    final reply = await pending;
-    if (!mounted) return;
+    if (reply == null) {
+      growing.add(
+        AgentStep(agent: '连接状态', summary: _lastChatError ?? '请求失败', ms: 0),
+      );
+    }
 
     // 记住这一轮的意图 + 展示了哪些菜/食材，供下一句追问使用
     if (reply != null) {
-      if (reply.intent.isNotEmpty) _lastIntent = reply.intent;
+      if (reply.intent.isNotEmpty) {
+        _lastIntent = reply.intent;
+      }
+      _conversationState = reply.conversationState ?? _conversationState;
+      _effectiveContext = reply.effectiveContext ?? _effectiveContext;
+      _excludedCategories = reply.excludedCategories;
       for (final recipe in reply.recipes) {
         final id = int.tryParse(recipe.id);
         if (id != null) _shownRecipeIds.add(id);
@@ -230,6 +496,26 @@ class _AiPageState extends State<AiPage> {
       for (final food in reply.foods) {
         final id = int.tryParse(food.id);
         if (id != null) _shownFoodIds.add(id);
+      }
+    }
+
+    if (reply != null) {
+      try {
+        await ChatSessionStore.save(_currentScope, <String, dynamic>{
+          'state': _conversationState,
+          'effective': _effectiveContext,
+          'intent': _lastIntent,
+          'recipes': _shownRecipeIds.toList(),
+          'foods': _shownFoodIds.toList(),
+          'categories': _excludedCategories,
+        });
+      } catch (_) {
+        // Storage unavailable: keep this tab's state and the successful reply.
+      }
+      if (!mounted ||
+          generation != _requestGeneration ||
+          _currentScope != requestScope) {
+        return;
       }
     }
 
@@ -261,11 +547,16 @@ class _AiPageState extends State<AiPage> {
           // ★ 直接把后端返回的菜带进气泡 —— 以前只留 id 再去本地内容库查，
           //   而本地内容库只保留「有配图」的菜，查不到就整块消失，
           //   于是后端推荐了 3 道、界面上一张卡片都没有。
-          recipes: (reply != null && reply.recipes.isNotEmpty)
+          recipes:
+              (reply != null &&
+                  const {
+                    'meal_recommendation',
+                    'cook_with_my_foods',
+                  }.contains(reply.intent))
               ? reply.recipes
               : const <Recipe>[],
           // ★ 同理，推荐食材也直接带上完整对象（见 _Item.foods 的注释）。
-          foods: (reply != null && reply.foods.isNotEmpty)
+          foods: (reply != null && reply.intent == 'recommend_foods')
               ? reply.foods
               : const <Food>[],
           localFallback: reply == null,
@@ -278,8 +569,7 @@ class _AiPageState extends State<AiPage> {
   }
 
   /// 本地兜底文案（后端离线、或这一问失败时用）。
-  String _localAnswer(String text) =>
-      text.contains('食材') ? mockAiReplyByFood : mockAiReplyDefault;
+  String _localAnswer(String text) => '暂时无法连接问答服务，请稍后重试。';
 
   /// 问后端。任何失败都返回 null，交给调用方回落本地 ——
   /// 表现和后端离线时完全一致，界面不会弹错误。
@@ -290,15 +580,41 @@ class _AiPageState extends State<AiPage> {
   /// ★ 同时把**失败原因**记到 `_lastChatError`：以前不管是超时、断网还是
   ///   后端 500，界面一律显示「后端未连接」—— 那句话经常是错的，
   ///   而且把排查方向带偏（明明连得上，只是模型这一问慢了点）。
-  Future<AiChatResult?> _askBackend(String message) async {
+  Future<AiChatResult?> _askBackend(String message, {bool useAi = true}) async {
+    if (widget.request != null) return widget.request!(message, useAi);
     if (!BackendStatus.instance.online) {
       _lastChatError = '后端未连接（${BackendStatus.instance.apiBase}）';
       return null;
     }
+    final scope = _currentScope;
+    final cancel = _chatCancel;
     try {
+      await _restoreSession();
+      if (!mounted ||
+          scope != _currentScope ||
+          cancel != _chatCancel ||
+          cancel?.isCancelled == true) {
+        return null;
+      }
       final profile = AppState.instance.profile;
-      return await BackendApi.instance.chat(
+      final foodReplies = _items.reversed.where(
+        (item) => item.foods.isNotEmpty,
+      );
+      final recipeReplies = _items.reversed.where(
+        (item) => item.recipes.isNotEmpty,
+      );
+      final turns = _items
+          .where((item) => item.kind == _Kind.user || item.kind == _Kind.ai)
+          .toList();
+      // The current user message is sent separately; avoid duplicating it in history.
+      if (turns.isNotEmpty && turns.last.kind == _Kind.user) turns.removeLast();
+      final recentTurns = turns.length > 8
+          ? turns.sublist(turns.length - 8)
+          : turns;
+      final result = await BackendApi.instance.chat(
         message,
+        useAi: useAi,
+        cancelToken: cancel,
         city: CityStore.instance.city.name,
         people: profile.people,
         cookMinutes: profile.cookMinutes,
@@ -306,10 +622,37 @@ class _AiPageState extends State<AiPage> {
         preferences: profile.preferences.toList(),
         avoid: profile.avoid.toList(),
         // ★ 会话上下文：追问靠它才不会被当成闲聊
+        conversationState: _conversationState,
+        contextFoodIds: foodReplies.isEmpty
+            ? const <int>[]
+            : foodReplies.first.foods
+                  .map((food) => int.tryParse(food.id))
+                  .whereType<int>()
+                  .toList(),
+        contextRecipeIds: recipeReplies.isEmpty
+            ? const <int>[]
+            : recipeReplies.first.recipes
+                  .map((recipe) => int.tryParse(recipe.id))
+                  .whereType<int>()
+                  .toList(),
+        history: recentTurns.any((item) => item.kind == _Kind.user)
+            ? recentTurns
+                  .map(
+                    (item) => <String, dynamic>{
+                      'role': item.kind == _Kind.user ? 'user' : 'assistant',
+                      'content': item.text.length > 1000
+                          ? item.text.substring(0, 1000)
+                          : item.text,
+                    },
+                  )
+                  .toList()
+            : const <Map<String, dynamic>>[],
         lastIntent: _lastIntent,
         recentRecipeIds: _shownRecipeIds.toList(),
         recentFoodIds: _shownFoodIds.toList(),
       );
+      if (_currentScope != scope) return null;
+      return result;
     } catch (error) {
       // 注意：这里不 import dio —— 网络错误统一由 service 层翻译成人话，
       // 界面层不碰 DioException 类型。
@@ -331,6 +674,23 @@ class _AiPageState extends State<AiPage> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 children: [
                   _Header(onPrompt: _send),
+                  const SizedBox(height: 12),
+                  Text(_conditionLabel),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Wrap(
+                      children: [
+                        TextButton(
+                          onPressed: _busy ? null : _editConditions,
+                          child: const Text('编辑条件'),
+                        ),
+                        TextButton(
+                          onPressed: _busy ? null : _newConversation,
+                          child: const Text('开始新会话'),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 18),
                   for (final item in _items) ...[
                     _ItemView(item: item),
@@ -339,6 +699,12 @@ class _AiPageState extends State<AiPage> {
                 ],
               ),
             ),
+            if (_busy)
+              TextButton.icon(
+                onPressed: _stopWaiting,
+                icon: const Icon(Icons.stop_circle_outlined, size: 16),
+                label: const Text('停止等待'),
+              ),
             _InputBar(
               controller: _input,
               busy: _busy,
@@ -366,7 +732,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [orange700, orange900],
+          colors: [brand700, brand900],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -431,7 +797,7 @@ class _Header extends StatelessWidget {
               ),
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.white,
-                foregroundColor: orange900,
+                foregroundColor: brand900,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: const StadiumBorder(),
               ),
@@ -494,7 +860,7 @@ class _ItemView extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: orange700,
+              color: brand700,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
@@ -619,20 +985,21 @@ class _MiniFoodCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: orange50,
+                            color: brand50,
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             tag,
                             style: const TextStyle(
                               fontSize: 10,
-                              color: orange700,
+                              color: brand700,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
                     ],
                   ),
+                  AddFoodToPantryButton(food: food),
                 ],
               ),
             ),
@@ -681,10 +1048,7 @@ class _MiniRecipeCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  [
-                    recipe.desc,
-                    recipe.metaLine,
-                  ].where((part) => part.isNotEmpty).join(' · '),
+                  recipe.metaLine,
                   style: const TextStyle(fontSize: 11.5, color: muted),
                 ),
                 const SizedBox(height: 10),
@@ -705,13 +1069,13 @@ class _MiniRecipeCard extends StatelessWidget {
                           ),
                           duration: const Duration(milliseconds: 1400),
                           behavior: SnackBarBehavior.floating,
-                          backgroundColor: orange900,
+                          backgroundColor: brand700,
                           shape: const StadiumBorder(),
                         ),
                       );
                     },
                     style: FilledButton.styleFrom(
-                      backgroundColor: orange,
+                      backgroundColor: brand600,
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: const StadiumBorder(),
                     ),
@@ -740,9 +1104,6 @@ class _MiniRecipeCard extends StatelessWidget {
 class _TraceCard extends StatelessWidget {
   final List<AgentStep> steps;
   final bool running;
-
-  /// 这份轨迹是后端真实执行的，还是前端按家庭档案「展开」的演示版。
-  /// 两者都要给评委看，但不能混为一谈 —— 所以界面上必须写清是哪种。
   final bool isBackend;
 
   const _TraceCard({
@@ -755,79 +1116,66 @@ class _TraceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: orange50,
-        border: Border.all(color: orange100),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(14),
+      side: const BorderSide(color: brand100),
+    );
+    return ExpansionTile(
+      initiallyExpanded: false,
+      dense: true,
+      tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+      shape: shape,
+      collapsedShape: shape,
+      backgroundColor: brand50,
+      collapsedBackgroundColor: brand50,
+      iconColor: brand700,
+      collapsedIconColor: brand700,
+      leading: running
+          ? const SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(strokeWidth: 2, color: brand700),
+            )
+          : const Icon(Icons.account_tree_outlined, size: 16, color: brand700),
+      title: Row(
         children: [
-          // ---- 标题栏 ----
-          Row(
-            children: [
-              Icon(
-                running ? Icons.sync : Icons.account_tree_outlined,
-                size: 16,
-                color: orange700,
-              ),
-              const SizedBox(width: 7),
-              Text(
-                // ⚠️ 这里以前写的是「多智能体协作」—— 那是**不实的**。
-                //    项目里没有多智能体：后端只是一串顺序执行的函数
-                //    （外加一次大模型调用），没有 agent 自主决策、没有 agent 间通信。
-                //    如实写「推荐流程」，步骤名写清每步在干什么。
-                running ? '正在处理' : '推荐流程',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: orange900,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  running ? '协作中…' : (isBackend ? '后端真实轨迹' : '本地演示轨迹'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: isBackend && !running ? orange700 : muted,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                running
-                    ? ''
-                    : '${steps.length} 步 · ${(_totalMs / 1000).toStringAsFixed(2)} s',
-                style: const TextStyle(fontSize: 10.5, color: orange700),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // ---- 每一步 ----
-          for (var i = 0; i < steps.length; i++)
-            _TraceRow(step: steps[i], last: i == steps.length - 1 && !running),
-
-          if (running)
-            const Padding(
-              padding: EdgeInsets.only(top: 6, left: 2),
-              child: SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: orange700,
-                ),
+          Expanded(
+            child: Text(
+              running ? '正在处理' : '推荐流程',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: brand900,
               ),
             ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              running
+                  ? '点击查看'
+                  : '${steps.length}步 · ${(_totalMs / 1000).toStringAsFixed(2)}s',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 10.5, color: brand700),
+            ),
+          ),
         ],
       ),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            running ? '正在整理回答…' : (isBackend ? '后端执行记录' : '本地处理记录'),
+            style: const TextStyle(fontSize: 10, color: muted),
+          ),
+        ),
+        const SizedBox(height: 12),
+        for (var i = 0; i < steps.length; i++)
+          _TraceRow(step: steps[i], last: i == steps.length - 1),
+      ],
     );
   }
 }
@@ -843,7 +1191,7 @@ class _TraceRow extends StatelessWidget {
     final vetoed = step.status == 'veto';
     final info = step.status == 'info';
 
-    final Color dotColor = vetoed ? orange : (info ? muted : orange700);
+    final Color dotColor = vetoed ? brand600 : (info ? muted : brand700);
     final IconData dotIcon = vetoed
         ? Icons.block
         : (info ? Icons.info_outline : Icons.check);
@@ -859,14 +1207,14 @@ class _TraceRow extends StatelessWidget {
                 width: 18,
                 height: 18,
                 decoration: BoxDecoration(
-                  color: vetoed ? orange100 : Colors.white,
+                  color: vetoed ? brand100 : Colors.white,
                   border: Border.all(color: dotColor, width: 1.4),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(dotIcon, size: 10, color: dotColor),
               ),
               if (!last)
-                Expanded(child: Container(width: 1.2, color: orange100)),
+                Expanded(child: Container(width: 1.2, color: brand100)),
             ],
           ),
           const SizedBox(width: 10),
@@ -885,7 +1233,7 @@ class _TraceRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
-                            color: vetoed ? orange : ink,
+                            color: vetoed ? brand600 : ink,
                           ),
                         ),
                       ),
@@ -951,7 +1299,7 @@ class _InputBar extends StatelessWidget {
                     hintText: '问问今晚吃什么…',
                     hintStyle: const TextStyle(fontSize: 13.5, color: muted),
                     filled: true,
-                    fillColor: orange50,
+                    fillColor: brand50,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 12,
@@ -965,7 +1313,7 @@ class _InputBar extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Material(
-                color: busy ? muted : orange,
+                color: busy ? muted : brand600,
                 shape: const CircleBorder(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
