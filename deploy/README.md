@@ -207,6 +207,7 @@ cd /opt/test/back && python3 scripts/verify_ai_features.py --base http://127.0.0
 | 现象 | 原因 / 处理 |
 |---|---|
 | 打开是白屏，控制台一堆 404 | `/opt/web` 是空的或解压不全。重跑 `deploy.sh`，确认 Release 里有 `web-build.tar.gz` |
+| 打开是白屏，但 404 一条都没有，控制台只有 `WebAssembly … Incorrect response MIME type. Expected 'application/wasm'` | nginx 没声明 wasm 类型，`canvaskit.wasm` 被发成 `application/octet-stream`，浏览器拒绝编译引擎。先 `curl -sI http://127.0.0.1/canvaskit/canvaskit.wasm \| grep -i content-type`：不是 `application/wasm` 就补系统表 `sed -i '/^types {/a\    application/wasm                wasm;' /etc/nginx/mime.types && sudo nginx -t && sudo systemctl reload nginx`。配置里已带 wasm 专用 location，只有系统 `mime.types` 太老（nginx < 1.21）时才会犯。**改完要强刷**，旧的错误响应被按 7 天缓存了 |
 | 页面能开，但数据都是假的 | 前端探测不到后端。`curl http://127.0.0.1/api/health` 确认 nginx 反代生效；再看 `systemctl status shishi-backend` |
 | 登录报 500 | `SECRET_KEY` 没换或认证依赖没装。看 `journalctl -u shishi-backend` |
 | 首页建议里没有 AI 味（都是模板话） | `AI_API_KEY` 没配或调用失败。先跑 `cd /opt/test/back && python3 scripts/check_ai.py` —— 它会直接告诉你该改哪一项；也可以看 `/api/home` 返回的 `meta.source`：`ai`=真调了，`algorithm`=降级了 |
@@ -225,6 +226,12 @@ cd /opt/test/back && python3 scripts/verify_ai_features.py --base http://127.0.0
 - **compact 模式下新表不会被建** → 新表必须加进 `back/app/core/database.py` 的
   `STATE_TABLES`，否则 `create_all` 不建它（AI 缓存表就是这么加进去的）
 - **AI 调用慢于 nginx 默认超时** → `proxy_read_timeout 120s`
+- **nginx 不认识 `.wasm`** → 老版本 nginx（< 1.21）自带的 `mime.types` 里没有
+  wasm 映射，`canvaskit.wasm` 被当成 `application/octet-stream`，而浏览器的
+  `WebAssembly.compile` 有强制 MIME 校验，直接拒绝编译引擎。表现是**整站白屏**，
+  但 index.html、接口、其它静态资源全部正常 —— 很容易误判成「产物坏了」或
+  「浏览器缓存」。`deploy/nginx-shishi.conf` 里已加 wasm 专用 location 兜住；
+  系统 `mime.types` 也可以顺手补一行 `application/wasm wasm;`
 - **`WorkingDirectory` 必须设对** → 否则 `sqlite:///./shishi.db` 会落到别处，
   表现为「每次重启数据都空」
 - **前端产物必须是 same-origin 构建** → CI 里已去掉 `--dart-define=API_BASE`
