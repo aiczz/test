@@ -47,7 +47,14 @@ class AiConversationState(BaseModel):
 
     people: int | None = Field(default=None, ge=1, le=20)
     recommendation_count: int | None = Field(default=None, ge=1, le=10)
-    last_recommended_food_ids: list[int] = Field(default_factory=list, max_length=20)
+    selection_preferences: list[str] = Field(default_factory=list, max_length=20)
+    last_recommendation_kind: Literal['foods', 'recipes'] | None = None
+    focused_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
+    focused_food_ids: list[int] = Field(default_factory=list, max_length=200)
+    last_recipe_detail: Literal['ingredients', 'steps'] | None = None
+    active_topic: Literal['recipes', 'foods', 'recipe_ingredients'] | None = None
+    ingredient_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
+    last_recommended_food_ids: list[int] = Field(default_factory=list, max_length=200)
     last_recommended_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
     history: list[AiChatMessage] = Field(default_factory=list, max_length=8)
     cook_minutes: float | None = Field(default=None, ge=5, le=240)
@@ -59,7 +66,8 @@ class AiConversationState(BaseModel):
 
 
 class AiChatRequest(AiContext):
-    context_food_ids: list[int] = Field(default_factory=list, max_length=20)
+    context_kind: Literal['foods', 'recipes'] | None = None
+    context_food_ids: list[int] = Field(default_factory=list, max_length=200)
     context_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
     history: list[AiChatMessage] = Field(default_factory=list, max_length=8)
     recommendation_count: int = Field(default=3, ge=1, le=10)

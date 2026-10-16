@@ -49,12 +49,17 @@ def main():
     from sqlalchemy import create_engine, text
     from sqlmodel import Session
     from app.core.config import settings
+    from app.ai import client as ai_client
     from app.schemas.ai import AiRecommendRequest
     from app.services import ai_service, scoring_service, recipe_service, weather_service
 
     engine = create_engine(os.environ["DATABASE_URL"])
     available = bool(settings.ai_api_key.strip() and settings.ai_base_url.strip()) and not args.baseline_only
     settings.ai_temperature = 0
+    # Repeated timings must represent fresh requests, not successful-response cache hits.
+    settings.ai_response_cache_seconds = 0
+    ai_client.clear_cache()
+    ai_client.clear_failure_cooldowns()
     settings.weather_enabled = False
     weather = weather_service.current_weather(city=None, month=frozen.month, today=args.date)
     class FixedDateTime(datetime):
@@ -88,6 +93,14 @@ def main():
     excluded = []
     original_score = scoring_service.score_dishes
     candidate_runs = []
+    model_calls = []
+    original_complete = ai_client.complete_json
+    def capture_model(*a, **kw):
+        result = original_complete(*a, **kw)
+        model_calls.append(dict(ok=result.ok, called=result.called, cached=result.cached,
+                                elapsed_ms=result.elapsed_ms,
+                                error=ai_client.failure_message(result) if not result.ok else None))
+        return result
     def capture_candidates(*a, **kw):
         candidates = original_score(*a, **kw)
         candidate_runs.append([dict(id=x.item_id, name=x.name, score=x.score,
@@ -99,12 +112,13 @@ def main():
                 code_sha256=source_hash, weather=asdict(weather), model=settings.ai_model,
                 benchmark_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 real_ai_available=available, temperature=0, ai_call_limit=len(cases)*args.repeats,
+                response_cache_seconds=0, failure_cooldown_seconds=settings.ai_failure_cooldown_seconds,
                 safety_scope="详情配料词匹配，不证明医学安全或数据完整性", human_review="未开展")
     def save(name, value):
         (args.output / name).write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
     save("protocol.json", meta)
     rng = random.Random(20261012)
-    with patch.object(ai_service, "datetime", FixedDateTime), patch.object(ai_service, "_weather_for", return_value=weather), patch.object(scoring_service, "score_dishes", side_effect=capture_candidates):
+    with patch.object(ai_service, "datetime", FixedDateTime), patch.object(ai_service, "_weather_for", return_value=weather), patch.object(scoring_service, "score_dishes", side_effect=capture_candidates), patch.object(ai_client, 'complete_json', side_effect=capture_model):
         for number, (name, changes) in enumerate(cases, 1):
             payload = AiRecommendRequest(**{**common, **changes, **({"menu_recipe_ids": excluded} if number == 10 else {})})
             for repeat in range(1, args.repeats+1):
@@ -119,6 +133,7 @@ def main():
                         continue
                     settings.ai_enabled = enabled
                     candidate_runs.clear()
+                    model_calls.clear()
                     started = time.perf_counter()
                     with Session(engine) as session:
                         result = ai_service.recommend_recipes(session, None, payload).model_dump()
@@ -141,7 +156,7 @@ def main():
                                status="ok" if not enabled or source=="ai" else "fallback",
                                source=source, input=payload.model_dump(), response=result,
                                candidate_hash=digest(candidate_runs), candidates=[x["id"] for batch in candidate_runs for x in batch],
-                               elapsed_ms=elapsed, checks=checks)
+                               elapsed_ms=elapsed, checks=checks, model_calls=list(model_calls))
                     row["candidate_valid"] = all(p["id"] in row["candidates"] for p in checks)
                     observations.append(row)
                     paired.append(row)

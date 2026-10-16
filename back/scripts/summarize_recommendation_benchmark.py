@@ -41,6 +41,16 @@ def main():
             grouped.setdefault(row["scenario"], []).append(tuple(c["id"] for c in row["checks"]))
         consistent[version] = sum(len(values) == protocol["repeats"] and len(set(values)) == 1 for values in grouped.values())
     models = sorted({r["response"].get("model") for r in executed["规则＋AI"] if r["response"].get("model")})
+    menu_metrics = {}
+    for version, group in executed.items():
+        summaries = [r['response']['meal_summary'] for r in group if r['response'].get('meal_summary')]
+        menu_metrics[version] = dict(observed_menus=len(summaries),
+            vegetable_and_protein=sum(s.get('vegetable_dishes', 0) > 0 and s.get('protein_dishes', 0) > 0 for s in summaries),
+            multiple_soups=sum(s.get('soup_dishes', 0) > 1 for s in summaries))
+    call_metrics = {v: dict(network_requests=sum(c.get('called', False) for r in raw if r['version'] == v for c in r.get('model_calls', [])),
+                           cache_hits=sum(c.get('cached', False) for r in raw if r['version'] == v for c in r.get('model_calls', [])),
+                           fallbacks=sum(r['status'] == 'fallback' for r in raw if r['version'] == v)) for v in executed}
+    guarded_answers = sum(any(t.get('agent') == '事实校验' for t in r['response'].get('trace', [])) for r in executed['规则＋AI'])
     def table(headers, records):
         return ["| " + " | ".join(map(str,headers)) + " |", "|"+"---|"*len(headers),
                 *["| " + " | ".join(map(str,row)) + " |" for row in records]]
@@ -51,6 +61,16 @@ def main():
     text = ["# 食时真实AI同环境对照报告", "", f"日期：{protocol['date']}；{protocol['scenario_count']}组场景，每组重复{protocol['repeats']}次。",
             f"有效同输入、同候选配对：{len(valid)}/{expected}。实际响应模型：{'、'.join(models) or '未调用成功'}。", "", "## 汇总", ""]
     text += table(["指标", "纯规则", "规则＋AI"], [[label, stats["纯规则"][key], stats["规则＋AI"][key]] for label,key in metrics])
+    if any(s['observed_menus'] for s in menu_metrics.values()):
+        text += ['', '## 整餐搭配核查', '', *table(['按现有标签粗分的指标', '纯规则', '规则＋AI'], [
+            [label, menu_metrics['纯规则'][key], menu_metrics['规则＋AI'][key]] for label, key in [
+                ('有整餐摘要的请求', 'observed_menus'), ('同时有素菜和蛋白类的菜单', 'vegetable_and_protein'), ('多于一道汤的菜单', 'multiple_soups')]]),
+            '', '这些分类来自现有标签和菜名粗分，混合菜可能分类不完整，不等于实际营养均衡或健康效果。']
+    if any('model_calls' in r for r in raw):
+        text += ['', '## 实际调用核查', '', *table(['指标', '纯规则', '规则＋AI'], [
+            [label, call_metrics['纯规则'][key], call_metrics['规则＋AI'][key]] for label, key in [
+                ('真实网络请求', 'network_requests'), ('缓存命中', 'cache_hits'), ('规则回退', 'fallbacks')]]),
+            '', f"配置请求模型：{protocol.get('model')}；响应记录模型：{'、'.join(models)}。没有将缓存命中作为新模型调用。"]
     text += ["", f"两版菜品集合相同：{same_sets}/{len(valid)}组有效配对。重复请求菜品及顺序完全一致的场景：规则{consistent['纯规则']}/10，AI{consistent['规则＋AI']}/10。", "",
              "食材匹配次数是逐菜的匹配数之和，不是不同食材总数。P95采用最近秩分位法。重复请求是稳定性观测，不是新的独立场景。", "", "## 场景明细", ""]
     detail = []
@@ -70,6 +90,9 @@ def main():
         text.append(f"时长不详记录从规则的{base['time_unknown']}条变为AI的{ai['time_unknown']}条；仅能说明本轮所选菜谱的时长信息完整性差异，不证明实际烹饪更快。")
         text.append(f"已有食材场景匹配次数为规则{base['inventory_matches']}、AI{ai['inventory_matches']}。不能推广到其他库存或其他用户。")
         text.append(f"AI请求中位耗时{ai['median_ms']}ms，规则为{base['median_ms']}ms；模型外部服务和网络延迟包含在AI侧。")
+        text.append(f"AI侧有{guarded_answers}/{len(executed['规则＋AI'])}次总说明触发事实校验，改用规则文案；选菜仍由模型完成，不能据此宣称模型总说明更好。")
+        if menu_metrics['纯规则']['observed_menus'] and menu_metrics['规则＋AI']['observed_menus']:
+            text.append(f"按现有标签粗分，同时有素菜和蛋白类的菜单：规则{menu_metrics['纯规则']['vegetable_and_protein']}组、AI{menu_metrics['规则＋AI']['vegetable_and_protein']}组；多道汤菜单分别为{menu_metrics['纯规则']['multiple_soups']}组和{menu_metrics['规则＋AI']['multiple_soups']}组。该指标与时长、食材匹配应分开评估，不支持AI全面优于规则。")
     text += ["", "## 尚不能声称", "", "没有真人盲评，不能声称AI更合口味、更好吃、解释更清楚或用户满意度更高。",
              "营养估计可能漏计调味料，本轮不证明实际低钠或营养改善。10个场景、3次重复不支持总体优势或统计显著结论。",
              "模型生成解释属于实际功能，但解释质量需要独立评审，不能把描述更长等同于更好。", "", "## 原始证据与盲评", "",
@@ -78,7 +101,7 @@ def main():
              "blind-key.json仅给组织者，不交给评分者。旧报告保留，服务器没有部署本地修复。"]
     (folder / "真实AI对照报告.md").write_text("\n".join(text)+"\n",encoding="utf-8")
     summary = dict(valid_pairs=len(valid), expected_pairs=expected, same_recipe_sets=same_sets, consistency=consistent, models=models, metrics=stats,
-                   human_evaluation="未开展")
+                   menu_metrics=menu_metrics, call_metrics=call_metrics, guarded_ai_answers=guarded_answers, human_evaluation="未开展")
     (folder / "analysis.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf-8")
     print(json.dumps(summary,ensure_ascii=False))
 

@@ -15,6 +15,8 @@ import '../widgets/ai_compose_sheet.dart';
 import '../widgets/dish_photo.dart';
 import '../widgets/food_photo.dart';
 import '../widgets/add_food_to_pantry.dart';
+import 'foods.dart' show showFoodDetail;
+import 'recipes.dart' show openRecipeDetail;
 
 /// =====================================================================
 /// AI 助手页 · 小食
@@ -603,6 +605,9 @@ class _AiPageState extends State<AiPage> {
       final recipeReplies = _items.reversed.where(
         (item) => item.recipes.isNotEmpty,
       );
+      final cardReplies = _items.reversed.where(
+        (item) => item.recipes.isNotEmpty || item.foods.isNotEmpty,
+      );
       final turns = _items
           .where((item) => item.kind == _Kind.user || item.kind == _Kind.ai)
           .toList();
@@ -623,6 +628,9 @@ class _AiPageState extends State<AiPage> {
         avoid: profile.avoid.toList(),
         // ★ 会话上下文：追问靠它才不会被当成闲聊
         conversationState: _conversationState,
+        contextKind: cardReplies.isEmpty
+            ? null
+            : (cardReplies.first.recipes.isNotEmpty ? 'recipes' : 'foods'),
         contextFoodIds: foodReplies.isEmpty
             ? const <int>[]
             : foodReplies.first.foods
@@ -950,61 +958,73 @@ class _MiniFoodCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: Border.all(color: line),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 92, height: 92, child: FoodPhoto(asset: food.image)),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    food.name,
-                    style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Wrap(
-                    spacing: 5,
-                    runSpacing: 5,
+      child: InkWell(
+        onTap: () => showFoodDetail(context, food),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            border: Border.all(color: line),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 92,
+                height: 92,
+                child: FoodPhoto(asset: food.image),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final tag in food.tags.take(3))
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: brand50,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            tag,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: brand700,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                      Text(
+                        food.name,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
                         ),
+                      ),
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: 5,
+                        runSpacing: 5,
+                        children: [
+                          for (final tag in food.tags.take(3))
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: brand50,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                tag,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: brand700,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      AddFoodToPantryButton(food: food),
                     ],
                   ),
-                  AddFoodToPantryButton(food: food),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1019,79 +1039,87 @@ class _MiniRecipeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: Border.all(color: line),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: 110,
-            width: double.infinity,
-            child: DishPhoto(asset: recipe.image),
+      child: InkWell(
+        onTap: () => openRecipeDetail(context, recipe),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            border: Border.all(color: line),
+            borderRadius: BorderRadius.circular(14),
           ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  recipe.name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  recipe.metaLine,
-                  style: const TextStyle(fontSize: 11.5, color: muted),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () {
-                      // 真的写进今日菜单（菜谱页右侧那个 tab 能看到），
-                      // 不再只是弹一句提示就没了。
-                      final picked = recipe;
-                      final added = TodayMenuStore.instance.add(picked);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            added
-                                ? '已把「${picked.name}」加入今日菜单'
-                                : '「${picked.name}」已经在今日菜单里了',
-                          ),
-                          duration: const Duration(milliseconds: 1400),
-                          behavior: SnackBarBehavior.floating,
-                          backgroundColor: brand700,
-                          shape: const StadiumBorder(),
-                        ),
-                      );
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: brand600,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: const StadiumBorder(),
-                    ),
-                    child: const Text(
-                      '加入今日菜单',
-                      style: TextStyle(
-                        fontSize: 12.5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 110,
+                width: double.infinity,
+                child: DishPhoto(asset: recipe.image),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recipe.name,
+                      style: const TextStyle(
+                        fontSize: 14,
                         fontWeight: FontWeight.w800,
+                        color: ink,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      recipe.metaLine,
+                      style: const TextStyle(fontSize: 11.5, color: muted),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          // 真的写进今日菜单（菜谱页右侧那个 tab 能看到），
+                          // 不再只是弹一句提示就没了。
+                          final picked = recipe;
+                          final added = TodayMenuStore.instance.add(picked);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                added
+                                    ? '已把「${picked.name}」加入今日菜单'
+                                    : '「${picked.name}」已经在今日菜单里了',
+                              ),
+                              duration: const Duration(milliseconds: 1400),
+                              behavior: SnackBarBehavior.floating,
+                              backgroundColor: brand700,
+                              shape: const StadiumBorder(),
+                            ),
+                          );
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: brand600,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: const StadiumBorder(),
+                        ),
+                        child: const Text(
+                          '加入今日菜单',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

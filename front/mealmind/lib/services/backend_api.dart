@@ -457,6 +457,7 @@ class BackendApi {
     Map<String, dynamic>? conversationState,
     List<int> contextFoodIds = const <int>[],
     List<int> contextRecipeIds = const <int>[],
+    String? contextKind,
     List<Map<String, dynamic>> history = const <Map<String, dynamic>>[],
     List<int> recentRecipeIds = const <int>[],
     // 推荐食材那条链路要排除的食材。
@@ -477,6 +478,7 @@ class BackendApi {
         'conversation_state': ?conversationState,
         'context_food_ids': contextFoodIds,
         'context_recipe_ids': contextRecipeIds,
+        'context_kind': contextKind,
         'history': history,
         'last_intent': ?lastIntent,
         if (recentRecipeIds.isNotEmpty) 'recent_recipe_ids': recentRecipeIds,

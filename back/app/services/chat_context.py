@@ -8,6 +8,26 @@ DIGITS = dict(zip("零一二三四五六七八九", range(10)))
 DIGITS["两"] = 2
 
 
+def selection_preferences(message: str, previous: list[str] | None = None) -> list[str]:
+    """Soft selection goals, separate from ingredient exclusions and time filters."""
+    result = list(previous or [])
+    groups = {
+        '少洗锅': ('少洗锅', '少洗几个锅', '一锅出', '一锅搞定'),
+        '省事': ('省事', '简单点', '简单一点', '操作简单'),
+        '少油': ('少油', '别太油', '不要太油', '不油腻'),
+        '清淡': ('清淡',),
+        '高蛋白': ('高蛋白', '补充蛋白质', '补足蛋白质'),
+        '全素': ('全素', '纯素', '只要素菜', '只吃素', '不要荤菜'),
+        '只推荐汤': ('只推荐汤', '只要汤', '只喝汤', '全是汤'),
+    }
+    for goal, phrases in groups.items():
+        if any(re.search(r'(?:取消|不用|不要求)' + re.escape(p), message) for p in phrases):
+            result = [p for p in result if p not in {goal, *phrases}]
+        elif any(p in message for p in phrases) and goal not in result:
+            result.append(goal)
+    return result
+
+
 def number(text: str) -> float:
     if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", text):
         return float(text)
@@ -42,6 +62,7 @@ def requested_count(message: str) -> int | None:
 
 def edits(message: str, state: AiConversationState, terms: list[str]) -> AiConversationState:
     state = state.model_copy(deep=True)
+    state.selection_preferences = selection_preferences(message, state.selection_preferences)
     count = requested_count(message)
     if count is not None:
         state.recommendation_count = count

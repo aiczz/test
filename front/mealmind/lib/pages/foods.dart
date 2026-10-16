@@ -11,6 +11,108 @@ import '../theme.dart';
 import '../widgets/dish_photo.dart';
 import '../widgets/food_photo.dart';
 
+/// 共用的食材详情入口，推荐卡片和食材页均可直接打开。
+void showFoodDetail(BuildContext context, Food food) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => DraggableScrollableSheet(
+      initialChildSize: 0.72,
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, controller) => Container(
+        decoration: const BoxDecoration(
+          color: page,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
+        ),
+        child: ListView(
+          controller: controller,
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: line,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(rCard),
+              child: AspectRatio(
+                aspectRatio: 1.8,
+                child: FoodPhoto(asset: food.image),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    food.name,
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: brand900,
+                    ),
+                  ),
+                ),
+                // 「当季推荐」只在**确实是当季**时才挂，不是每个食材都挂
+                if (ContentStore.instance.isSeasonal(food))
+                  const _DetailSeasonBadge(),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _seasonBlurb(food),
+              style: const TextStyle(fontSize: 14, color: muted, height: 1.7),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final tag in food.tags) _Tag(text: tag),
+                // 应季指数用后端算出来的真实分值；拿不到就不显示
+                if (food.seasonScore != null)
+                  _Tag(text: '应季指数 ${food.seasonScore}'),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '适合做这些菜',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            _FoodRecipeSuggestions(food: food),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// 食材详情里那句介绍。
+///
+/// 当季 / 不当季说的话不一样 —— 以前不管三七二十一都说「正值当季」。
+String _seasonBlurb(Food food) {
+  if (ContentStore.instance.isSeasonal(food)) {
+    return '${food.name}正值当季，口感更鲜、运输距离更短。'
+        '适合安排进本周菜单，也可以优先消耗家中库存。';
+  }
+  if (food.season != null && food.season!.isNotEmpty) {
+    return '${food.name}的时令是${food.season}，现在不是它最好的时候 —— '
+        '反季的也能吃，但风味和价格通常不如当季。';
+  }
+  // 后端不返回季节名（只返回应季指数），这时不硬说当季还是反季
+  return '${food.name}的营养数据、可做菜谱都来自清洗后的食材库。';
+}
+
 /// 食材页：时令浏览 + 家中库存 + 选中食材交给 AI。
 class FoodsPage extends StatefulWidget {
   final ValueChanged<List<String>> onAskAi;
@@ -320,106 +422,7 @@ class FoodsPageState extends State<FoodsPage> {
   ///      静默退化成「取前两道菜」，点任何食材看到的都是同两道。
   ///   现在指数用后端的 season_score，「能做的菜」走后端关联，
   ///   两样都拿不到时如实说明，不编。
-  void openFoodDetail(Food food) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.72,
-        minChildSize: 0.5,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, controller) => Container(
-          decoration: const BoxDecoration(
-            color: page,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
-          ),
-          child: ListView(
-            controller: controller,
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
-            children: [
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: line,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(rCard),
-                child: AspectRatio(
-                  aspectRatio: 1.8,
-                  child: FoodPhoto(asset: food.image),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      food.name,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        color: brand900,
-                      ),
-                    ),
-                  ),
-                  // 「当季推荐」只在**确实是当季**时才挂，不是每个食材都挂
-                  if (ContentStore.instance.isSeasonal(food))
-                    const _DetailSeasonBadge(),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                _seasonBlurb(food),
-                style: const TextStyle(fontSize: 14, color: muted, height: 1.7),
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final tag in food.tags) _Tag(text: tag),
-                  // 应季指数用后端算出来的真实分值；拿不到就不显示
-                  if (food.seasonScore != null)
-                    _Tag(text: '应季指数 ${food.seasonScore}'),
-                ],
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                '适合做这些菜',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 12),
-              _FoodRecipeSuggestions(food: food),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 食材详情里那句介绍。
-  ///
-  /// 当季 / 不当季说的话不一样 —— 以前不管三七二十一都说「正值当季」。
-  String _seasonBlurb(Food food) {
-    if (ContentStore.instance.isSeasonal(food)) {
-      return '${food.name}正值当季，口感更鲜、运输距离更短。'
-          '适合安排进本周菜单，也可以优先消耗家中库存。';
-    }
-    if (food.season != null && food.season!.isNotEmpty) {
-      return '${food.name}的时令是${food.season}，现在不是它最好的时候 —— '
-          '反季的也能吃，但风味和价格通常不如当季。';
-    }
-    // 后端不返回季节名（只返回应季指数），这时不硬说当季还是反季
-    return '${food.name}的营养数据、可做菜谱都来自清洗后的食材库。';
-  }
+  void openFoodDetail(Food food) => showFoodDetail(context, food);
 
   /// 从“我的”页统计卡进入时，直接展示库存，而不是仍停留在推荐列表。
   void openPantry() {
