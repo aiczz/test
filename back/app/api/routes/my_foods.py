@@ -14,7 +14,7 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.core.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.my_food import MyFoodCreate, MyFoodPublic, MyFoodUpdate
+from app.schemas.my_food import MyFoodCreate, MyFoodPublic, MyFoodUpdate, MyFoodBatchCreate, MyFoodBatchResult
 from app.services import my_food_service
 
 router = APIRouter(prefix="/my-foods", tags=["我的食材"])
@@ -50,6 +50,12 @@ def update_my_food(
     session: Session = Depends(get_session),
 ) -> MyFoodPublic:
     return my_food_service.update_item(session, user.id, item_id, payload)
+
+
+@router.post('/batch', response_model=MyFoodBatchResult, summary='批量加入食材，已有项目不重复累加')
+def add_batch(payload: MyFoodBatchCreate, user: User = Depends(get_current_user),
+              session: Session = Depends(get_session)):
+    return my_food_service.add_batch(session, user.id, payload.food_ids)
 
 
 @router.delete("/{item_id}", status_code=204, summary="移出我的食材")

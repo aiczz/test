@@ -2,6 +2,7 @@
 
 from sqlmodel import Session
 from app.utils.recipe_steps import clean_step_description
+from app.services.ingredient_quality import is_ingredient, positive_amount
 
 from app.core.database import uses_compact_catalog
 from app.models.recipe import Recipe
@@ -20,7 +21,7 @@ from app.schemas.recipe import (
 
 def _fmt_amount(value: float | None) -> str | None:
     """500.0 → "500"；1.5 → "1.5"；None → None（"适量"这类没有数值）。"""
-    if value is None:
+    if not positive_amount(value):
         return None
     number = float(value)
     return str(int(number)) if number.is_integer() else str(number)
@@ -116,6 +117,7 @@ def get_detail(
             food_id=item.food_id,
         )
         for item in recipe_repository.list_ingredients(session, recipe_id)
+        if is_ingredient(item.ingredient_name, item.amount)
     ]
 
     cleaned_steps = [
@@ -133,8 +135,19 @@ def get_detail(
         for index, (step, description) in enumerate(cleaned_steps, start=1)
     ]
 
+    notes = []
+    if not ingredients:
+        notes.append('暂无配料记录，请核对后再准备食材。')
+    elif any(i.amount is None for i in ingredients):
+        notes.append('部分配料用量未注明，购物清单将保留为待确认，不按人数估算克重。')
+    if not steps:
+        notes.append('暂无做法步骤，请勿将本记录当作完整操作指南。')
+    brief = to_brief(recipe)
+    if brief.duration_note:
+        notes.append(brief.duration_note)
     return RecipeDetail(
-        **to_brief(recipe).model_dump(),
+        **brief.model_dump(),
+        quality_notes=notes,
         ingredients=ingredients,
         steps=steps,
         tips=[recipe.tips] if recipe.tips else [],

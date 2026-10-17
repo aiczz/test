@@ -38,6 +38,7 @@ STATE_TABLES = {
     "user_preferences",
     "login_logs",
     "favorites",
+    "recipe_feedback",
     "my_foods",
     "menu_plans",
     "menu_plan_items",

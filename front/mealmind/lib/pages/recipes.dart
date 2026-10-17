@@ -1275,9 +1275,12 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                   const SizedBox(height: 24),
 
                   // ---- 所需食材 ----
-                  if (recipe.durationNote.isNotEmpty) ...[
+                  if (recipe.qualityNotes.isNotEmpty ||
+                      recipe.durationNote.isNotEmpty) ...[
                     Text(
-                      recipe.durationNote,
+                      recipe.qualityNotes.isNotEmpty
+                          ? recipe.qualityNotes.join('\n')
+                          : recipe.durationNote,
                       style: const TextStyle(
                         fontSize: 11,
                         color: muted,

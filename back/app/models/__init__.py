@@ -6,6 +6,7 @@
 
 from app.models.ai_cache import AiDailyCache
 from app.models.favorite import Favorite
+from app.models.recipe_feedback import RecipeFeedback
 from app.models.food import Food, FoodSeason
 from app.models.login_log import LoginLog
 from app.models.menu import MenuPlan, MenuPlanItem
@@ -18,6 +19,7 @@ from app.models.verification_code import VerificationCode
 __all__ = [
     "AiDailyCache",
     "Favorite",
+    "RecipeFeedback",
     "Food",
     "FoodSeason",
     "LoginLog",

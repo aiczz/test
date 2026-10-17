@@ -65,6 +65,16 @@ class Food {
   );
 
   /// 在【当前季节】是不是时令。
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'image': image,
+    'category': category,
+    'tags': tags,
+    'season': season,
+    'season_score': seasonScore,
+  };
+
   ///
   /// 判断刻意保守：「全年」供应的小白菜、鸡蛋不算时令 ——
   /// 时令的意思是「当季特有」，把全年货也算进来，这个分类就没有区分度了。
@@ -98,6 +108,7 @@ class Recipe {
   final List<String> steps; // 做法步骤
   final String difficulty; // 简单 / 中等
   final String durationNote;
+  final List<String> qualityNotes;
 
   const Recipe({
     required this.id,
@@ -111,6 +122,7 @@ class Recipe {
     this.steps = const <String>[],
     this.difficulty = '简单',
     this.durationNote = '',
+    this.qualityNotes = const [],
   });
 
   factory Recipe.fromJson(Map<String, dynamic> j) => Recipe(
@@ -125,7 +137,23 @@ class Recipe {
     steps: _strList(j['steps']),
     difficulty: j['difficulty'] as String? ?? '简单',
     durationNote: j['duration_note'] as String? ?? '',
+    qualityNotes: _strList(j['quality_notes']),
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'image': image,
+    'desc': desc,
+    'time': time,
+    'people': people,
+    'tags': tags,
+    'ingredients': ingredients,
+    'steps': steps,
+    'difficulty': difficulty,
+    'duration_note': durationNote,
+    'quality_notes': qualityNotes,
+  };
 
   /// 一行元信息：「时长 · 份量」。
   ///

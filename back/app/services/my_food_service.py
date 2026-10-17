@@ -42,6 +42,19 @@ def list_items(session: Session, user_id: int) -> list[MyFoodPublic]:
     ]
 
 
+def add_batch(session, user_id, food_ids):
+    """Validate the whole batch first; repeating the action never increments stock."""
+    ids = list(dict.fromkeys(food_ids))
+    if any(food_repository.get(session, food_id) is None for food_id in ids):
+        raise HTTPException(status_code=404, detail='部分食材已不存在，请刷新后重试；本次未添加任何食材')
+    existing = {r.food_id for r in my_food_repository.list_for_user(session, user_id)}
+    added = [i for i in ids if i not in existing]
+    for food_id in added:
+        session.add(MyFood(user_id=user_id, food_id=food_id, amount=1, unit='份'))
+    session.commit()
+    return {'added_count': len(added), 'existing_count': len(ids) - len(added)}
+
+
 def add_item(
     session: Session, user_id: int, payload: MyFoodCreate
 ) -> MyFoodPublic:

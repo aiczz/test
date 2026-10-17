@@ -54,3 +54,9 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def audit(session):
+    # Ingredient audit for callers; preserve the existing duration CLI.
+    from scripts.audit_recipe_ingredients import audit as audit_ingredients
+    return audit_ingredients(session)

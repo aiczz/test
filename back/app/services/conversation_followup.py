@@ -3,11 +3,12 @@ from dataclasses import dataclass, field
 import re
 import math
 
-from app.repositories import recipe_repository, food_repository
+from app.repositories import recipe_repository, food_repository, my_food_repository
 from app.repositories.catalog_insight_repository import food_insights
 from app.services import recipe_service, food_service
 from app.schemas.home import HomeFoodItem
 from app.services.chat_context import number
+from app.services.ingredient_quality import stock_requirements
 
 
 @dataclass
@@ -18,6 +19,7 @@ class Followup:
     clarification: bool = False
     detail_kind: str | None = None
     foods: list[HomeFoodItem] = field(default_factory=list)
+    missing_only: bool = False
 
 
 _GROUP_HEADERS = {'蔬菜类', '蛋白质类', '碳水主食类', '水果类', '主食类', '调料类', '调味品类'}
@@ -47,16 +49,23 @@ def ingredient_text(detail) -> str:
     return '\n'.join(parts) or '菜谱暂无配料记录，不能可靠列出所需食材。'
 
 
-def ingredient_cards(session, recipe_ids) -> Followup:
+def ingredient_cards(session, recipe_ids, *, user_id=None, missing_only=False) -> Followup:
+    details = [d for i in recipe_ids if (d := recipe_service.get_detail(session, i)) is not None]
+    if missing_only and user_id is None:
+        return Followup('recipe_detail', answer='请先登录，我才能核对你的实际库存并列出缺少的食材。', clarification=True)
     catalogue, _ = food_repository.list_foods(session, limit=2000)
+    requirements = None
+    if missing_only:
+        requirements = stock_requirements(details, my_food_repository.list_for_user(session, user_id),
+                                          {f.id: f.name for f in catalogue})
+    needed = {r['name'] for r in requirements if r['status'] != 'available'} if requirements is not None else None
     by_id = {food.id: food for food in catalogue}
     by_name = {food.name.strip(): food for food in catalogue}
     cards, unmatched, seen = [], [], set()
-    for recipe_id in recipe_ids:
-        detail = recipe_service.get_detail(session, recipe_id)
-        if detail is None:
-            continue
+    for detail in details:
         for ingredient in actual_ingredients(detail):
+            if needed is not None and ingredient.name not in needed:
+                continue
             food = by_id.get(ingredient.food_id) or by_name.get(ingredient.name.strip())
             if food is None:
                 if ingredient.name not in unmatched:
@@ -68,17 +77,65 @@ def ingredient_cards(session, recipe_ids) -> Followup:
     answer = f'下面是刚才配料清单中匹配到的 {len(cards)} 种食材，已去重，点击“加入我的食材”即可添加。' if cards else '刚才的配料暂未匹配到可添加的食材记录。'
     if unmatched:
         answer += '\n尚未匹配到食材卡片：' + '、'.join(unmatched) + '。'
-    answer += '\n这里仅展示清单，尚未替你添加库存；实际用量以原菜谱为准。'
-    return Followup('ingredient_cards', list(recipe_ids), answer, foods=cards)
+    if requirements is not None:
+        def describe(item):
+            amount = item['remaining']
+            return item['name'] + (f'（还需{amount:g}{item["unit"]}）' if amount else '（用量待确认）')
+        missing = [describe(r) for r in requirements if r['status'] == 'missing']
+        uncertain = [r['name'] for r in requirements if r['status'] == 'confirm']
+        available = sum(r['status'] == 'available' for r in requirements)
+        answer = '按刚才菜谱的完整配料与实际登记库存核对：\n需要补充：' + ('、'.join(missing) or '没有已确认缺少的项目')
+        if uncertain:
+            answer += '\n已登记但数量或单位待确认：' + '、'.join(uncertain)
+        answer += f'\n已按明确数量抵扣 {available} 项；下方仅列需补充或待确认的食材。'
+        if unmatched:
+            answer += '\n尚未建档的配料：' + '、'.join(unmatched)
+    answer += '\n这里仅展示清单，尚未替你添加库存；实际用量以原菜谱为准，未按人数换算。'
+    return Followup('ingredient_cards', list(recipe_ids), answer, foods=cards, missing_only=missing_only)
 
 
-def resolve(session, payload, named_food_ids=()) -> Followup | None:
+def resolve(session, payload, named_food_ids=(), *, user_id=None) -> Followup | None:
     state = payload.conversation_state
     message = payload.message.strip()
     recipe_ids = list(state.last_recommended_recipe_ids)
     food_ids = list(state.last_recommended_food_ids)
     focus = 'recipes' if state.active_topic == 'recipe_ingredients' else state.last_recommendation_kind
     ordinal = re.search(r'第\s*([0-9]+|[一二两三四五六七八九十]+)\s*(道|个|种|样)', message)
+    known = {r.id: r for r in recipe_repository.list_by_ids(session, recipe_ids)} if recipe_ids else {}
+    named_recipes = [i for i in recipe_ids if i in known and known[i].name in message]
+    replacement = bool(re.search(r'换掉|替换|换成|换一道|不喜欢.*(?:换|别的)', message))
+    if replacement and (named_recipes or (ordinal and ordinal[2] == '道') or
+                        (focus == 'recipes' and re.search(r'这道|那道|它|换一道', message))) and not re.search(r'全部换|整组换|换一批', message):
+        references = list(re.finditer(r'第\s*([0-9]+|[一二两三四五六七八九十]+)\s*道', message))
+        active = []
+        for reference in references:
+            before = message[max(0, reference.start() - 8):reference.start()]
+            after = re.split(r'[，,。；;]', message[reference.end():], maxsplit=1)[0]
+            if re.search(r'(?:不要|不用|别|不)(?:替换|换掉|换)\s*$', before) or re.match(r'\s*(?:先)?(?:不要换|别换|不换|保留)', after):
+                continue
+            active.append(reference)
+        if references:
+            if len(active) != 1:
+                return Followup('recipe_replace', answer='请明确本次要替换哪一道；可以说“第一道保留，只换第二道”。', clarification=True)
+            ordinal = active[0]
+        selected = named_recipes or list(state.focused_recipe_ids or recipe_ids)
+        if ordinal:
+            index = int(number(ordinal[1])) - 1
+            if not 0 <= index < len(recipe_ids):
+                return Followup('recipe_replace', answer=f'上一轮共有 {len(recipe_ids)} 道菜，请说明要替换第几道。', clarification=True)
+            selected = [recipe_ids[index]]
+        if len(selected) != 1:
+            return Followup('recipe_replace', answer='要替换哪一道菜？可以说“第二道换成不辣的，其他不变”。', clarification=True)
+        return Followup('recipe_replace', selected)
+    missing_query = bool(re.search(r'缺(?:少|的|哪些|什么|啥)|还缺|补买|补购|还要买|还需要买', message))
+    if missing_query and recipe_ids:
+        selected = named_recipes or list(state.focused_recipe_ids or recipe_ids)
+        if ordinal:
+            index = int(number(ordinal[1])) - 1
+            if not 0 <= index < len(recipe_ids):
+                return Followup('recipe_detail', answer=f'上一轮共有 {len(recipe_ids)} 道菜，请重新说明序号。', clarification=True)
+            selected = [recipe_ids[index]]
+        return ingredient_cards(session, selected, user_id=user_id, missing_only=True)
     ingredient_query = bool(re.search(
         r'(?:需要|要用|要哪些|要什么|要啥|用到|用什么|准备|买|采购|还缺).*(?:食材|材料|配料)|(?:食材|材料|配料)(?:清单|有哪些|是什么|呢)|(?:第.*道|这道菜|这几道菜|这些菜).*的(?:食材|材料|配料)|要准备什么|要买(?:什么|啥)|^(?:食材|配料|材料)[呢？?。]*$', message))
     ingredient_query = ingredient_query or bool(recipe_ids and re.fullmatch(
@@ -89,16 +146,22 @@ def resolve(session, payload, named_food_ids=()) -> Followup | None:
         focus == 'recipes' and bool(re.search(r'食材|配料|材料', message)))
     display = bool(re.search(r'展示|显示|列出|列出来|给我看看|看一下|查看|卡片|加入|添加|放进|存到|收进', message))
     food_reference = bool(re.search(r'这些|这几样|上述|上面的|刚才的|它们|食材|配料|材料', message))
-    if ingredient_context and display and food_reference and not re.search(r'重新推荐|另外推荐|换一批|新的食材', message):
+    short_message = re.sub(r'[\s，,。.!！?？]', '', message)
+    image_preview = bool(re.fullmatch(
+        r'(?:(?:能不能|可以|能)?(?:给我|让我)?(?:看一下|看看|预览一下|预览|展示一下|展示|显示|发一下|发|看)?'
+        r'(?:这些|上面的|刚才的)?(?:食材|配料)?的?(?:图片|照片|配图|图|卡片)(?:呢|吗|吧)?'
+        r'|有(?:图片|照片|配图|图)(?:吗)?'
+        r'|(?:能不能|可以|能)?预览(?:这些|上面的|刚才的)?(?:食材|配料)(?:吗)?)', short_message))
+    if ingredient_context and ((display and food_reference) or image_preview) and not re.search(r'重新推荐|另外推荐|换一批|新的食材', message):
         sources = state.ingredient_recipe_ids or state.focused_recipe_ids or recipe_ids
         if sources:
-            return ingredient_cards(session, sources)
+            return ingredient_cards(session, sources, user_id=user_id, missing_only=state.ingredient_view == 'missing')
+    if image_preview and not ingredient_context:
+        return Followup('recipe_detail', answer='你想看哪些食材或哪道菜的图片？可以先查看菜谱配料，再说“展示这些食材的图片”。', clarification=True)
     if ordinal and re.fullmatch(r'第\s*(?:[0-9]+|[一二两三四五六七八九十]+)\s*道[呢？?。]*', message):
         ingredient_query = state.last_recipe_detail == 'ingredients'
         steps_query = state.last_recipe_detail == 'steps'
     explicit_recipes = bool(re.search(r'菜谱|这几道菜|这些菜|上面的菜|刚才的菜', message)) or bool(ordinal and ordinal[2] == '道')
-    known = {r.id: r for r in recipe_repository.list_by_ids(session, recipe_ids)} if recipe_ids else {}
-    named_recipes = [i for i in recipe_ids if i in known and known[i].name in message]
     # Required ingredients are a recipe-detail question, never a fresh seasonal-food recommendation.
     explicit_food_cooking = bool(re.search(r'这些食材|这些配料|这些材料|这几样', message))
     if ingredient_query or (steps_query and not explicit_food_cooking and (focus == 'recipes' or explicit_recipes or named_recipes)):

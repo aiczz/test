@@ -15,6 +15,7 @@ import '../widgets/ai_compose_sheet.dart';
 import '../widgets/dish_photo.dart';
 import '../widgets/food_photo.dart';
 import '../widgets/add_food_to_pantry.dart';
+import '../widgets/recommendation_actions.dart';
 import 'foods.dart' show showFoodDetail;
 import 'recipes.dart' show openRecipeDetail;
 
@@ -57,6 +58,8 @@ class _Item {
   /// 降级的具体原因（超时？连不上？后端 500？）—— 直接显示给用户，
   /// 比笼统的「后端未连接」有用得多。
   final String? fallbackReason;
+  final String? retryPrompt;
+  final String? source;
 
   _Item.user(this.text)
     : kind = _Kind.user,
@@ -66,6 +69,8 @@ class _Item {
       foods = const <Food>[],
       localFallback = false,
       fallbackReason = null,
+      retryPrompt = null,
+      source = null,
       fromBackend = true; // 用户自己的话无所谓降级
 
   /// 这条回复附带的推荐菜（后端会给，最多 3 道）。
@@ -88,6 +93,8 @@ class _Item {
     this.foods = const <Food>[],
     this.localFallback = false,
     this.fallbackReason,
+    this.retryPrompt,
+    this.source,
   }) : kind = _Kind.ai,
        steps = const <AgentStep>[],
        running = false,
@@ -99,10 +106,41 @@ class _Item {
       recipes = const <Recipe>[],
       foods = const <Food>[],
       localFallback = false,
-      fallbackReason = null;
+      fallbackReason = null,
+      retryPrompt = null,
+      source = null;
 
   /// 轨迹用：这份轨迹是不是后端返回的真实轨迹
   final bool fromBackend;
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind.name,
+    'text': text,
+    'recipes': recipes.map((r) => r.toJson()).toList(),
+    'foods': foods.map((f) => f.toJson()).toList(),
+    'fallback': localFallback,
+    'reason': fallbackReason,
+    'retry': retryPrompt,
+    'source': source,
+  };
+
+  static _Item fromJson(Map<String, dynamic> json) => json['kind'] == 'user'
+      ? _Item.user(json['text'] as String? ?? '')
+      : _Item.ai(
+          json['text'] as String? ?? '',
+          recipes: ((json['recipes'] as List?) ?? [])
+              .whereType<Map<String, dynamic>>()
+              .map(Recipe.fromJson)
+              .toList(),
+          foods: ((json['foods'] as List?) ?? [])
+              .whereType<Map<String, dynamic>>()
+              .map(Food.fromJson)
+              .toList(),
+          localFallback: json['fallback'] == true,
+          fallbackReason: json['reason'] as String?,
+          retryPrompt: json['retry'] as String?,
+          source: json['source'] as String?,
+        );
 }
 
 class AiPage extends StatefulWidget {
@@ -141,6 +179,42 @@ class _AiPageState extends State<AiPage> {
   /// 和 _shownRecipeIds 分开：食材和菜品是两套 id 空间，混用会误排除。
   CancelToken? _chatCancel;
   int _requestGeneration = 0;
+  String? _pendingPrompt;
+  bool _usingAi = true;
+
+  Future<void> _persistSession(String scope) async {
+    if (scope != _currentScope) return;
+    final messages = _items.where((i) => i.kind != _Kind.trace).toList();
+    try {
+      await ChatSessionStore.save(scope, {
+        'state': _conversationState,
+        'effective': _effectiveContext,
+        'intent': _lastIntent,
+        'recipes': _shownRecipeIds.toList(),
+        'foods': _shownFoodIds.toList(),
+        'categories': _excludedCategories,
+        'messages': messages
+            .skip(messages.length > 20 ? messages.length - 20 : 0)
+            .map((i) => i.toJson())
+            .toList(),
+      });
+    } catch (_) {
+      /* Keep the current tab usable if local storage is full. */
+    }
+  }
+
+  void _useRules() {
+    if (!_busy || !_usingAi) return;
+    final prompt = _pendingPrompt;
+    if (prompt == null) return;
+    _requestGeneration++;
+    _chatCancel?.cancel('改用规则处理');
+    setState(() {
+      _busy = false;
+      if (_items.isNotEmpty && _items.last.running) _items.removeLast();
+    });
+    _send(prompt, useAi: false, appendUser: false);
+  }
 
   void _stopWaiting() {
     _requestGeneration++;
@@ -150,8 +224,9 @@ class _AiPageState extends State<AiPage> {
       if (_items.isNotEmpty) {
         _items[_items.length - 1] = _Item.trace(const [], false);
       }
-      _items.add(_Item.ai('已停止等待。你可以修改条件后重新提问。'));
+      _items.add(_Item.ai('已停止等待。可以重试，或改用规则处理。', retryPrompt: _pendingPrompt));
     });
+    _persistSession(_currentScope);
   }
 
   final Set<int> _shownFoodIds = <int>{};
@@ -191,12 +266,25 @@ class _AiPageState extends State<AiPage> {
     _excludedCategories = ((saved?['categories'] as List?) ?? [])
         .whereType<String>()
         .toList();
+    final messages = ((saved?['messages'] as List?) ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    if (messages.isNotEmpty) {
+      _items
+        ..clear()
+        ..addAll(messages.map(_Item.fromJson));
+    }
     setState(() {});
+    if (messages.isNotEmpty) _scrollToBottom();
   }
 
   void _accountChanged() {
     if (!mounted || _sessionScope == _currentScope) return;
+    _requestGeneration++;
+    _chatCancel?.cancel('账号已切换');
     setState(() {
+      _busy = false;
+      _pendingPrompt = null;
       _conversationState = null;
       _effectiveContext = null;
       _excludedCategories = <String>[];
@@ -371,18 +459,7 @@ class _AiPageState extends State<AiPage> {
       };
       _excludedCategories = noSoup ? ['汤羹'] : <String>[];
     });
-    try {
-      await ChatSessionStore.save(scope, <String, dynamic>{
-        'state': _conversationState,
-        'effective': _effectiveContext,
-        'intent': _lastIntent,
-        'recipes': _shownRecipeIds.toList(),
-        'foods': _shownFoodIds.toList(),
-        'categories': _excludedCategories,
-      });
-    } catch (_) {
-      // Keep in-tab edits when storage is unavailable.
-    }
+    await _persistSession(scope);
     if (!mounted || scope != _currentScope) return;
     await _send('按修改后的条件重新推荐晚餐，其他条件不变');
   }
@@ -449,16 +526,30 @@ class _AiPageState extends State<AiPage> {
   }
 
   /// Show cards only after the backend has resolved this message's intent.
-  Future<void> _send(String raw) async {
+  Future<void> _send(
+    String raw, {
+    bool useAi = true,
+    bool appendUser = true,
+  }) async {
     final text = raw.trim();
     if (text.isEmpty || _busy) return;
 
     final requestScope = _currentScope;
     final generation = ++_requestGeneration;
+    setState(() => _busy = true);
+    await _restoreSession();
+    if (!mounted ||
+        generation != _requestGeneration ||
+        requestScope != _currentScope) {
+      return;
+    }
+    _pendingPrompt = text;
+    _usingAi = useAi;
+    _lastChatError = null;
     _chatCancel = CancelToken();
     _input.clear();
     setState(() {
-      _items.add(_Item.user(text));
+      if (appendUser) _items.add(_Item.user(text));
       _busy = true;
     });
     _scrollToBottom();
@@ -471,7 +562,7 @@ class _AiPageState extends State<AiPage> {
         ], true),
       ),
     );
-    final reply = await _askBackend(text, useAi: true);
+    final reply = await _askBackend(text, useAi: useAi);
     if (!mounted ||
         generation != _requestGeneration ||
         _currentScope != requestScope) {
@@ -498,26 +589,6 @@ class _AiPageState extends State<AiPage> {
       for (final food in reply.foods) {
         final id = int.tryParse(food.id);
         if (id != null) _shownFoodIds.add(id);
-      }
-    }
-
-    if (reply != null) {
-      try {
-        await ChatSessionStore.save(_currentScope, <String, dynamic>{
-          'state': _conversationState,
-          'effective': _effectiveContext,
-          'intent': _lastIntent,
-          'recipes': _shownRecipeIds.toList(),
-          'foods': _shownFoodIds.toList(),
-          'categories': _excludedCategories,
-        });
-      } catch (_) {
-        // Storage unavailable: keep this tab's state and the successful reply.
-      }
-      if (!mounted ||
-          generation != _requestGeneration ||
-          _currentScope != requestScope) {
-        return;
       }
     }
 
@@ -563,10 +634,17 @@ class _AiPageState extends State<AiPage> {
               : const <Food>[],
           localFallback: reply == null,
           fallbackReason: reply == null ? _lastChatError : null,
+          retryPrompt: reply == null ? text : null,
+          source: reply == null
+              ? null
+              : reply.fromAi
+              ? 'AI 辅助'
+              : '规则 / 数据查询',
         ),
       );
       _busy = false;
     });
+    await _persistSession(requestScope);
     _scrollToBottom();
   }
 
@@ -583,14 +661,14 @@ class _AiPageState extends State<AiPage> {
   ///   后端 500，界面一律显示「后端未连接」—— 那句话经常是错的，
   ///   而且把排查方向带偏（明明连得上，只是模型这一问慢了点）。
   Future<AiChatResult?> _askBackend(String message, {bool useAi = true}) async {
-    if (widget.request != null) return widget.request!(message, useAi);
-    if (!BackendStatus.instance.online) {
+    if (widget.request == null && !BackendStatus.instance.online) {
       _lastChatError = '后端未连接（${BackendStatus.instance.apiBase}）';
       return null;
     }
     final scope = _currentScope;
     final cancel = _chatCancel;
     try {
+      if (widget.request != null) return await widget.request!(message, useAi);
       await _restoreSession();
       if (!mounted ||
           scope != _currentScope ||
@@ -701,17 +779,33 @@ class _AiPageState extends State<AiPage> {
                   ),
                   const SizedBox(height: 18),
                   for (final item in _items) ...[
-                    _ItemView(item: item),
+                    _ItemView(
+                      item: item,
+                      busy: _busy,
+                      onRetry: (text, useAi) =>
+                          _send(text, useAi: useAi, appendUser: false),
+                    ),
                     const SizedBox(height: 12),
                   ],
                 ],
               ),
             ),
             if (_busy)
-              TextButton.icon(
-                onPressed: _stopWaiting,
-                icon: const Icon(Icons.stop_circle_outlined, size: 16),
-                label: const Text('停止等待'),
+              Wrap(
+                alignment: WrapAlignment.center,
+                children: [
+                  TextButton.icon(
+                    onPressed: _stopWaiting,
+                    icon: const Icon(Icons.stop_circle_outlined, size: 16),
+                    label: const Text('停止等待'),
+                  ),
+                  if (_usingAi)
+                    TextButton.icon(
+                      onPressed: _useRules,
+                      icon: const Icon(Icons.bolt, size: 16),
+                      label: const Text('改用规则处理'),
+                    ),
+                ],
               ),
             _InputBar(
               controller: _input,
@@ -853,8 +947,14 @@ class _Header extends StatelessWidget {
 
 class _ItemView extends StatelessWidget {
   final _Item item;
+  final bool busy;
+  final void Function(String, bool) onRetry;
 
-  const _ItemView({required this.item});
+  const _ItemView({
+    required this.item,
+    required this.busy,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -902,6 +1002,28 @@ class _ItemView extends StatelessWidget {
                   item.text,
                   style: const TextStyle(fontSize: 14, color: ink, height: 1.7),
                 ),
+                if (item.source != null)
+                  Text(
+                    item.source!,
+                    style: const TextStyle(fontSize: 10.5, color: muted),
+                  ),
+                if (item.retryPrompt != null)
+                  Wrap(
+                    children: [
+                      TextButton(
+                        onPressed: busy
+                            ? null
+                            : () => onRetry(item.retryPrompt!, true),
+                        child: const Text('重试'),
+                      ),
+                      TextButton(
+                        onPressed: busy
+                            ? null
+                            : () => onRetry(item.retryPrompt!, false),
+                        child: const Text('改用规则处理'),
+                      ),
+                    ],
+                  ),
                 if (item.localFallback) ...[
                   const SizedBox(height: 6),
                   Text(
@@ -913,6 +1035,18 @@ class _ItemView extends StatelessWidget {
                 ],
                 if (item.recipes.isNotEmpty) ...[
                   const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      final added = TodayMenuStore.instance.addAll(
+                        item.recipes,
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('新增 $added 道到今日菜单，已有菜品保持不变')),
+                      );
+                    },
+                    icon: const Icon(Icons.playlist_add, size: 17),
+                    label: const Text('整组加入今日菜单'),
+                  ),
                   for (final recipe in item.recipes) ...[
                     _MiniRecipeCard(recipe: recipe),
                     const SizedBox(height: 10),
@@ -921,6 +1055,7 @@ class _ItemView extends StatelessWidget {
                 // ★ 推荐食材的卡片 —— 和菜谱卡片是并列的两条链路
                 if (item.foods.isNotEmpty) ...[
                   const SizedBox(height: 12),
+                  BatchFoodButton(foods: item.foods),
                   for (final food in item.foods) ...[
                     _MiniFoodCard(food: food),
                     const SizedBox(height: 10),
@@ -1077,6 +1212,7 @@ class _MiniRecipeCard extends StatelessWidget {
                       recipe.metaLine,
                       style: const TextStyle(fontSize: 11.5, color: muted),
                     ),
+                    RecipeFeedbackButton(recipeId: recipe.id),
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,

@@ -54,6 +54,7 @@ class AiConversationState(BaseModel):
     last_recipe_detail: Literal['ingredients', 'steps'] | None = None
     active_topic: Literal['recipes', 'foods', 'recipe_ingredients'] | None = None
     ingredient_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
+    ingredient_view: Literal['all', 'missing'] = 'all'
     last_recommended_food_ids: list[int] = Field(default_factory=list, max_length=200)
     last_recommended_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
     history: list[AiChatMessage] = Field(default_factory=list, max_length=8)
@@ -103,6 +104,15 @@ class AiMenuSummary(BaseModel):
     summary: str
 
 
+class RecipeFeedbackRequest(BaseModel):
+    value: Literal['like', 'dislike', 'neutral']
+    reason: Literal['口味不合', '食材不方便', '太费时', '其他'] | None = None
+
+
+class RecipeFeedbackPublic(RecipeFeedbackRequest):
+    recipe_id: int
+
+
 class AiChatResponse(BaseModel):
     requested_count: int | None = None
     returned_count: int = 0
@@ -149,6 +159,8 @@ class AiChatResponse(BaseModel):
 
 
 class AiRecommendRequest(AiContext):
+    excluded_categories: list[str] = []
+    require_known_time: bool = False
     meal_goal: Literal["balanced", "quick", "fewer_purchases", "pantry"] = "balanced"
     """配菜请求。
 

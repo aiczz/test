@@ -422,6 +422,36 @@ class BackendApi {
     pantryChanges.value++;
   }
 
+  Future<Map<String, dynamic>> addMyFoodsBatch(List<int> foodIds) async {
+    final result = await _dio.post<Map<String, dynamic>>(
+      '/api/my-foods/batch',
+      data: {'food_ids': foodIds.toSet().toList()},
+      options: _auth,
+    );
+    pantryChanges.value++;
+    return result.data ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> fetchRecipeFeedback() async {
+    final result = await _dio.get<List<dynamic>>(
+      '/api/ai/feedback',
+      options: _auth,
+    );
+    return (result.data ?? []).whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<void> setRecipeFeedback(
+    int recipeId,
+    String value,
+    String? reason,
+  ) async {
+    await _dio.put<void>(
+      '/api/ai/feedback/$recipeId',
+      data: {'value': value, 'reason': reason},
+      options: _auth,
+    );
+  }
+
   /// GET /api/favorites —— 需要登录，只取总数（「我的」页的统计数字用）
   Future<int> fetchFavoriteCount() async {
     final res = await _dio.get<Map<String, dynamic>>(
@@ -826,6 +856,7 @@ class BackendApi {
   );
 
   static Recipe _recipeFromJson(Map<String, dynamic> json) => Recipe(
+    qualityNotes: _strListFrom(json['quality_notes']),
     durationNote: json['duration_note'] as String? ?? '',
     id: '${json['id']}',
     name: json['name'] as String? ?? '',
@@ -865,6 +896,10 @@ class BackendApi {
     final name = json['name']?.toString() ?? '';
     final amount = json['amount']?.toString() ?? '';
     final unit = json['unit']?.toString() ?? '';
+    final number = double.tryParse(amount);
+    if (number == null || !number.isFinite || number <= 0) {
+      return '$name ${const {'适量', '少许', '若干'}.contains(unit) ? unit : '用量未注明'}';
+    }
     final quantity = '$amount$unit';
     return quantity.isEmpty ? name : '$name $quantity';
   }

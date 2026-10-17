@@ -29,6 +29,15 @@ class MyFoodUpdate(BaseModel):
     expire_hint: str | None = Field(default=None, max_length=64)
 
 
+class MyFoodBatchCreate(BaseModel):
+    food_ids: list[int] = Field(min_length=1, max_length=200)
+
+
+class MyFoodBatchResult(BaseModel):
+    added_count: int
+    existing_count: int
+
+
 class MyFoodPublic(BaseModel):
     id: int
     food_id: int | None = None

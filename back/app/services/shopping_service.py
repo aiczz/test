@@ -22,6 +22,7 @@ from app.schemas.shopping import (
     ShoppingItemUpdate,
     ShoppingListResponse,
 )
+from app.services.ingredient_quality import is_ingredient, positive_amount, normalize_unit
 
 # 类别展示顺序。"其他" 兜底放最后。
 _CATEGORY_ORDER = ["蔬菜", "肉蛋", "水产", "豆制品", "主食", "调味", "其他"]
@@ -89,10 +90,12 @@ def generate(
     merged: dict[tuple, dict] = {}
     for plan_item in plan_items:
         for ingredient in recipe_repository.list_ingredients(session, plan_item.recipe_id):
+            if not is_ingredient(ingredient.ingredient_name, ingredient.amount):
+                continue
             unit, scale = normalize_unit(ingredient.unit or "份")
             identity = ("id", ingredient.food_id) if ingredient.food_id else ("name", ingredient.ingredient_name.strip())
             key = (identity, unit)
-            amount = ingredient.amount * scale if ingredient.amount is not None and ingredient.amount > 0 else None
+            amount = ingredient.amount * scale if positive_amount(ingredient.amount) else None
             if key not in merged:
                 merged[key] = {"food_id": ingredient.food_id, "name": ingredient.ingredient_name,
                                "amount": amount, "unit": unit, "category": ingredient.category or "其他"}
@@ -102,7 +105,7 @@ def generate(
     if payload.subtract_my_foods:
         stock: dict[tuple, float] = {}
         for item in my_food_repository.list_for_user(session, user_id):
-            if item.amount <= 0 or item.unit.strip() in {"份", "适量", "少许", "少量"}:
+            if not positive_amount(item.amount) or item.unit.strip() in {"份", "适量", "少许", "少量"}:
                 continue
             unit, scale = normalize_unit(item.unit)
             identity = ("id", item.food_id) if item.food_id else ("name", (item.custom_name or "").strip())
@@ -167,11 +170,3 @@ def update_item(
         )
     item.checked = payload.checked
     return _to_public(shopping_repository.save_item(session, item))
-
-
-def normalize_unit(unit: str) -> tuple[str, float]:
-    units = {"g": ("克", 1), "克": ("克", 1), "kg": ("克", 1000), "千克": ("克", 1000),
-             "公斤": ("克", 1000), "斤": ("克", 500), "毫升": ("毫升", 1), "ml": ("毫升", 1),
-             "升": ("毫升", 1000), "l": ("毫升", 1000)}
-    value = unit.strip().lower()
-    return units.get(value, (value or "份", 1))

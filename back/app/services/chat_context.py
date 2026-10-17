@@ -97,6 +97,12 @@ def edits(message: str, state: AiConversationState, terms: list[str]) -> AiConve
         state.preferences = [p for p in (state.preferences or []) if p != "清淡"]
     elif "清淡" in message:
         state.preferences = list(dict.fromkeys([*(state.preferences or []), "清淡"]))
+    if re.search(r'取消不辣|取消不吃辣|可以吃辣|恢复辣味', message):
+        state.avoid_added = [a for a in state.avoid_added if a not in {'辛辣', '辣'}]
+        state.avoid_removed = list(dict.fromkeys([*state.avoid_removed, '辛辣', '辣']))
+    elif re.search(r'不辣|不要辣|别放辣|不能吃辣|不吃辣', message):
+        state.avoid_added = list(dict.fromkeys([*state.avoid_added, '辛辣']))
+        state.avoid_removed = [a for a in state.avoid_removed if a != '辛辣']
     soup_removed = any(t in message for t in ("取消不喝汤", "取消不要汤", "可以喝汤", "汤可以", "恢复汤"))
     if soup_removed:
         state.excluded_categories = [c for c in state.excluded_categories if c != "汤羹"]

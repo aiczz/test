@@ -15,6 +15,28 @@ Recipe dish(String id, {String image = 'assets/images/tomato-egg.jpg'}) =>
     );
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+  test('batch addition deduplicates, preserves existing menu, and persists quality notes', () async {
+    final store = TodayMenuStore(scopeProvider: () => 'batch-test');
+    await store.load();
+    store.add(dish('1'));
+    final recipe = Recipe(
+      id: '2',
+      name: '菜2',
+      image: 'assets/images/tomato-egg.jpg',
+      desc: '',
+      time: '',
+      people: '',
+      tags: const [],
+      qualityNotes: const ['用量待确认'],
+    );
+    expect(store.addAll([dish('1'), recipe, recipe, dish('3', image: '')]), 1);
+    expect(store.items.map((r) => r.id), ['1', '2']);
+    expect(store.addAll([recipe]), 0);
+    await store.flush();
+    await store.load();
+    expect(store.items.last.qualityNotes, ['用量待确认']);
+    store.dispose();
+  });
   test(
     'unillustrated recipes cannot enter or replace a visible menu',
     () async {

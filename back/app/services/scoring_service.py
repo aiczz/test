@@ -697,6 +697,7 @@ def score_dishes(
     candidate_ids: list[int] | None = None,
     rejected_names: list[str] | None = None,
     health_goal: HealthGoal | None = None,
+    user_id: int | None = None,
 ) -> list[ScoredItem]:
     """按综合打分挑菜。
 
@@ -708,7 +709,10 @@ def score_dishes(
     而不必再跑一遍打分。
     """
     season_name = f"{season_char_of(month)}季"
-    exclude_ids = exclude_ids or set()
+    from app.services import recipe_feedback_service
+    feedback = recipe_feedback_service.list_items(session, user_id)
+    liked = {r.recipe_id for r in feedback if r.rating > 0}
+    exclude_ids = (exclude_ids or set()) | {r.recipe_id for r in feedback if r.rating < 0}
     goal_keywords = effect_keywords_of(health_goal)
 
     if candidate_ids is not None:
@@ -894,9 +898,13 @@ def score_dishes(
             # 时长没依据、又明显超预算的：降权而不是删掉
             - overtime_penalty
         )
+        if recipe_id in liked:
+            quality += 0.6
         score = quality + W_DAILY * salt
 
         highlights: list[str] = []
+        if recipe_id in liked:
+            highlights.append('你喜欢的菜')
         if goal_score > 0 and health_goal is not None:
             highlights.append(health_goal.name)
         if season_fit >= 0.5:

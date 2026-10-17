@@ -7,6 +7,7 @@ from sqlmodel import Session, col, select
 from app.core.security import create_access_token, hash_password, verify_password
 from app.data.seed import ADMIN_USERNAME, DEMO_USERNAME
 from app.models.favorite import Favorite
+from app.models.recipe_feedback import RecipeFeedback
 from app.models.login_log import LoginLog
 from app.models.menu import MenuPlan, MenuPlanItem
 from app.models.my_food import MyFood
@@ -355,6 +356,7 @@ def delete_account(session: Session, user: User) -> None:
         session.exec(delete(MenuPlan).where(MenuPlan.user_id == user_id))
         # 3) 我的收藏 / 现有食材 / 口味偏好
         session.exec(delete(Favorite).where(Favorite.user_id == user_id))
+        session.exec(delete(RecipeFeedback).where(RecipeFeedback.user_id == user_id))
         session.exec(delete(MyFood).where(MyFood.user_id == user_id))
         session.exec(delete(UserPreference).where(UserPreference.user_id == user_id))
         # 4) 登录痕迹。注销就该把「谁在什么时候从哪个 IP 登过」一并带走 ——

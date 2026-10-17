@@ -22,6 +22,7 @@ from app.data.seed import (
     DEMO_USERNAME,
 )
 from app.models.favorite import Favorite
+from app.models.recipe_feedback import RecipeFeedback
 from app.models.login_log import LoginLog
 from app.models.menu import MenuPlan, MenuPlanItem
 from app.models.my_food import MyFood
@@ -67,6 +68,7 @@ def _seed_user_data(session, user_id: int) -> dict[str, int]:
     session.add(MenuPlanItem(menu_plan_id=plan.id, recipe_id=1))
     session.add(ShoppingItem(shopping_list_id=shopping.id, name="莲藕"))
     session.add(Favorite(user_id=user_id, recipe_id=1))
+    session.add(RecipeFeedback(user_id=user_id, recipe_id=1, rating=-1, reason='口味不合'))
     session.add(MyFood(user_id=user_id, custom_name="藕"))
     session.commit()
 
@@ -93,6 +95,7 @@ def test_delete_account_returns_204_and_wipes_every_related_row(client, session)
     assert _count(session, UserPreference, UserPreference.user_id == user_id) == 1
     assert _count(session, LoginLog, LoginLog.user_id == user_id) >= 1
     assert _count(session, Favorite, Favorite.user_id == user_id) == 1
+    assert _count(session, RecipeFeedback, RecipeFeedback.user_id == user_id) == 1
     assert _count(session, MyFood, MyFood.user_id == user_id) == 1
     assert _count(session, MenuPlan, MenuPlan.user_id == user_id) == 1
     assert _count(session, ShoppingList, ShoppingList.user_id == user_id) == 1
@@ -110,6 +113,7 @@ def test_delete_account_returns_204_and_wipes_every_related_row(client, session)
     # 登录记录也要清 —— 注销就该把个人痕迹一并带走
     assert _count(session, LoginLog, LoginLog.user_id == user_id) == 0
     assert _count(session, Favorite, Favorite.user_id == user_id) == 0
+    assert _count(session, RecipeFeedback, RecipeFeedback.user_id == user_id) == 0
     assert _count(session, MyFood, MyFood.user_id == user_id) == 0
     assert _count(session, MenuPlan, MenuPlan.user_id == user_id) == 0
     assert _count(session, ShoppingList, ShoppingList.user_id == user_id) == 0

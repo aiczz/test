@@ -89,6 +89,19 @@ class TodayMenuStore extends ChangeNotifier {
     return true;
   }
 
+  int addAll(Iterable<Recipe> recipes) {
+    _ensureScope();
+    var added = 0;
+    for (final recipe in recipes) {
+      if (recipe.image.trim().isNotEmpty && !contains(recipe.id)) {
+        _items.add(recipe);
+        added++;
+      }
+    }
+    if (added > 0) _changed();
+    return added;
+  }
+
   void remove(String id) {
     _ensureScope();
     _items.removeWhere((r) => r.id == id);
@@ -129,25 +142,7 @@ class TodayMenuStore extends ChangeNotifier {
   void _changed() {
     _revision++;
     final key = _key!;
-    final raw = jsonEncode(
-      _items
-          .map(
-            (r) => <String, dynamic>{
-              'id': r.id,
-              'name': r.name,
-              'image': r.image,
-              'desc': r.desc,
-              'time': r.time,
-              'people': r.people,
-              'tags': r.tags,
-              'ingredients': r.ingredients,
-              'steps': r.steps,
-              'difficulty': r.difficulty,
-              'duration_note': r.durationNote,
-            },
-          )
-          .toList(),
-    );
+    final raw = jsonEncode(_items.map((r) => r.toJson()).toList());
     _pending = _pending.then((_) async {
       try {
         final prefs = await SharedPreferences.getInstance();

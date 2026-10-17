@@ -136,3 +136,35 @@ def test_old_ingredient_conversation_and_more_than_twenty_cards_are_supported(cl
     request = AiChatRequest(message='这些能做什么菜', context_food_ids=list(range(1, 42)), conversation_state={
         'last_recommended_food_ids': list(range(1, 42)), 'focused_food_ids': list(range(1, 42))})
     assert len(request.context_food_ids) == 41
+
+
+@pytest.mark.parametrize('message', ['图片呢', '给我看看图片', '有图吗', '这些食材的图片', '能预览这些食材吗'])
+def test_short_image_followup_displays_the_focused_ingredients_without_model(client, session, monkeypatch, message):
+    first = ask(client, '推荐三道菜')
+    ingredients = ask(client, '第二道需要什么食材', first)
+    target = first['recipes'][1]['id']
+    monkeypatch.setattr(settings, 'ai_enabled', True)
+    monkeypatch.setattr(settings, 'ai_api_key', 'test-only')
+    monkeypatch.setattr(ai_client, '_network_complete_json', lambda *a, **kw: pytest.fail('Ingredient image preview must not call the model'))
+    cards = ask(client, message, ingredients, use_ai=True)
+    assert cards['intent'] == 'recommend_foods' and cards['foods']
+    assert not cards['recipes']
+    detail = recipe_service.get_detail(session, target)
+    names = {i.name for i in detail.ingredients}
+    assert all(f['name'] in names for f in cards['foods'])
+    assert cards['conversation_state']['ingredient_recipe_ids'] == [target]
+
+
+def test_image_question_without_a_reference_asks_which_content(client):
+    result = ask(client, '图片呢')
+    assert result['needs_clarification'] and not result['foods'] and not result['recipes']
+
+
+@pytest.mark.parametrize('message', ['怎么生成图片', '为什么图片打不开', '另外推荐一些食材'])
+def test_unrelated_image_questions_or_new_requests_do_not_reuse_ingredient_cards(client, session, message):
+    from app.schemas.ai import AiChatRequest, AiConversationState
+    from app.services.conversation_followup import resolve
+    first = ask(client, '推荐三道菜')
+    ingredients = ask(client, '需要什么食材', first)
+    result = resolve(session, AiChatRequest(message=message, conversation_state=AiConversationState(**ingredients['conversation_state'])))
+    assert result is None or result.kind != 'ingredient_cards'

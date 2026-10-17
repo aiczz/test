@@ -42,6 +42,7 @@ class RecipeBrief(BaseModel):
 
 
 class RecipeDetail(RecipeBrief):
+    quality_notes: list[str] = []
     ingredients: list[IngredientPublic] = []
     steps: list[StepPublic] = []
     tips: list[str] = []

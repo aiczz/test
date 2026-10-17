@@ -697,6 +697,7 @@ def _candidate_lines(session: Session, items: list[ScoredItem], food_ids: list[i
             f"{str(insight.duration_minutes) + '分钟' if insight.duration_source in {'table', 'text'} else '未知，不可承诺按时完成'} | 主要食材："
             f"{'、'.join(insight.main_ingredients) or '未提供'} | "
             f"完整配料记录：{'、'.join(insight.all_ingredient_names) or '未提供，不可推断齐全'} | "
+            f"个人反馈：{'你喜欢的菜' if '你喜欢的菜' in item.highlights else '未标记'} | "
             f"时长来源：{insight.duration_source}（步骤记录不等于整餐耗时） | "
             f"做法标签：{'、'.join(insight.tags) or '未提供'} | "
             f"匹配已选食材：{'、'.join(f.name for i, f in selected.items() if i in insight.ingredient_ids) or '无'} | "
@@ -1051,7 +1052,7 @@ def _chat_with_context(session: Session, user_id: int | None, payload: AiChatReq
     if payload.history and not prior.history:
         prior.history = payload.history
     payload = payload.model_copy(update={'conversation_state': prior})
-    followup = conversation_followup.resolve(session, payload, _mentioned_foods(session, payload.message)[0])
+    followup = conversation_followup.resolve(session, payload, _mentioned_foods(session, payload.message)[0], user_id=user_id)
     terms = list(dict.fromkeys([*_KNOWN_AVOID_WORDS, *base.avoid, *prior.avoid_added,
                                *prior.avoid_removed]))
     food_terms = _food_terms_cached(session)
@@ -1077,7 +1078,7 @@ def _chat_with_context(session: Session, user_id: int | None, payload: AiChatReq
             mentioned_ids=list(referenced), mentioned_names=[f.name for f in referenced.values()])
     else:
         route = _route_smart(session=session, message=payload.message, payload=payload)
-    if route.intent == "general" and (_is_question(payload.message) or route.clarification):
+    if route.intent == "general" and not (followup and followup.kind == 'recipe_replace') and (_is_question(payload.message) or route.clarification):
         # Asking what low sodium means must not enable a dietary constraint.
         state = prior.model_copy(deep=True)
     # Model additions supplement deterministic parsing, but never undo an explicit removal.
@@ -1116,12 +1117,17 @@ def _chat_with_context(session: Session, user_id: int | None, payload: AiChatReq
             if followup.detail_kind:
                 state.last_recipe_detail = followup.detail_kind
             if followup.detail_kind == 'ingredients' or followup.kind == 'ingredient_cards':
+                state.last_recipe_detail = 'ingredients'
                 state.active_topic = 'recipe_ingredients'
                 state.ingredient_recipe_ids = followup.ids
+                state.ingredient_view = 'missing' if followup.missing_only else 'all'
             elif followup.detail_kind == 'steps':
                 state.active_topic = 'recipes'
     else:
-        result = _chat_once(session, user_id, resolved, route)
+        if followup and followup.kind == 'recipe_replace':
+            result = _replace_conversation_recipe(session, user_id, resolved, followup.ids[0])
+        else:
+            result = _chat_once(session, user_id, resolved, route)
         if followup and followup.kind == 'food_recipes':
             state.focused_food_ids = followup.ids
             result.trace.insert(0, AiTraceStep(agent='食材关联查询', summary='使用会话所指食材检索菜谱，保留忌口等条件；不代表已拥有全部配料'))
@@ -1153,6 +1159,28 @@ def _chat_with_context(session: Session, user_id: int | None, payload: AiChatReq
         HardConstraints.from_profile(resolved)) + (
             "；排除品类：" + "、".join(state.excluded_categories) if state.excluded_categories else ""
         )))
+    return result
+
+
+def _replace_conversation_recipe(session, user_id, payload, target):
+    original = payload.conversation_state.last_recommended_recipe_ids
+    retained = [i for i in original if i != target]
+    proposal = _recommend_recipes(session, user_id, AiRecommendRequest(
+        **{k: v for k, v in payload.model_dump().items() if k in AiContext.model_fields},
+        count=1, menu_recipe_ids=retained,
+        excluded_categories=payload.excluded_categories,
+        require_known_time=payload.require_known_time,
+        excluded_recipe_ids=list(dict.fromkeys([*original, *payload.recent_recipe_ids]))[-100:],
+        message=payload.message))
+    replacement = proposal.recommendations[0].recipe if proposal.recommendations else None
+    known = {r.id: recipe_service.to_brief(r) for r in recipe_repository.list_by_ids(session, original)}
+    recipes = [replacement if i == target and replacement is not None else known[i] for i in original if i in known]
+    result = AiChatResponse(intent='meal_recommendation', recipes=recipes,
+        answer=(f'已将「{known[target].name}」替换为「{replacement.name}」，其余菜品和顺序保留。本次新条件用于替换菜，原配料和用量仍请核对。'
+                if replacement is not None and target in known else '没有符合当前条件的新候选，本次未替换，原菜单已保留。'),
+        trace=proposal.trace, source=proposal.source, model=proposal.model,
+        requested_count=len(original), returned_count=len(recipes))
+    result.trace.insert(0, AiTraceStep(agent='单菜替换', summary=f'仅替换第{original.index(target) + 1}道，保留其余{len(retained)}道'))
     return result
 
 
@@ -1330,6 +1358,7 @@ def _chat_once(
         pool_size=200,
         limit=24,
         rejected_names=rejected,
+        user_id=user_id,
         health_goal=health_goal,
         # 「换一批」时避开已经展示过的菜
         exclude_ids=already_shown,
@@ -1948,7 +1977,7 @@ def _recommend_recipes(
         terms = list(dict.fromkeys([*_KNOWN_AVOID_WORDS, *constraints.avoid,
                                    *(name for _, name, _ in _food_terms_cached(session))]))
         try:
-            edits = chat_context.edits(payload.message, AiConversationState(), terms)
+            edits = chat_context.edits(payload.message, AiConversationState(excluded_categories=list(constraints.excluded_categories)), terms)
         except ValueError as exc:
             return AiRecommendResponse(answer=str(exc), trace=[AiTraceStep(
                 agent='需求确认', summary='输入条件超出支持范围，请重新说明', status='info')])
@@ -2049,6 +2078,7 @@ def _recommend_recipes(
         exclude_ids=exclude,
         pool_size=300,
         limit=shortlist,
+        user_id=user_id,
         health_goal=health_goal,
     )
 
@@ -2064,6 +2094,7 @@ def _recommend_recipes(
             date_key=datetime.now().date().isoformat(),
             exclude_ids=exclude,
             limit=shortlist,
+            user_id=user_id,
             health_goal=health_goal,
         )
         relaxed = True

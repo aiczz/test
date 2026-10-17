@@ -12,17 +12,30 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
 from app.core.database import get_session
-from app.core.dependencies import get_current_user_optional
+from app.core.dependencies import get_current_user_optional, get_current_user
 from app.models.user import User
 from app.schemas.ai import (
     AiChatRequest,
     AiChatResponse,
     AiRecommendRequest,
     AiRecommendResponse,
+    RecipeFeedbackRequest, RecipeFeedbackPublic,
 )
-from app.services import ai_service
+from app.services import ai_service, recipe_feedback_service
 
 router = APIRouter(prefix="/ai", tags=["AI 助手"])
+
+
+@router.get('/feedback', response_model=list[RecipeFeedbackPublic])
+def get_feedback(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    return [RecipeFeedbackPublic(recipe_id=r.recipe_id, value='like' if r.rating > 0 else 'dislike', reason=r.reason)
+            for r in recipe_feedback_service.list_items(session, user.id)]
+
+
+@router.put('/feedback/{recipe_id}', response_model=RecipeFeedbackPublic)
+def set_feedback(recipe_id: int, payload: RecipeFeedbackRequest,
+                 user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    return recipe_feedback_service.set_feedback(session, user.id, recipe_id, payload)
 
 
 @router.post("/chat", response_model=AiChatResponse, summary="AI 对话")

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Structured constraints only, scoped by account and backend; no chat text.
+/// Recent messages and constraints stored on this device, scoped by account and backend.
 class ChatSessionStore {
   static String storageKey(String scope) =>
       'ai_session_v1_${Uri.encodeComponent(scope)}';
