@@ -18,10 +18,15 @@ EnvironmentFile=-/opt/test/back/.env
 
 # 优先用项目自带的虚拟环境；没有就退回系统 python3。
 # deploy.sh 会自动把这一行改成实际可用的解释器。
-ExecStart=/opt/test/back/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/test/back/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-# 只监听 127.0.0.1：对外统一由 nginx 的 80/443 提供，
-# 后端端口不直接暴露到公网。
+# 监听 0.0.0.0 而不是 127.0.0.1：已发布的 APK 在编译期就把
+# http://8.148.69.56:8000 写死进包里（front/mealmind/lib/services/api_config.dart
+# 的 _apiBaseOverride，配合 .github/workflows/build-apk.yml 的 API_BASE 默认值），
+# 一旦注入就不再自动探测候选地址。
+# 只听本机会让 APK 全部失联，而 Web 一切正常 —— 很难当场看出来。
+# Web 侧仍然走 nginx 的 80/443；这个端口只服务于直连的 APK。
+# 确认没有 APK 在用、想收回内网时：BIND_HOST=127.0.0.1 跑 deploy.sh。
 Restart=always
 RestartSec=3
 StandardOutput=journal

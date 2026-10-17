@@ -25,6 +25,24 @@
 所以前端产物里**不需要**写服务器 IP —— 换 IP、换域名、上 HTTPS 都不用重新构建。
 这也顺带避开了浏览器的 mixed content 限制（HTTPS 页面不能调 http 接口）。
 
+### 还有一条绕过 nginx 的直连通道（专供 APK），别把它关掉
+
+```
+APK（手机）──HTTP:8000──▶ uvicorn  (监听 0.0.0.0:8000)
+```
+
+已发布的 APK 在**编译期**就把 `http://<服务器IP>:8000` 写死了：见
+`front/mealmind/lib/services/api_config.dart` 里的 `_apiBaseOverride`
+（`String.fromEnvironment('API_BASE')`），配合 `.github/workflows/build-apk.yml`
+的 `API_BASE` 默认值。一旦注入了这个值，前端就**不再自动探测**候选地址，
+只剩这一个。
+
+所以后端必须固定在 `0.0.0.0:8000`。`deploy.sh` 的默认值就是它，可以用
+`BIND_HOST` / `BIND_PORT` 覆盖。改成 `127.0.0.1` 的后果非常隐蔽：
+**Web 一切正常，只有 APK 全线失联**，而且报错只出现在手机上。
+
+纯 Web 部署、确定没有 APK 在用，才建议 `BIND_HOST=127.0.0.1 sudo -E bash deploy/deploy.sh`。
+
 ---
 
 ## 1. 前置要求
@@ -217,6 +235,7 @@ cd /opt/test/back && python3 scripts/verify_ai_features.py --base http://127.0.0
 | `database is locked` | 别同时跑多个后端实例（两个 uvicorn 指向同一个 SQLite） |
 | 改了算法但首页没变 | AI 每日结果是**按天缓存**的。等第二天，或 `curl "http://127.0.0.1/api/home?refresh=true"` |
 | 换了服务器/域名，前端连不上 | 不用改代码。确认 nginx 的 `server_name` 和 `/api/` 反代即可（前端是同源的）|
+| **Web 一切正常，但 APK 全部连不上** | 后端只听 `127.0.0.1` 了。APK 是直连 `:8000` 的（地址编译进包里），不经 nginx。查 `ss -lntp \| grep ':8000'`：应该是 `0.0.0.0:8000`，不是 `127.0.0.1:8000`。重跑 `deploy.sh` 或改 `BIND_HOST=0.0.0.0` 后 `systemctl daemon-reload && systemctl restart shishi-backend` |
 
 ---
 
@@ -239,3 +258,10 @@ cd /opt/test/back && python3 scripts/verify_ai_features.py --base http://127.0.0
   新列永远不会出现（表现是「保存了偏好，一查就报 `no such column`」）。
   现在启动时按 `back/app/core/database.py` 的 `_ADDED_COLUMNS` 增量
   `ALTER TABLE` 补上（幂等，不丢数据）。**以后再加列，记得也写进那张表。**
+- **后端监听地址不能想当然绑 `127.0.0.1`** → 最初的设计是「后端只在本机，
+  对外统一走 nginx 80/443」，这个思路对 Web 是对的，但漏了 APK：
+  APK 没有页面来源，绝对地址必须编译进包里，只能直连 `:8000`。
+  上线当天 Web 全绿、APK 全挂，就是因为这条通道被绑回了内网。
+  现在 `deploy.sh` 默认 `BIND_HOST=0.0.0.0`，并在自检里打印实际监听地址；
+  模板 `deploy/shishi-backend.service` 的注释也写清了原因。
+  **下次看到有人把 host 改回 `127.0.0.1`，先问一句「APK 还发不发」。**

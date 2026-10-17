@@ -8,6 +8,19 @@
 #   sudo bash deploy/deploy.sh --no-web       # 只更新后端（跳过前端产物）
 #   sudo bash deploy/deploy.sh --web-from-release  # 前端强制用 CI 的 Release 产物
 #
+# 可选环境变量：
+#   BIND_HOST=0.0.0.0   后端监听地址（默认 0.0.0.0）
+#   BIND_PORT=8000      后端监听端口
+#
+# 为什么默认监听 0.0.0.0 而不是 127.0.0.1：
+#   已发布的 APK 把 http://8.148.69.56:8000 在编译期写死进了包里
+#   （front/mealmind/lib/services/api_config.dart 的 _apiBaseOverride，
+#   配合 .github/workflows/build-apk.yml 的 API_BASE 默认值），
+#   一旦注入就不再走自动探测，只有一个候选地址。
+#   后端只听 127.0.0.1 时 Web 完全正常、APK 却全部失联，很难当场看出来。
+#   纯 Web 部署想收回内网可以：BIND_HOST=127.0.0.1 sudo -E bash deploy/deploy.sh
+#   —— 但这样做之前必须确认没有在用 :8000 的 APK。
+#
 # 做完这些事：
 #   1. 检查/生成 back/.env（并提醒你改 SECRET_KEY、填 AI_API_KEY）
 #   2. 建虚拟环境 + 装依赖
@@ -31,6 +44,11 @@ SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 NGINX_CONF="/etc/nginx/conf.d/shishi.conf"
 WEB_RELEASE_URL="https://github.com/aiczz/test/releases/download/web-latest/web-build.tar.gz"
 
+# 后端监听地址。默认 0.0.0.0 —— 已发布的 APK 把 :8000 直连地址编译进包里了，
+# 改成 127.0.0.1 会让 APK 失联（Web 却看不出问题）。理由见文件头。
+BIND_HOST="${BIND_HOST:-0.0.0.0}"
+BIND_PORT="${BIND_PORT:-8000}"
+
 RELOAD_DATA=0
 DO_WEB=1
 WEB_FROM_RELEASE=0
@@ -39,7 +57,7 @@ for arg in "$@"; do
     --reload-data)       RELOAD_DATA=1 ;;
     --no-web)            DO_WEB=0 ;;
     --web-from-release)  WEB_FROM_RELEASE=1 ;;
-    -h|--help)           sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help)           sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知参数：$arg"; exit 2 ;;
   esac
 done
@@ -139,8 +157,12 @@ fi
 # ---------------------------------------------------------------------
 say "4/7 注册 systemd 服务"
 # ---------------------------------------------------------------------
-sed "s#^ExecStart=.*#ExecStart=$PY -m uvicorn app.main:app --host 127.0.0.1 --port 8000#" \
+sed "s#^ExecStart=.*#ExecStart=$PY -m uvicorn app.main:app --host $BIND_HOST --port $BIND_PORT#" \
   "$REPO_DIR/deploy/${SERVICE_NAME}.service" > "$SERVICE_FILE"
+echo "  监听地址：$BIND_HOST:$BIND_PORT"
+if [ "$BIND_HOST" = "0.0.0.0" ]; then
+  echo "  （对公网开放：已发布的 APK 直连 :$BIND_PORT，别改回 127.0.0.1）"
+fi
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
 systemctl restart "$SERVICE_NAME"
@@ -215,13 +237,20 @@ echo "  nginx 已重载"
 say "7/7 自检"
 # ---------------------------------------------------------------------
 sleep 1
+# 绑 0.0.0.0 时本机回环仍可达；绑了具体网卡就直接测那个地址
+if [ "$BIND_HOST" = "0.0.0.0" ]; then CHECK_HOST="127.0.0.1"; else CHECK_HOST="$BIND_HOST"; fi
+
 printf '  后端直连  : '
-curl -fsS --max-time 10 http://127.0.0.1:8000/api/health || warn "后端没响应"
+curl -fsS --max-time 10 "http://$CHECK_HOST:$BIND_PORT/api/health" || warn "后端没响应"
 printf '\n  经 nginx  : '
 curl -fsS --max-time 10 http://127.0.0.1/api/health || warn "nginx 反代没通"
 printf '\n  首页数据  : '
-curl -fsS --max-time 60 'http://127.0.0.1/api/home?city=%E6%9D%AD%E5%B7%9E' \
-  | head -c 120 || warn "首页接口没响应"
+# 先把响应收进变量再截断。以前是 `curl ... | head -c 120`：
+# head 提前关闭管道会让 curl 以退出码 23 结束，于是每次都误报「首页接口没响应」，
+# 明明接口是好的 —— 这个假警报误导过两次线上排查。
+HOME_BODY="$(curl -fsS --max-time 60 'http://127.0.0.1/api/home?city=%E6%9D%AD%E5%B7%9E' || true)"
+printf '%s' "${HOME_BODY:0:120}"
+[ -n "$HOME_BODY" ] || warn "首页接口没响应"
 printf '\n'
 
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
@@ -236,9 +265,10 @@ cat <<EOF
 
   后端状态：  systemctl status ${SERVICE_NAME}
   实时日志：  journalctl -u ${SERVICE_NAME} -f
+  监听地址：  ${BIND_HOST}:${BIND_PORT}
   验收脚本：  $PY $BACK_DIR/scripts/verify_ai_features.py --base http://127.0.0.1
 
-还没做的两件事（按需）：
+还没做的事（按需）：
   1. 换 SECRET_KEY —— 脚本已自动换过；若你手工改过 .env 请确认它不是默认值
   2. 填 AI_API_KEY —— 填完 sudo systemctl restart ${SERVICE_NAME}
   3. 上 HTTPS   —— sudo certbot --nginx -d 你的域名（不用重新构建前端）
