@@ -122,13 +122,26 @@ echo "  依赖已就绪（$("$PY" --version)）"
 say "3/7 准备数据库与内容数据"
 # ---------------------------------------------------------------------
 DB_PATH="$BACK_DIR/shishi.db"
-"$PY" - <<PY
+
+# 必须在 back/ 目录下执行这段，并且把 DATABASE_URL 钉成绝对路径。
+#
+# 踩过的坑：settings.database_url 默认是 `sqlite:///./shishi.db`（相对路径），
+# 而 .env 也是按 CWD 找的。在仓库根目录跑这一步时，引擎会连到
+# `<仓库根>/shishi.db` —— 一个跟线上毫无关系的空库，新建的表全建在那儿，
+# 真正的 back/shishi.db 一点没变。现象是服务照常起来、旧接口全都正常，
+# 只有用到新表的接口 500；仓库根还会凭空多出一个 shishi.db（git status 里
+# 是 `?? shishi.db`）。2026-10-21 加 recipe_feedback 时就是这样被下面那段
+# 自检抓到的。
+(
+  cd "$BACK_DIR" || die "进不去 $BACK_DIR"
+  DATABASE_URL="sqlite:///$DB_PATH" "$PY" - <<PY
 import sys
 sys.path.insert(0, "$BACK_DIR")
 from app.core.database import create_db_and_tables
 create_db_and_tables()
-print("  表结构已就绪")
+print("  表结构已就绪（$DB_PATH）")
 PY
+)
 
 # 建完立刻核对「用户侧状态表」是不是真的都在。
 #
@@ -152,7 +165,13 @@ if missing:
 print("  状态表齐全（%d 张）" % len(STATE_TABLES))
 PY
 then
-  die "状态表缺失（见上）。常见原因：新模型没在 app/models/__init__.py 里 import，或没登记进 app/core/database.py 的 STATE_TABLES"
+  die "状态表缺失（见上）。三个常见原因：新模型没在 app/models/__init__.py 里 import；没登记进 app/core/database.py 的 STATE_TABLES；或者建表时连错了数据库文件（检查 $REPO_DIR/shishi.db 这个多出来的空库是否存在——存在就说明 CWD 没切到 back/）"
+fi
+
+# 仓库根出现 shishi.db，说明某次建表连错了库（相对路径没切 CWD）。留着只会让
+# 后来的人误以为是线上库，这里顺手报出来。
+if [ -f "$REPO_DIR/shishi.db" ]; then
+  warn "$REPO_DIR/shishi.db 是建表时连错库留下的空库，不是线上库（线上是 $DB_PATH），可以删掉"
 fi
 
 content_rows() {

@@ -177,6 +177,20 @@ sqlite3 /opt/test/back/shishi.db ".tables" | tr -s ' ' '\n' | sort | grep -v '^$
 队友新增表时最容易漏的就是这一行登记，与其等上线后某个按钮点了没反应，
 不如让部署直接失败。
 
+### 它抓到的第二个坑：建表连错了库
+
+第一次上线时这条自检报的是「`recipe_feedback` 没建出来」，但登记明明是对的。
+原因是 `settings.database_url` 默认是 `sqlite:///./shishi.db`（**相对路径**），
+`.env` 也按 CWD 找。部署脚本在仓库根目录跑 `create_db_and_tables()` 时，
+引擎连的是 `<仓库根>/shishi.db`——一个跟线上毫无关系的空库，新表全建在那儿，
+真正的 `back/shishi.db` 一点没变。
+
+症状极具误导性：服务照常起来、旧接口全部正常，只有用到新表的接口 500；
+`git status` 里还会多出一个 `?? shishi.db`。
+
+修法：建表必须在 `back/` 下执行，并用 `DATABASE_URL` 钉死绝对路径（脚本已改）。
+判断历史上是否踩过：`ls -la /opt/test/shishi.db`——存在就是那个空库，可以删。
+
 ## 9. 从外网再验一遍（不能只听服务器自己说）
 
 在本机（不登录服务器）跑：
