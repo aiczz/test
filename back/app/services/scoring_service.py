@@ -42,6 +42,7 @@ from sqlmodel import Session
 from app.data.dish_images import has_image
 from app.core.config import settings
 from app.repositories import food_repository, recipe_repository
+from app.services import required_ingredients
 from app.repositories.catalog_insight_repository import (
     DishInsight,
     FoodInsight,
@@ -178,6 +179,7 @@ class HardConstraints:
     low_sodium: bool = False
     preferences: tuple[str, ...] = ()
     avoid: tuple[str, ...] = ()
+    required_foods: tuple[str, ...] = ()
 
     @classmethod
     def from_profile(cls, profile: Any) -> HardConstraints:
@@ -192,6 +194,7 @@ class HardConstraints:
             low_sodium=bool(getattr(profile, "low_sodium", False)),
             preferences=tuple(getattr(profile, "preferences", ()) or ()),
             avoid=tuple(getattr(profile, "avoid", ()) or ()),
+            required_foods=tuple(getattr(profile, "required_foods", ()) or ()),
         )
 
 
@@ -399,7 +402,10 @@ def score_foods(
     season_name = f"{season_char_of(month)}季"
 
     seasonal = food_repository.list_seasonal(session, month=month, limit=pool_size)
-    if seasonal:
+    if constraints.required_foods:
+        rows, _ = food_repository.list_foods(session, offset=0, limit=10000)
+        pool = [(food, None) for food in rows]
+    elif seasonal:
         pool: list[tuple[Any, Any]] = [(food, season) for food, season in seasonal]
     else:
         rows, _ = food_repository.list_foods(session, offset=0, limit=pool_size)
@@ -458,6 +464,8 @@ def score_foods(
     for food, season in pool:
         food_id = int(getattr(food, "id", 0))
         name = str(getattr(food, "name", ""))
+        if not required_ingredients.matches([name], constraints.required_foods):
+            continue
         insight = insights.get(food_id)
         tags = list(getattr(food, "tags", None) or [])
 
@@ -718,8 +726,13 @@ def score_dishes(
     if candidate_ids is not None:
         ids = [int(i) for i in candidate_ids if int(i) not in exclude_ids]
     elif food_ids:
-        hits = dishes_using_foods(session, food_ids, limit=pool_size)
+        hits = dishes_using_foods(session, food_ids, limit=10000 if constraints.required_foods else pool_size)
         ids = [i for i in hits if i not in exclude_ids]
+    elif constraints.required_foods:
+        # Apply the inclusion before the seasonal shortlist: otherwise fish beyond
+        # that shortlist disappear even though the catalogue has valid matches.
+        rows, _ = recipe_repository.list_recipes(session, limit=10000)
+        ids = [int(row.id) for row in rows if row.id not in exclude_ids]
     else:
         ids = [
             i
@@ -774,6 +787,12 @@ def score_dishes(
             continue
         insight = insights.get(recipe_id)
         name = str(getattr(raw, "name", "") or (insight.name if insight else ""))
+        if not required_ingredients.matches(
+            getattr(insight, "all_ingredient_names", ()) or (), constraints.required_foods
+        ):
+            if rejected_names is not None:
+                rejected_names.append(f"{name}（不符合指定食材：{'、'.join(constraints.required_foods)}）")
+            continue
         if settings.recipe_images_only and not (
             has_image(name) or str(getattr(raw, "image_url", "") or "").strip()
         ):

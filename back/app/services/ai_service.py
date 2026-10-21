@@ -53,6 +53,7 @@ from app.schemas.ai import (
 )
 from app.services import (
     chat_context,
+    required_ingredients,
     conversation_followup,
     meal_selection,
     home_service,
@@ -494,6 +495,18 @@ def _route(
         return _Route(intent='general', clarification='这段会话里还没有可引用的食材，请先让我推荐食材，或直接告诉我要用哪些食材。')
     if _is_question(message):
         return _Route(intent="general")
+    restriction_edit = required_ingredients.edit(
+        message, None, [name for _, name, _ in _food_terms_cached(session)] if session is not None else []
+    )
+    if restriction_edit is not None:
+        inherited = getattr(payload, 'last_intent', None)
+        if _wants_foods(message):
+            target = 'recommend_foods'
+        elif re.search(r'菜谱|菜单|菜品|道菜', message):
+            target = 'meal_recommendation'
+        else:
+            target = inherited if inherited in {'meal_recommendation', 'cook_with_my_foods', 'recommend_foods'} else 'meal_recommendation'
+        return _Route(intent=target, follow_up=False, health_goal=need_service.extract_goal(message))
     goal = need_service.extract_goal(message)
     mentioned_ids, mentioned_names = _mentioned_foods(session, message)
     avoid_added = _declared_avoid(message, mentioned_names)
@@ -719,7 +732,8 @@ def _constraints_block(constraints: HardConstraints) -> str:
         f"可用烹饪时间 {constraints.cook_minutes:.0f} 分钟；"
         f"{'限钠（少盐）' if constraints.low_sodium else '不限钠'}；"
         f"口味偏好：{'、'.join(constraints.preferences) or '无'}；"
-        f"忌口：{'、'.join(constraints.avoid) or '无'}"
+        f"忌口：{'、'.join(constraints.avoid) or '无'}；"
+        f"限定食材：{'、'.join(constraints.required_foods) or '不限'}"
     )
 
 
@@ -1097,11 +1111,16 @@ def _chat_with_context(session: Session, user_id: int | None, payload: AiChatReq
         preferences=[p for p in (state.preferences if state.preferences is not None else base.preferences)
                      if p not in avoid],
         avoid=avoid, city=payload.city,
+        required_foods=state.required_foods if state.required_foods is not None else list(base.required_foods),
     )
     resolved = payload.model_copy(update={**effective.model_dump(),
         "recommendation_count": state.recommendation_count if state.recommendation_count is not None else payload.recommendation_count,
         "excluded_categories": state.excluded_categories,
         "require_known_time": state.cook_minutes is not None,
+        # A new filter refines the previous menu; it must be allowed to keep a
+        # matching recipe already shown there. "换一批" keeps normal exclusions.
+        "recent_recipe_ids": [] if state.required_foods != prior.required_foods else payload.recent_recipe_ids,
+        "recent_food_ids": [] if state.required_foods != prior.required_foods else payload.recent_food_ids,
         "conversation_state": state})
     route.avoid_added = []  # Already merged; cancellation must not be overwritten downstream.
     if followup and (followup.kind in {'recipe_detail', 'ingredient_cards'} or followup.clarification):
@@ -1364,7 +1383,9 @@ def _chat_once(
         exclude_ids=already_shown,
     )
 
-    if intent == "cook_with_my_foods":
+    if constraints.required_foods:
+        recall_detail = f"按真实配料限定「{'、'.join(constraints.required_foods)}」召回"
+    elif intent == "cook_with_my_foods":
         recall_detail = f"命中库存食材 {len(cook_food_ids)} 样"
     elif route.mentioned_names:
         recall_detail = f"按你点名的食材「{'、'.join(route.mentioned_names[:3])}」召回"
@@ -1507,6 +1528,10 @@ def _chat_once(
         if adjusted:
             answer, picks = None, []
 
+    if constraints.required_foods:
+        # A free-form explanation must not claim unrelated "balancing" dishes.
+        # AI selection is still allowed inside the strictly filtered pool.
+        answer, picks = None, []
     if intent == "cook_with_my_foods":
         # Inventory statements are facts, not free-form model explanations.
         answer = _inventory_answer(session, user_id, chosen, constraints)
@@ -1529,6 +1554,8 @@ def _chat_once(
 
     if len(chosen) < count:
         answer = f"你要 {count} 道，当前条件下只找到 {len(chosen)} 道合适菜谱。" + answer
+    if constraints.required_foods:
+        answer = f"已限定食材：{'、'.join(constraints.required_foods)}，仅展示配料符合条件的菜谱。" + answer
 
     notes = (
         {} if intent == "cook_with_my_foods" else
@@ -1586,6 +1613,9 @@ def _relax_time_only(
         low_sodium=constraints.low_sodium,
         preferences=constraints.preferences,
         avoid=constraints.avoid,   # ★ 忌口绝不放宽
+        required_foods=constraints.required_foods,
+        excluded_categories=constraints.excluded_categories,
+        require_known_time=constraints.require_known_time,
     )
 
 
@@ -1748,7 +1778,8 @@ def _verified_selection(candidates: list[ScoredItem], picks: list[dict], baselin
 
 
 def _selection_requirements(constraints: HardConstraints, preferences: list[str]) -> str:
-    return (f'必须满足：忌口 {"、".join(constraints.avoid) or "无"}；排除分类 {"、".join(constraints.excluded_categories) or "无"}。'
+    return (f'必须满足：忌口 {"、".join(constraints.avoid) or "无"}；排除分类 {"、".join(constraints.excluded_categories) or "无"}；'
+            f'限定食材 {"、".join(constraints.required_foods) or "不限"}，数量不足时不能用不匹配的菜补齐。'
             f'时间要求：{constraints.cook_minutes:g}分钟；未知时长不代表达标，单菜计时不代表整餐耗时。\n'
             f'尽量满足：{"、".join(preferences) or "按原口味偏好"}；通常至少有一道含蔬菜的菜，蛋白来源和做法多样，汤最多一道；全素或只推荐汤时优先遵守用户明确要求。\n'
             '只能依据候选事实选菜。没有锅具和完整流程依据时，不承诺少洗锅或整餐按时完成。'
@@ -1977,7 +2008,8 @@ def _recommend_recipes(
         terms = list(dict.fromkeys([*_KNOWN_AVOID_WORDS, *constraints.avoid,
                                    *(name for _, name, _ in _food_terms_cached(session))]))
         try:
-            edits = chat_context.edits(payload.message, AiConversationState(excluded_categories=list(constraints.excluded_categories)), terms)
+            edits = chat_context.edits(payload.message, AiConversationState(
+                excluded_categories=list(constraints.excluded_categories), required_foods=list(constraints.required_foods)), terms)
         except ValueError as exc:
             return AiRecommendResponse(answer=str(exc), trace=[AiTraceStep(
                 agent='需求确认', summary='输入条件超出支持范围，请重新说明', status='info')])
@@ -1993,6 +2025,7 @@ def _recommend_recipes(
         constraints.avoid = tuple(t for t in dict.fromkeys([*constraints.avoid, *edits.avoid_added])
                                   if t not in edits.avoid_removed)
         constraints.excluded_categories = tuple(edits.excluded_categories)
+        constraints.required_foods = tuple(edits.required_foods or ())
     weather = _weather_for(payload, month)
     trace: list[AiTraceStep] = []
 
@@ -2203,6 +2236,8 @@ def _recommend_recipes(
         if adjusted:
             answer, picks = None, []
     meal_summary = meal_selection.summary(chosen, set(food_ids))
+    if constraints.required_foods:
+        answer, picks = None, []
     notes = {p["id"]: checked_text(p["reason"], '')[0] for p in picks if p.get("reason")}
 
     if answer is None:
@@ -2217,6 +2252,11 @@ def _recommend_recipes(
                 f"按时令和今天的天气，我挑了 {len(chosen)} 道："
                 f"{'、'.join(i.name for i in chosen)}。"
             )
+
+    if constraints.required_foods:
+        answer = f"已限定食材：{'、'.join(constraints.required_foods)}。" + answer
+        if len(chosen) < payload.count:
+            answer = f"你要 {payload.count} 道，当前条件下只找到 {len(chosen)} 道合适菜谱。" + answer
 
     selected_ids = set(food_ids)
     recommendations: list[AiRecipePick] = []

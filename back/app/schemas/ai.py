@@ -34,6 +34,7 @@ class AiContext(BaseModel):
     low_sodium: bool = False
     preferences: list[str] = []
     avoid: list[str] = []
+    required_foods: list[str] = Field(default_factory=list, max_length=20)
     city: str | None = None
 
 
@@ -48,6 +49,7 @@ class AiConversationState(BaseModel):
     people: int | None = Field(default=None, ge=1, le=20)
     recommendation_count: int | None = Field(default=None, ge=1, le=10)
     selection_preferences: list[str] = Field(default_factory=list, max_length=20)
+    required_foods: list[str] | None = Field(default=None, max_length=20)
     last_recommendation_kind: Literal['foods', 'recipes'] | None = None
     focused_recipe_ids: list[int] = Field(default_factory=list, max_length=20)
     focused_food_ids: list[int] = Field(default_factory=list, max_length=200)

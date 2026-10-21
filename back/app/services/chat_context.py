@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from app.schemas.ai import AiConversationState
+from app.services import required_ingredients
 
 DIGITS = dict(zip("零一二三四五六七八九", range(10)))
 DIGITS["两"] = 2
@@ -62,6 +63,9 @@ def requested_count(message: str) -> int | None:
 
 def edits(message: str, state: AiConversationState, terms: list[str]) -> AiConversationState:
     state = state.model_copy(deep=True)
+    required = required_ingredients.edit(message, state.required_foods, terms)
+    if required is not None:
+        state.required_foods = required
     state.selection_preferences = selection_preferences(message, state.selection_preferences)
     count = requested_count(message)
     if count is not None:
@@ -109,7 +113,9 @@ def edits(message: str, state: AiConversationState, terms: list[str]) -> AiConve
     elif any(t in message for t in ("不喝汤", "不要汤", "别推荐汤", "不想喝汤", "排除汤")):
         state.excluded_categories = list(dict.fromkeys([*state.excluded_categories, "汤羹"]))
     for clause in re.split(r"[，,。；;！!？?]|但是|不过|但", message):
-        for term in terms:
+        if re.search(r'取消只(?:要|吃|推荐)|不要只(?:要|吃|推荐)|不只(?:要|吃)', clause):
+            continue  # Cancelling inclusion must not cancel an independent allergy/avoid.
+        for term in dict.fromkeys([*terms, *required_ingredients.ANIMALS]):
             if not term or term not in clause:
                 continue
             removed = bool(re.search(r"(?:取消|撤销|解除).*" + re.escape(term), clause)) or bool(
@@ -118,7 +124,9 @@ def edits(message: str, state: AiConversationState, terms: list[str]) -> AiConve
             if removed:
                 state.avoid_added = [a for a in state.avoid_added if a != term]
                 state.avoid_removed = list(dict.fromkeys([*state.avoid_removed, term]))
-            elif any(t in clause for t in ("不吃", "不能吃", "过敏", "忌口", "别放", "不要放")):
+            elif any(t in clause for t in ("不吃", "不能吃", "过敏", "忌口", "别放", "不要放")) or re.search(
+                r'(?:不要|别推荐|排除)\s*' + re.escape(term), clause
+            ):
                 state.avoid_added = list(dict.fromkeys([*state.avoid_added, term]))
                 state.avoid_removed = [a for a in state.avoid_removed if a != term]
     return state

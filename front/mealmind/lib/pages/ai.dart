@@ -477,10 +477,12 @@ class _AiPageState extends State<AiPage> {
         };
     final avoid = ((c['avoid'] as List?) ?? []).join('、');
     final tastes = ((c['preferences'] as List?) ?? []).join('、');
+    final requiredFoods = ((c['required_foods'] as List?) ?? []).join('、');
     return '本次条件：${c['people']}人 · ${c['cook_minutes']}分钟以内'
         '${c['low_sodium'] == true ? ' · 少盐' : ''}'
         '${tastes.isEmpty ? '' : ' · $tastes'}'
         '${avoid.isEmpty ? '' : ' · 忌口：$avoid'}'
+        '${requiredFoods.isEmpty ? '' : ' · 限定食材：$requiredFoods'}'
         '${_excludedCategories.isEmpty ? '' : ' · 排除：${_excludedCategories.join('、')}'}';
   }
 

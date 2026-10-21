@@ -77,8 +77,11 @@ def test_missing_food_cards_exclude_sufficient_stock_and_keep_scope_on_next_disp
     login = client.post('/api/auth/login', json={'username': DEMO_USERNAME, 'password': DEMO_PASSWORD}).json()
     headers = {'Authorization': 'Bearer ' + login['access_token']}
     first = ask(client, '推荐三道菜', headers=headers)
-    detail = recipe_service.get_detail(session, first['recipes'][0]['id'])
-    ingredient = next(i for i in detail.ingredients if i.food_id and i.amount)
+    # Daily ranking can put an unlinked-ingredient recipe first. This test is
+    # about inventory coverage across the menu, not the day's first recipe.
+    ingredient = next(i for r in first['recipes']
+                      for i in recipe_service.get_detail(session, r['id']).ingredients
+                      if i.food_id and i.amount)
     client.post('/api/my-foods', headers=headers, json={'food_id': ingredient.food_id, 'amount': 99999, 'unit': ingredient.unit})
     missing = ask(client, '只看缺少的食材', first, headers=headers)
     assert missing['intent'] == 'recommend_foods'
