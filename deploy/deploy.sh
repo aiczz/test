@@ -130,6 +130,31 @@ create_db_and_tables()
 print("  表结构已就绪")
 PY
 
+# 建完立刻核对「用户侧状态表」是不是真的都在。
+#
+# 为什么值得专门查一次：compact 模式下 create_all 只建 STATE_TABLES 里登记过
+# 的表，而漏登记的后果是**静默**的 —— 服务照常起来，只有在用到那张表的接口
+# 上才 500（no such table）。队友加新表时最容易漏的就是这一步，历史上已经
+# 踩过一次（verification_codes）。宁可部署在这里直接失败。
+if ! "$PY" - <<PY
+import sqlite3, sys
+sys.path.insert(0, "$BACK_DIR")
+from app.core.database import STATE_TABLES
+
+con = sqlite3.connect("$DB_PATH")
+present = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+con.close()
+
+missing = sorted(STATE_TABLES - present)
+if missing:
+    print("  [X] 这些状态表没建出来：" + "、".join(missing))
+    raise SystemExit(1)
+print("  状态表齐全（%d 张）" % len(STATE_TABLES))
+PY
+then
+  die "状态表缺失（见上）。常见原因：新模型没在 app/models/__init__.py 里 import，或没登记进 app/core/database.py 的 STATE_TABLES"
+fi
+
 content_rows() {
   "$PY" - <<PY
 import sqlite3

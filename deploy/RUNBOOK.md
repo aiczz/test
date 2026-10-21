@@ -150,6 +150,9 @@ curl -sI http://127.0.0.1/canvaskit/canvaskit.wasm | grep -i content-type
 
 # ④ 功能验收（49 项）
 cd /opt/test/back && .venv/bin/python scripts/verify_ai_features.py --base http://127.0.0.1
+
+# ⑤ 数据库结构（这次新加的验证，deploy.sh 已自动跑过一遍）
+sqlite3 /opt/test/back/shishi.db ".tables" | tr -s ' ' '\n' | sort | grep -v '^$'
 ```
 
 必须同时满足：
@@ -161,7 +164,18 @@ cd /opt/test/back && .venv/bin/python scripts/verify_ai_features.py --base http:
 | 两个 health | 都是 `{"status":"ok"}` |
 | `main.dart.js` | 等于 `JS_BYTES` |
 | `canvaskit.wasm` | `Content-Type: application/wasm` |
+| 状态表 | 12 张，含 `recipe_feedback`（本次新增） |
 | 验收脚本 | `49 项通过，0 项未通过` |
+
+关于 ⑤：`deploy.sh` 第 3 步在建表之后新增了一段自检，会把
+`app/core/database.py` 里的 `STATE_TABLES` 和数据库里实际的表逐个核对，
+缺任何一张就直接 `die`。
+
+这条为什么必要——compact 模式下 `create_all` 只建 `STATE_TABLES` 里
+**登记过**的表，而漏登记的后果是静默的：服务照常起来，只有在用到那张表的
+接口上才 500（`no such table`）。历史上已经踩过一次（`verification_codes`）。
+队友新增表时最容易漏的就是这一行登记，与其等上线后某个按钮点了没反应，
+不如让部署直接失败。
 
 ## 9. 从外网再验一遍（不能只听服务器自己说）
 
