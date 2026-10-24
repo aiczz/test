@@ -74,12 +74,12 @@
 │   ├── app/                                  FastAPI 应用
 │   │   ├── main.py                             入口 + CORS + 建表 & 灌种子
 │   │   ├── core/                               配置 / 数据库 / 安全 / 依赖注入
-│   │   ├── api/routes/                         36 个接口路径 / 41 个操作，按业务分文件
+│   │   ├── api/routes/                         39 个接口路径 / 45 个操作，按业务分文件
 │   │   ├── models/                             16 张表（SQLModel）
 │   │   ├── schemas/ · repositories/ · services/ 响应模型 / 数据访问层 / 业务逻辑层
 │   │   ├── ai/                               ★ 大模型客户端（DeepSeek / OpenAI 兼容）
 │   │   └── data/seed.py                        种子数据（幂等）
-│   ├── tests/                                197 个 pytest 用例 —— CI 里真的会跑
+│   ├── tests/                                503 个 pytest 用例 —— CI 里真的会跑
 │   ├── scripts/verify_ai_features.py         ★ 验收脚本（49 项断言，给运维自检用）
 │   ├── data_tools/                           数据清洗辅助脚本
 │   ├── requirements.txt · README.md
