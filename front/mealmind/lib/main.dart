@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show FontLoader, rootBundle;
 
 import 'models/content.dart';
 import 'pages/ai.dart';
@@ -39,6 +42,11 @@ class _BootstrapState extends State<_Bootstrap> {
   late final Future<void> _ready = _prepare();
 
   Future<void> _prepare() async {
+    // ★ 字体预热：首页那两款字体合计 12 MB，Flutter Web 是「用到才下」。
+    //   等首页第一次绘制时才去拉，字会晚一步才换上，看起来就是登录进去卡了一下。
+    //   这里不 await —— 让它和下面的后端探测并行跑，两边都在品牌屏期间完成。
+    unawaited(_preloadDisplayFonts());
+
     // 恢复上次的登录状态（token 存在本地）
     await AuthStore.instance.restore();
     // 探测后端；在线就把内容数据也拉下来
@@ -67,6 +75,30 @@ class _BootstrapState extends State<_Bootstrap> {
     // （见它的 _wire()）。**不要在这里再挂一次**：那样一旦启动流程有意外，
     // 监听会静默失效，表现为「换了城市推荐一动不动」，而且完全不报错。
     await HomeFeedStore.instance.load();
+  }
+
+  /// 预热首页的两款展示字体。
+  ///
+  /// Flutter Web 的字体是按需下载的：首页第一次绘制毛笔标题时才开始拉，
+  /// 5.9 MB 的马善政 + 6.3 MB 的站酷小薇下完之前，标题先用兜底字体画，
+  /// 下完再重排一次 —— 那一下就是「登进去顿一下」的来源。
+  /// 放到品牌屏期间预热，这笔下载就藏在启动时间里，首页一上来就是对的字。
+  Future<void> _preloadDisplayFonts() async {
+    const families = <String, String>{
+      'MaShanZheng': 'assets/fonts/MaShanZheng-Regular.ttf',
+      'ZCOOLXiaoWei': 'assets/fonts/ZCOOLXiaoWei-Regular.ttf',
+    };
+    await Future.wait(
+      families.entries.map((entry) async {
+        try {
+          final loader = FontLoader(entry.key)
+            ..addFont(rootBundle.load(entry.value));
+          await loader.load();
+        } catch (_) {
+          // 预热失败不影响功能：字体仍会在首次使用时按需下载
+        }
+      }),
+    );
   }
 
   @override

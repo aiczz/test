@@ -207,18 +207,16 @@ class _Hero extends StatelessWidget {
         ? 'assets/images/splash.png'
         : hero.image;
 
-    final deck = _easeOut(_Span(0.0, 0.60).at(t));
-
     return ClipRect(
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          // 菜品图只有 480×300，铺满封面在视网膜屏上必然发虚。
-          // 所以底层让它当模糊氛围，清晰的那张留给右下角小图。
-          ImageFiltered(
-            imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Transform.scale(
-              scale: 1.05 + 0.11 * deck,
+          // 模糊底：全屏高斯模糊在 Web 上很贵，如果跟着动画每帧重算就是卡顿的来源。
+          // 所以它完全不参与动画，并用 RepaintBoundary 保证只栅格化一次——
+          // 反正 σ=16 之下，再缓慢的位移肉眼也看不出来。
+          RepaintBoundary(
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
               child: DishPhoto(asset: asset, fit: BoxFit.cover),
             ),
           ),
