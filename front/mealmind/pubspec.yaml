@@ -85,6 +85,16 @@ flutter:
     - family: NotoSansSC
       fonts:
         - asset: assets/fonts/NotoSansSC-Regular.otf
+    # 展示用字重。原设计只有一个 Regular，靠字号硬撑层级；
+    # 这两款都是 SIL Open Font License，可随应用再分发。
+    #   MaShanZheng  马善政毛笔楷书 —— 节气大字、印章
+    #   ZCOOLXiaoWei 站酷小薇       —— 菜名、标题（宋楷之间的展示体）
+    - family: MaShanZheng
+      fonts:
+        - asset: assets/fonts/MaShanZheng-Regular.ttf
+    - family: ZCOOLXiaoWei
+      fonts:
+        - asset: assets/fonts/ZCOOLXiaoWei-Regular.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

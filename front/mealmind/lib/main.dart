@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'models/content.dart';
 import 'pages/ai.dart';
 import 'pages/foods.dart';
-import 'pages/home.dart';
+import 'pages/home_editorial.dart';
 import 'pages/login.dart';
 import 'pages/profile.dart';
 import 'pages/recipes.dart';
@@ -249,7 +249,7 @@ class _RootShellState extends State<RootShell> {
       body: IndexedStack(
         index: _index,
         children: [
-          HomePage(
+          HomeEditorial(
             onOpenFoods: () => _selectTab(1),
             onOpenRecipes: () => _selectTab(2),
             onOpenAi: () => _selectTab(3),
