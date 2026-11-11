@@ -5,8 +5,16 @@ import pytest
 from app.ai import client as ai_client
 from app.core.config import settings
 from app.models.recipe import Recipe
-from app.schemas.ai import AiChatRequest, AiConversationState, AiRecommendRequest
+from app.schemas.ai import AiChatRequest, AiConversationState, AiRecommendRequest, AiUnderstanding, AiUnderstandingSlots
 from app.services import ai_service, chat_context
+
+
+@pytest.fixture(autouse=True)
+def structured_chat_request(stub_chat_understanding):
+    stub_chat_understanding(AiUnderstanding(
+        intent='meal_recommendation', operation='new', confidence=0.97,
+        slots=AiUnderstandingSlots(dish_count=3, selection_preferences=['少洗锅']),
+    ))
 
 
 @pytest.fixture
@@ -64,13 +72,21 @@ def test_invalid_or_incomplete_model_selection_uses_whole_rule_menu(session, cat
 
 
 def test_soft_preferences_survive_followup_and_can_be_cancelled():
-    state = chat_context.edits('少洗几个锅，不吃花生', AiConversationState(), ['花生'])
+    state = chat_context.apply_understanding(AiConversationState(), AiUnderstanding(
+        intent='meal_recommendation', operation='new', confidence=0.97,
+        slots=AiUnderstandingSlots(selection_preferences=['少洗锅'], avoid_added=['花生']),
+    ))
     assert state.selection_preferences == ['少洗锅']
     assert state.avoid_added == ['花生']
-    state = chat_context.edits('换一批', state, ['花生'])
+    state = chat_context.apply_understanding(state, AiUnderstanding(
+        intent='meal_recommendation', operation='repeat', confidence=0.97,
+    ))
     assert state.selection_preferences == ['少洗锅']
     assert state.avoid_added == ['花生']
-    state = chat_context.edits('取消少洗锅', state, ['花生'])
+    state = chat_context.apply_understanding(state, AiUnderstanding(
+        intent='meal_recommendation', operation='refine', confidence=0.97,
+        reset=['selection_preferences'],
+    ))
     assert not state.selection_preferences
     assert state.avoid_added == ['花生']
 

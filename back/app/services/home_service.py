@@ -172,6 +172,8 @@ def build_home(
         date_key=today,
         limit=shortlist,
     )
+    # 菜品池保留 20 道给菜谱页；真正发给 AI 的仍然只有前 shortlist 道，
+    # 不会因为我们固定了菜谱页推荐就增加提示词 token。
     region_dishes = scoring_service.score_dishes(
         session,
         month=current_month,
@@ -179,7 +181,7 @@ def build_home(
         constraints=neutral,
         region=region_key,
         date_key=today,
-        limit=shortlist,
+        limit=20,
     )
     steps.append(
         HomeAlgoStep(
@@ -195,7 +197,8 @@ def build_home(
     # ---- 3. 每天每地区只问一次 AI ----
     # ★ 图片优先排序：让 AI 在有图的候选里优先挑，避免首页 3 张卡片出现空图框。
     #   判断条件：后端 image_url（网络图）或 dish_images.has_image（本地 asset）
-    region_dishes.sort(
+    ai_dish_shortlist = region_dishes[:shortlist]
+    ai_dish_shortlist.sort(
         key=lambda it: 0 if (it.raw.image_url or dish_images.has_image(it.raw.name)) else 1
     )
     region_foods.sort(key=lambda it: 0 if True else 1)  # 食材图片前端按名字 hash，后端不管
@@ -207,7 +210,8 @@ def build_home(
         month=current_month,
         weather=weather,
         food_shortlist=region_foods,
-        dish_shortlist=region_dishes,
+        dish_shortlist=ai_dish_shortlist,
+        dish_pool=region_dishes,
         refresh=refresh,
     )
     if enhancement.source in {"ai", "cached"}:
@@ -249,8 +253,16 @@ def build_home(
         constraints=constraints,
         region=region_key,
         date_key=today,
-        limit=20,
+        # 命中每日缓存后，只在当天首次确定的池子里做用户硬约束过滤。
+        candidate_ids=enhancement.dish_pool or None,
+        limit=len(enhancement.dish_pool) or 20,
     )
+    if enhancement.dish_pool:
+        # score_dishes 会把实时天气纳入质量分；这里恢复快照顺序，
+        # 保证早晚天气变化只更新天气卡片，不会把菜谱推荐重新洗牌。
+        user_dishes = _order_by_picks(
+            user_dishes, enhancement.dish_pool, len(user_dishes)
+        )
 
     # ★ Step 4 重跑后也要做图片优先 —— 否则 Step 5 _order_by_picks 会从
     # user_dishes（没图片排序）里按原顺序抓 AI 挑好的 id，把有图的又排到后面去。
@@ -339,8 +351,13 @@ def build_home(
     # 和首页最终展示的 3 道（从 user_dishes 来）对不上。
     pool_source_dishes = user_dishes or region_dishes  # user_dishes 全空才回退
     pool_source_foods = user_foods or region_foods
+    # 菜谱页与首页共用同一份顺序：AI 的 3 道精选在前，其余按当日快照补齐。
+    # 不能直接使用每次重算的原始打分顺序，否则菜谱页会在一天内反复变化。
+    ordered_pool_dishes = _order_by_picks(
+        pool_source_dishes, enhancement.dish_picks, 20
+    )
     recipe_pool_briefs = [
-        recipe_service.to_brief(item.raw) for item in pool_source_dishes[:20]
+        recipe_service.to_brief(item.raw) for item in ordered_pool_dishes
     ]
     food_pool_briefs = [
         food_service.to_brief(item.raw) for item in pool_source_foods[:12]
@@ -373,7 +390,7 @@ def build_home(
             ai_ms=enhancement.elapsed_ms,
             cache_key=enhancement.cache_key,
             shortlist_foods=len(region_foods),
-            shortlist_dishes=len(region_dishes),
+            shortlist_dishes=len(ai_dish_shortlist),
             steps=steps,
         ),
         today_recipe_pool=recipe_pool_briefs,

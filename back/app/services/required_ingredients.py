@@ -22,6 +22,37 @@ ANIMALS = {
 ALIASES = {'鱼肉': '鱼', '鱼类': '鱼', '鸡': '鸡肉', '牛': '牛肉', '猪': '猪肉',
            '羊': '羊肉', '鸭': '鸭肉', '虾肉': '虾', '虾类': '虾'}
 
+_SEAFOOD = ('鱼', '虾', '蟹', '贝类')
+_TOPIC_VERBS = re.compile(
+    r'推荐|来点|来几|来一|来两|来三|来四|来五|想吃|想喝|做点|做一|给我|配点|配几|上点|整点|的菜')
+# 问句/查详情不该被当成主题筛选，否则「鱼怎么做」会把会话锁死在只推鱼。
+_BLOCK_QUESTION = re.compile(r'怎么做|做法|步骤|热量|营养|多少卡|卡路里|是什么|什么意思')
+
+
+def _topic_requirement(message: str, terms: list[str]) -> list[str] | None:
+    """「推荐三道鱼的菜」「想吃点虾」这类主题式请求也要变成硬性食材限制。
+
+    之前只认「只要/只吃/只推荐…」，用户说「推荐三道鱼的菜」时约束为空，
+    候选池按季节随机召回，最后只有一道水产 —— 这就是「明明用了 RAG 却全是凑数菜」的根因。
+    """
+    if _BLOCK_QUESTION.search(message) or not _TOPIC_VERBS.search(message):
+        return None
+    if '海鲜' in message or '水产' in message:
+        return list(_SEAFOOD)
+    for term in sorted(terms, key=len, reverse=True):
+        if len(term) < 2 or term not in message:
+            continue
+        if re.search(r'(?:不|别|忌|免)(?:要|吃|放|加)?' + re.escape(term), message):
+            continue
+        return [term]
+    for group, (positive, negative) in ANIMALS.items():
+        if not re.search(positive, message) or re.search(negative, message):
+            continue
+        if re.search(r'(?:不|别|忌|免)(?:要|吃|放|加)?(?:' + positive + r')', message):
+            continue
+        return [group]
+    return None
+
 
 def edit(message: str, previous: list[str] | None, terms: list[str]) -> list[str] | None:
     """None means no edit; [] explicitly cancels a previous restriction."""
@@ -49,6 +80,8 @@ def edit(message: str, previous: list[str] | None, terms: list[str]) -> list[str
             # An unknown explicit ingredient must fail closed, never silently become
             # an unrestricted recommendation. Unsupported targets produce no matches.
             result = [tail]
+    if result is None:
+        result = _topic_requirement(message, terms)
     return result
 
 

@@ -65,7 +65,7 @@ def test_explicit_soup_only_and_vegetarian_goals_override_default_structure():
 
 
 @pytest.mark.parametrize('mode', ['chat', 'compose'])
-def test_service_repairs_extra_soup_and_discards_stale_model_description(session, monkeypatch, mode):
+def test_service_repairs_extra_soup_and_discards_stale_model_description(session, monkeypatch, stub_chat_understanding, mode):
     from app.ai import client as ai_client
     from app.core.config import settings
     from app.models.recipe import Recipe
@@ -86,6 +86,11 @@ def test_service_repairs_extra_soup_and_discards_stale_model_description(session
     monkeypatch.setattr(ai_client, '_network_complete_json', lambda *a, **kw: ai_client.AiResult(ok=True,
         data={'answer': old_description, 'picks': [{'id': c.item_id} for c in pool[:3]]}))
     if mode == 'chat':
+        from app.schemas.ai import AiUnderstanding, AiUnderstandingSlots
+        stub_chat_understanding(AiUnderstanding(
+            intent='meal_recommendation', operation='new', confidence=0.97,
+            slots=AiUnderstandingSlots(dish_count=3),
+        ))
         result = ai_service.chat(session, None, AiChatRequest(message='推荐三道菜'))
         final_ids = [r.id for r in result.recipes]
     else:

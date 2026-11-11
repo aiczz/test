@@ -25,7 +25,7 @@ def _compact_engine():
         """CREATE TABLE dishes (
             id INTEGER PRIMARY KEY, dish_name TEXT, dish_name_original TEXT,
             description TEXT, cuisine TEXT, instruction_text TEXT,
-            tags_json TEXT
+            tags_json TEXT, image_url TEXT
         )""",
         """CREATE TABLE dish_ingredients (
             id INTEGER PRIMARY KEY, dish_id INTEGER, ingredient_id INTEGER,
@@ -58,7 +58,8 @@ def _compact_engine():
         )
         connection.execute(
             text(
-                "INSERT INTO dishes VALUES "
+                "INSERT INTO dishes (id, dish_name, dish_name_original, description, "
+                "cuisine, instruction_text, tags_json) VALUES "
                 "(10, '香煎鸡胸肉', '香煎鸡胸肉', '简单健康', '家常菜', "
                 "'1、鸡胸肉切片\n2、煎至熟透', '[\"高蛋白\"]')"
             )

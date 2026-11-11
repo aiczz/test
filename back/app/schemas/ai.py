@@ -43,11 +43,72 @@ class AiChatMessage(BaseModel):
     content: str = Field(max_length=1000)
 
 
+class AiUnderstandingSlots(BaseModel):
+    """本轮明确说出的条件；None 一律表示「没有提到」，不是默认值。"""
+
+    people: int | None = Field(default=None, ge=1, le=20)
+    dish_count: int | None = Field(default=None, ge=1, le=10)
+    meat_count: int | None = Field(default=None, ge=0, le=10)
+    veg_count: int | None = Field(default=None, ge=0, le=10)
+    health_goal: str | None = None
+    required_foods: list[str] | None = Field(default=None, max_length=20)
+    mentioned_foods: list[str] = Field(default_factory=list, max_length=20)
+    avoid_added: list[str] = Field(default_factory=list, max_length=100)
+    avoid_removed: list[str] = Field(default_factory=list, max_length=100)
+    selection_preferences: list[str] | None = Field(default=None, max_length=20)
+    preferences: list[str] | None = Field(default=None, max_length=20)
+    excluded_categories: list[str] | None = Field(default=None, max_length=20)
+    cook_minutes: float | None = Field(default=None, ge=5, le=240)
+    low_sodium: bool | None = None
+
+
+class AiReference(BaseModel):
+    """模型只给出引用线索，真实 ID 由代码在当前会话结果里解析。"""
+
+    kind: Literal['recipe', 'food']
+    name: str | None = None
+    ordinal: int | None = Field(default=None, ge=1, le=20)
+    all: bool = False
+
+
+class AiPendingAction(BaseModel):
+    """高置信但信息不足时，由代码保存的待回填动作。"""
+
+    intent: Literal['meal_recommendation', 'recommend_foods', 'cook_with_my_foods', 'general']
+    operation: Literal['new', 'refine', 'add', 'replace', 'repeat', 'detail', 'answer']
+    slots: AiUnderstandingSlots = Field(default_factory=AiUnderstandingSlots)
+    reset: list[str] = Field(default_factory=list, max_length=20)
+    reference: AiReference | None = None
+    detail_kind: Literal['ingredients', 'steps', 'missing_ingredients', 'ingredient_cards', 'food_recipes'] | None = None
+    question: str
+
+
+class AiUnderstanding(BaseModel):
+    """理解层唯一输出：只描述用户说了什么，不执行工具、不直接改状态。"""
+
+    intent: Literal['meal_recommendation', 'recommend_foods', 'cook_with_my_foods', 'general', 'unknown']
+    operation: Literal['new', 'refine', 'add', 'replace', 'repeat', 'detail', 'answer'] = 'new'
+    confidence: float = Field(ge=0, le=1)
+    slots: AiUnderstandingSlots = Field(default_factory=AiUnderstandingSlots)
+    reset: list[str] = Field(default_factory=list, max_length=20)
+    reference: AiReference | None = None
+    detail_kind: Literal['ingredients', 'steps', 'missing_ingredients', 'ingredient_cards', 'food_recipes'] | None = None
+    clarification: str | None = None
+    why: str = ''
+    # 非权威上下文：代码可保存它，但任何约束不得只存在于这段摘要中。
+    history_summary: str | None = Field(default=None, max_length=2000)
+
+
 class AiConversationState(BaseModel):
     """Only explicit conversation overrides; profile defaults remain independent."""
 
     people: int | None = Field(default=None, ge=1, le=20)
     recommendation_count: int | None = Field(default=None, ge=1, le=10)
+    # 整餐结构：「一荤两素」→ meat=1, veg=2。和数量分开存，方便「换一道」时仍守住结构。
+    meal_meat_count: int | None = Field(default=None, ge=0, le=10)
+    meal_veg_count: int | None = Field(default=None, ge=0, le=10)
+    # 增量请求（「再来一道汤」）只作用于本轮执行，不写入持久会话状态或整餐数量。
+    incremental_count: int | None = Field(default=None, ge=1, le=10)
     selection_preferences: list[str] = Field(default_factory=list, max_length=20)
     required_foods: list[str] | None = Field(default=None, max_length=20)
     last_recommendation_kind: Literal['foods', 'recipes'] | None = None
@@ -66,6 +127,10 @@ class AiConversationState(BaseModel):
     avoid_added: list[str] = Field(default_factory=list, max_length=100)
     avoid_removed: list[str] = Field(default_factory=list, max_length=100)
     excluded_categories: list[str] = Field(default_factory=list, max_length=20)
+    health_goal: str | None = None
+    pending: AiPendingAction | None = None
+    history_summary: str | None = Field(default=None, max_length=2000)
+    last_intent: str | None = None
 
 
 class AiChatRequest(AiContext):

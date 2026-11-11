@@ -14,19 +14,29 @@ class Features:
     method: str
     minutes: float | None
     plant_only: bool = False
+    # 荤菜判定只认动物性蛋白（豆腐算素，鸡蛋算荤），避免「蚝油生菜」被调料误判成荤。
+    animal_protein: bool = False
 
 
 @dataclass(frozen=True)
 class MealPolicy:
     vegetarian: bool = False
     soup_only: bool = False
+    # 用户明确说出的整餐结构，如「一荤两素」→ meat_count=1, veg_count=2。
+    meat_count: int | None = None
+    veg_count: int | None = None
 
 
-def policy(message: str = '', preferences=()) -> MealPolicy:
-    from app.services.chat_context import selection_preferences
+def policy(message: str = '', preferences=(), *, meat: int | None = None,
+           veg: int | None = None) -> MealPolicy:
+    from app.services.chat_context import meal_structure, selection_preferences
     text = ' '.join(selection_preferences(message, list(preferences)))
+    structure = meal_structure(message)
+    if structure is not None:
+        meat, veg = structure
     return MealPolicy(vegetarian=bool(re.search(r'全素|纯素|只要素菜|只吃素|不要荤菜', text)),
-                      soup_only=bool(re.search(r'只要汤|只喝汤|只推荐汤|全是汤', text)))
+                      soup_only=bool(re.search(r'只要汤|只喝汤|只推荐汤|全是汤', text)),
+                      meat_count=meat, veg_count=veg)
 
 
 def features(item: ScoredItem) -> Features:
@@ -60,7 +70,8 @@ def features(item: ScoredItem) -> Features:
     duration = getattr(insight, "duration_minutes", None) if insight else getattr(item.raw, "duration_minutes", None)
     return Features(frozenset(getattr(insight, "ingredient_ids", []) or []), vegetable, protein, soup, method,
                     float(duration) if reliable and duration and duration > 0 else None,
-                    plant_only=not animal and (vegetable or protein == '豆类'))
+                    plant_only=not animal and (vegetable or protein == '豆类'),
+                    animal_protein=protein in {'牛肉', '猪肉', '羊肉', '鸡肉', '鱼虾', '蛋类'})
 
 
 def eligible(candidates: list[ScoredItem], requirements: MealPolicy) -> list[ScoredItem]:
@@ -68,11 +79,22 @@ def eligible(candidates: list[ScoredItem], requirements: MealPolicy) -> list[Sco
             and (not requirements.soup_only or features(c).soup)]
 
 
+def _structure_issues(all_facts: list[Features], requirements: MealPolicy) -> tuple[int, ...]:
+    """荤素结构偏差 —— 只对用户明确说出的 X荤Y素 生效。"""
+    result: list[int] = []
+    if not requirements.vegetarian and requirements.meat_count is not None:
+        result.append(abs(sum(f.animal_protein for f in all_facts) - requirements.meat_count))
+    if requirements.veg_count is not None:
+        result.append(abs(sum(not f.animal_protein for f in all_facts) - requirements.veg_count))
+    return tuple(result)
+
+
 def _issues(selected: list[Features], available: list[Features], fixed: list[Features], requirements: MealPolicy) -> tuple[int, ...]:
     all_facts = [*fixed, *selected]
     need_variety = len(all_facts) >= 2 and not requirements.soup_only
     proteins = [f.protein for f in all_facts if f.protein and not f.soup]
     return (0 if requirements.soup_only else max(0, sum(f.soup for f in all_facts) - 1),
+            *_structure_issues(all_facts, requirements),
             int(need_variety and any(f.vegetable for f in [*available, *fixed]) and not any(f.vegetable for f in all_facts)),
             int(need_variety and not requirements.vegetarian and any(f.protein for f in [*available, *fixed]) and not any(f.protein for f in all_facts)),
             max(0, len(proteins) - len(set(proteins))))
@@ -115,7 +137,13 @@ def remaining_issues(selected, candidates, *, existing=None, requirements=None) 
     requirements = requirements or MealPolicy()
     issues = _issues([features(c) for c in selected], [features(c) for c in eligible(candidates, requirements)],
                      [features(c) for c in (existing or [])], requirements)
-    return [label for label, amount in zip(('汤菜重复', '缺少蔬菜搭配', '缺少蛋白类', '蛋白来源重复'), issues) if amount]
+    structure_labels = []
+    if not requirements.vegetarian and requirements.meat_count is not None:
+        structure_labels.append('荤菜数量不符')
+    if requirements.veg_count is not None:
+        structure_labels.append('素菜数量不符')
+    labels = ('汤菜重复', *structure_labels, '缺少蔬菜搭配', '缺少蛋白类', '蛋白来源重复')
+    return [label for label, amount in zip(labels, issues) if amount]
 
 
 def select_meal(candidates: list[ScoredItem], count: int, *, food_ids: set[int],
@@ -137,6 +165,11 @@ def select_meal(candidates: list[ScoredItem], count: int, *, food_ids: set[int],
         score += 2 * bool(any(f.protein for f in all_facts))
         if not requirements.soup_only:
             score -= 7 * max(0, sum(f.soup for f in all_facts) - 1)
+        # 用户明确要求的荤素结构优先于口味多样性
+        if not requirements.vegetarian and requirements.meat_count is not None:
+            score -= 6 * abs(sum(f.animal_protein for f in all_facts) - requirements.meat_count)
+        if requirements.veg_count is not None:
+            score -= 6 * abs(sum(not f.animal_protein for f in all_facts) - requirements.veg_count)
         proteins = [f.protein for f in all_facts if f.protein]
         methods = [f.method for f in all_facts if f.method]
         score -= 3 * (len(proteins) - len(set(proteins)))

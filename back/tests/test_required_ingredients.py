@@ -2,11 +2,21 @@
 import pytest
 
 from app.models.recipe import Recipe, RecipeIngredient
-from app.schemas.ai import AiChatRequest, AiConversationState, AiRecommendRequest
+from app.schemas.ai import AiChatRequest, AiConversationState, AiRecommendRequest, AiUnderstanding, AiUnderstandingSlots
 from app.services import ai_service, chat_context
 from app.services import required_ingredients, scoring_service
 from app.ai import client as ai_client
 from app.core.config import settings
+
+
+def understood(intent='meal_recommendation', operation='new', *, reset=None, **slots):
+    return AiUnderstanding(
+        intent=intent,
+        operation=operation,
+        confidence=0.97,
+        slots=AiUnderstandingSlots(**slots),
+        reset=reset or [],
+    )
 
 
 @pytest.fixture
@@ -34,12 +44,17 @@ def fish_catalog(session):
 
 def ask(session, message, previous=None, **kwargs):
     return ai_service.chat(session, None, AiChatRequest(
-        message=message, use_ai=False, cook_minutes=240,
+        message=message, cook_minutes=240,
         conversation_state=previous.conversation_state if previous else None,
         last_intent=previous.intent if previous else None, **kwargs))
 
 
-def test_only_fish_persists_without_filling_with_other_meats(session, fish_catalog):
+def test_only_fish_persists_without_filling_with_other_meats(session, fish_catalog, stub_chat_understanding):
+    stub_chat_understanding({
+        '推荐8道菜': understood(dish_count=8),
+        '只要鱼': understood(operation='refine', required_foods=['鱼']),
+        '换一批': understood(operation='repeat'),
+    })
     first = ask(session, '推荐8道菜')
     result = ask(session, '只要鱼', first)
     expected = {fish_catalog['清蒸鲈鱼'], fish_catalog['番茄鳕鱼豆腐锅']}
@@ -54,8 +69,9 @@ def test_only_fish_persists_without_filling_with_other_meats(session, fish_catal
 
 
 @pytest.mark.parametrize('mode', ['chat', 'compose'])
-def test_restriction_applies_to_both_entrypoints(session, fish_catalog, mode):
+def test_restriction_applies_to_both_entrypoints(session, fish_catalog, stub_chat_understanding, mode):
     if mode == 'chat':
+        stub_chat_understanding(understood(dish_count=5, required_foods=['鸡肉']))
         result = ask(session, '只推荐鸡肉，推荐5道菜')
         recipes = result.recipes
     else:
@@ -66,31 +82,42 @@ def test_restriction_applies_to_both_entrypoints(session, fish_catalog, mode):
     assert all('鸡' in r.name and '菇' not in r.name.replace('香菇', '') for r in recipes)
 
 
-def test_cancel_and_replace_required_foods_preserve_other_conditions(session, fish_catalog):
+def test_cancel_and_replace_required_foods_preserve_other_conditions(session, fish_catalog, stub_chat_understanding):
+    stub_chat_understanding({
+        '推荐8道菜，只要鱼，不吃花生': understood(dish_count=8, required_foods=['鱼'], avoid_added=['花生']),
+        '只要鸡肉': understood(operation='refine', required_foods=['鸡肉']),
+        '取消食材限制': understood(operation='refine', reset=['required_foods']),
+    })
     first = ask(session, '推荐8道菜，只要鱼，不吃花生')
     chicken = ask(session, '只要鸡肉', first)
     assert chicken.conversation_state.required_foods == ['鸡肉']
     assert fish_catalog['清蒸鸡肉'] in {r.id for r in chicken.recipes}
     assert all('鸡' in r.name and r.name != '清炒鸡腿菇' for r in chicken.recipes)
     cancelled = ask(session, '取消食材限制', chicken)
-    assert cancelled.conversation_state.required_foods == []
+    assert not cancelled.conversation_state.required_foods
     assert cancelled.requested_count == 8
     assert '花生' in cancelled.effective_context.avoid
     assert len(cancelled.recipes) > 1
 
 
-def test_no_matching_ingredient_does_not_relax_to_unrelated_foods(session):
+def test_no_matching_ingredient_does_not_relax_to_unrelated_foods(session, stub_chat_understanding):
+    stub_chat_understanding(understood(dish_count=8, required_foods=['鳗鱼']))
     result = ask(session, '只要鳗鱼，推荐8道菜')
     assert not result.recipes
 
 
 @pytest.mark.parametrize('message', ['只要鱼是什么意思', '不要只推荐鱼', '不只要鱼', '只要两个', '只要三道菜', '只推荐汤', '只要素菜', '只要不辣'])
 def test_negated_or_explanatory_phrases_are_not_positive_filters(message):
+    """遗留独立解析器自身的反例，不参与聊天主链路。"""
     state = chat_context.edits(message, AiConversationState(), ['鱼'])
     assert not state.required_foods
 
 
-def test_switch_and_exclude_ingredient_in_same_conversation(session, fish_catalog):
+def test_switch_and_exclude_ingredient_in_same_conversation(session, fish_catalog, stub_chat_understanding):
+    stub_chat_understanding({
+        '只要鱼': understood(required_foods=['鱼']),
+        '换成鸡肉，不要鱼': understood(operation='refine', required_foods=['鸡肉'], avoid_added=['鱼']),
+    })
     first = ask(session, '只要鱼')
     chicken = ask(session, '换成鸡肉，不要鱼', first)
     assert chicken.conversation_state.required_foods == ['鸡肉']
@@ -99,9 +126,10 @@ def test_switch_and_exclude_ingredient_in_same_conversation(session, fish_catalo
     assert all('鱼' not in r.name for r in chicken.recipes)
 
 
-def test_explicit_empty_request_overrides_persisted_restriction(session, fish_catalog):
+def test_explicit_empty_request_overrides_persisted_restriction(session, fish_catalog, stub_chat_understanding):
+    stub_chat_understanding(understood(operation='repeat'))
     state = AiConversationState(required_foods=[], recommendation_count=8)
-    result = ai_service.chat(session, None, AiChatRequest(message='换一批', use_ai=False,
+    result = ai_service.chat(session, None, AiChatRequest(message='换一批',
         last_intent='meal_recommendation', required_foods=['鱼'], conversation_state=state))
     assert not result.effective_context.required_foods
     assert len(result.recipes) > 2
@@ -109,10 +137,13 @@ def test_explicit_empty_request_overrides_persisted_restriction(session, fish_ca
 
 @pytest.mark.parametrize('mode', ['chat', 'compose'])
 @pytest.mark.parametrize('invalid', [False, True])
-def test_model_pool_and_invalid_selection_cannot_reintroduce_other_meats(session, fish_catalog, monkeypatch, mode, invalid):
+def test_model_pool_and_invalid_selection_cannot_reintroduce_other_meats(
+    session, fish_catalog, monkeypatch, stub_chat_understanding, mode, invalid,
+):
     import re
     expected = {fish_catalog['清蒸鲈鱼'], fish_catalog['番茄鳕鱼豆腐锅']}
     calls = []
+
     def network(messages, **kwargs):
         prompt = messages[-1]['content']
         pool = set(map(int, re.findall(r'^(\d+) \|', prompt, re.M)))
@@ -123,10 +154,12 @@ def test_model_pool_and_invalid_selection_cannot_reintroduce_other_meats(session
         return ai_client.AiResult(ok=True, model='test', data={
             'answer': '其他几道是牛肉和鸡肉补充',
             'picks': [{'id': i, 'reason': '牛肉补充'} for i in picks]})
+
     monkeypatch.setattr(settings, 'ai_enabled', True)
     monkeypatch.setattr(settings, 'ai_api_key', 'test-only')
     monkeypatch.setattr(ai_client, '_network_complete_json', network)
     if mode == 'chat':
+        stub_chat_understanding(understood(dish_count=8, required_foods=['鱼']))
         result = ai_service.chat(session, None, AiChatRequest(message='只要鱼，推荐8道菜', use_ai=True, cook_minutes=240))
         recipes = result.recipes
     else:
@@ -139,7 +172,8 @@ def test_model_pool_and_invalid_selection_cannot_reintroduce_other_meats(session
     assert all('牛肉补充' not in (r.description or '') for r in recipes)
 
 
-def test_strict_recall_does_not_depend_on_seasonal_shortlist(session, fish_catalog, monkeypatch):
+def test_strict_recall_does_not_depend_on_seasonal_shortlist(session, fish_catalog, monkeypatch, stub_chat_understanding):
+    stub_chat_understanding(understood(dish_count=8, required_foods=['鱼']))
     monkeypatch.setattr(scoring_service, '_dish_candidate_ids',
                         lambda *a, **kw: pytest.fail('Strict ingredient recall must precede seasonal truncation'))
     result = ask(session, '只要鱼，推荐8道菜')
@@ -174,7 +208,8 @@ def test_ingredient_evidence_and_animal_lookalikes(names, required, expected):
     assert required_ingredients.matches(names, required) == expected
 
 
-def test_conflicting_avoid_and_requirement_never_relaxes(session, fish_catalog):
+def test_conflicting_avoid_and_requirement_never_relaxes(session, fish_catalog, stub_chat_understanding):
+    stub_chat_understanding(understood(required_foods=['鱼'], avoid_added=['鱼']))
     result = ask(session, '只要鱼，不吃鱼')
     assert not result.recipes
     assert '鱼' in result.effective_context.avoid
@@ -182,6 +217,7 @@ def test_conflicting_avoid_and_requirement_never_relaxes(session, fish_catalog):
 
 
 def test_inclusion_cancellation_does_not_cancel_independent_avoid():
+    """遗留独立解析器自身的取消规则，不代表聊天状态 reducer。"""
     state = AiConversationState(required_foods=['鱼'], avoid_added=['鱼', '花生'])
     changed = chat_context.edits('取消只要鱼', state, ['鱼', '花生'])
     assert changed.required_foods == []
@@ -199,18 +235,28 @@ def test_food_names_keep_their_last_character(message, expected):
     assert required_ingredients.edit(message, None, ['白菜', '油麦菜', '三文鱼', '四季豆']) == expected
 
 
-def test_new_filter_can_keep_matching_previously_shown_dishes(session, fish_catalog):
+def test_new_filter_can_keep_matching_previously_shown_dishes(session, fish_catalog, stub_chat_understanding):
+    stub_chat_understanding({
+        '推荐8道菜': understood(dish_count=8),
+        '只要鱼': understood(operation='refine', required_foods=['鱼']),
+        '换一批': understood(operation='repeat'),
+    })
     first = ask(session, '推荐8道菜')
-    # The app sends all recently shown IDs, including fish the user wants to keep.
+    # 前端会传所有近期展示 ID；条件修改不能像“换一批”一样盲目排除旧菜。
     first.conversation_state.last_recommended_recipe_ids = list(fish_catalog.values())
     result = ask(session, '只要鱼', first, recent_recipe_ids=list(fish_catalog.values()))
     assert {r.id for r in result.recipes} == {fish_catalog['清蒸鲈鱼'], fish_catalog['番茄鳕鱼豆腐锅']}
     again = ask(session, '换一批', result, recent_recipe_ids=[r.id for r in result.recipes])
-    assert not again.recipes  # Exhaustion is honest; no beef or chicken fallback.
+    assert not again.recipes  # 候选耗尽要诚实，不得用牛肉或鸡肉补齐。
 
 
-def test_restriction_keeps_explicit_new_food_or_recipe_target(session, fish_catalog):
+def test_restriction_keeps_explicit_new_food_or_recipe_target(session, fish_catalog, stub_chat_understanding):
     from app.models.food import Food
+    stub_chat_understanding({
+        '推荐8道菜': understood(dish_count=8),
+        '推荐食材，只要鱼': understood(intent='recommend_foods', required_foods=['鱼']),
+        '推荐菜谱，只要鱼': understood(required_foods=['鱼']),
+    })
     session.add(Food(name='鲈鱼', category='aquatic'))
     session.commit()
     recipes = ask(session, '推荐8道菜')

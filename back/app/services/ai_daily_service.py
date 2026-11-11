@@ -7,8 +7,10 @@
   · 不能每个用户、每次刷新都调一次大模型    → 一个地区一天只调一次，落库复用
 
 所以这里把「问 AI」这件事收敛成一个纯函数：
-    key = home:{地区}:{日期}:{季节}:{天气}
+    key = home:{地区}:{日期}:{模型}
 命中缓存就直接返回；没命中才真的发一次请求，然后把结果写回缓存。
+实时天气只参与当天第一次生成，不参与缓存键 —— 早晚天气变化不能再触发
+一次模型调用。缓存里同时保存菜品池快照，首页和菜谱页当天共用同一顺序。
 
 【为什么候选筛选不带上用户的忌口】
 如果候选集因人而异，缓存就没法共享，token 也就省不下来。
@@ -64,6 +66,9 @@ class HomeEnhancement:
     tip_body: str
     food_picks: list[int] = field(default_factory=list)
     dish_picks: list[int] = field(default_factory=list)
+    # 当天首次生成时的菜品候选池快照。菜谱页也按它过滤与排序，
+    # 避免早晚天气变化后重新打分，把同一天的推荐洗牌。
+    dish_pool: list[int] = field(default_factory=list)
     food_notes: dict[int, str] = field(default_factory=dict)
     dish_notes: dict[int, str] = field(default_factory=dict)
     # ai = 这次真的调了模型；cached = 命中当天缓存；algorithm = 没配 AI / 调用失败
@@ -83,21 +88,17 @@ class HomeEnhancement:
 # 否则部署后 36 小时内还会命中旧代码生成的推荐（候选集和文案都对不上了）。
 # 带上版本号，一次部署就能让旧缓存自然失效，不用手工清库。
 #
-# ★ v6：换成精选目录（10000 道 → 700 道）。
-#   这次比改算法更要紧的原因是：缓存里存的是**菜谱 id**，
-#   而换目录之后 id 会被重新占用 —— 旧缓存里的 id 可能指向完全不同的菜。
-#   不失效的话，首页会出现「缓存里是 A、显示出来是 B」这种鬼故事。
-CACHE_RECIPE_VERSION = "v6"
+# ★ v7：缓存增加「当日菜品池快照」，并移除缓存键里的实时天气。
+#   天气只影响当天第一次生成；一天内天气变化不能再产生新缓存、重调模型。
+CACHE_RECIPE_VERSION = "v7"
 
 
 def build_cache_key(
     *, region: str, date_key: str, month: int, weather: WeatherContext
 ) -> str:
-    return (
-        f"home:{CACHE_RECIPE_VERSION}:{region}:{date_key}"
-        f":{scoring_service.season_char_of(month)}"
-        f":{weather.kind}:{settings.ai_model}"
-    )
+    # month / weather 仍保留在签名里，调用方无需跟着改；日期已能确定季节。
+    # 关键是实时天气不能参与缓存身份，否则早晚天气一变就会重新生成推荐。
+    return f"home:{CACHE_RECIPE_VERSION}:{region}:{date_key}:{settings.ai_model}"
 
 
 def _read_cache(session: Session, key: str) -> dict | None:
@@ -380,6 +381,7 @@ def _enhance_home(
     weather: WeatherContext,
     food_shortlist: list[ScoredItem],
     dish_shortlist: list[ScoredItem],
+    dish_pool: list[ScoredItem] | None = None,
     refresh: bool = False,
 ) -> HomeEnhancement:
     """拿到今天的首页 AI 增强结果（缓存优先）。永不抛异常。"""
@@ -395,6 +397,7 @@ def _enhance_home(
                 tip_body=str(cached.get("tip_body") or ""),
                 food_picks=[int(i) for i in cached.get("food_picks") or []],
                 dish_picks=[int(i) for i in cached.get("dish_picks") or []],
+                dish_pool=[int(i) for i in cached.get("dish_pool") or []],
                 food_notes={int(k): str(v) for k, v in (cached.get("food_notes") or {}).items()},
                 dish_notes={int(k): str(v) for k, v in (cached.get("dish_notes") or {}).items()},
                 source="cached",
@@ -423,6 +426,7 @@ def _enhance_home(
                     tip_body=str(cached.get("tip_body") or ""),
                     food_picks=[int(i) for i in cached.get("food_picks") or []],
                     dish_picks=[int(i) for i in cached.get("dish_picks") or []],
+                    dish_pool=[int(i) for i in cached.get("dish_pool") or []],
                     food_notes={
                         int(k): str(v) for k, v in (cached.get("food_notes") or {}).items()
                     },
@@ -481,6 +485,9 @@ def _enhance_home(
     # 所以从前往后找第一个有图且没被挑过的替换即可。
     _ensure_all_have_images(dish_picks, dish_shortlist)
 
+    daily_dish_pool = [
+        item.item_id for item in (dish_pool if dish_pool is not None else dish_shortlist)
+    ]
     enhancement = HomeEnhancement(
         tip_title=str(data.get("tip_title") or "").strip()[:24]
         or f"{month} 月时令推荐",
@@ -488,6 +495,7 @@ def _enhance_home(
         or weather.advice,
         food_picks=food_picks[:3],
         dish_picks=dish_picks[:3],
+        dish_pool=daily_dish_pool,
         food_notes=_coerce_notes(data.get("food_notes"), food_ids),
         dish_notes=_coerce_notes(data.get("dish_notes"), dish_ids),
         source="ai",
@@ -504,6 +512,7 @@ def _enhance_home(
             "tip_body": enhancement.tip_body,
             "food_picks": enhancement.food_picks,
             "dish_picks": enhancement.dish_picks,
+            "dish_pool": enhancement.dish_pool,
             "food_notes": {str(k): v for k, v in enhancement.food_notes.items()},
             "dish_notes": {str(k): v for k, v in enhancement.dish_notes.items()},
             "model": enhancement.model,

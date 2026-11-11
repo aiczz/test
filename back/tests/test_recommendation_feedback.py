@@ -1,5 +1,13 @@
 from app.data.seed import DEMO_USERNAME, DEMO_PASSWORD
+from app.schemas.ai import AiUnderstanding, AiUnderstandingSlots
 from app.services import scoring_service, weather_service
+
+
+def _recipes(count):
+    return AiUnderstanding(
+        intent='meal_recommendation', operation='new', confidence=0.97,
+        slots=AiUnderstandingSlots(dish_count=count),
+    )
 
 
 def auth(client, username=DEMO_USERNAME, password=DEMO_PASSWORD):
@@ -8,7 +16,11 @@ def auth(client, username=DEMO_USERNAME, password=DEMO_PASSWORD):
     return {'Authorization': 'Bearer ' + response.json()['access_token']}
 
 
-def test_dislike_excludes_both_recommendation_paths_and_can_be_revoked(client):
+def test_dislike_excludes_both_recommendation_paths_and_can_be_revoked(client, stub_chat_understanding):
+    stub_chat_understanding({
+        '推荐一道菜': _recipes(1),
+        '推荐三道菜': _recipes(3),
+    })
     headers = auth(client)
     first = client.post('/api/ai/chat', headers=headers, json={'message': '推荐一道菜', 'use_ai': False, 'cook_minutes': 240}).json()
     target = first['recipes'][0]['id']

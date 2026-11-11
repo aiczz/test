@@ -182,7 +182,7 @@ def _compact_engine():
             text(
                 "CREATE TABLE dishes ("
                 "id INTEGER PRIMARY KEY, dish_name TEXT, description TEXT, "
-                "cuisine TEXT, instruction_text TEXT, tags_json TEXT)"
+                "cuisine TEXT, instruction_text TEXT, tags_json TEXT, image_url TEXT)"
             )
         )
         connection.execute(
@@ -222,7 +222,8 @@ def _compact_engine():
         )
         connection.execute(
             text(
-                "INSERT INTO dishes VALUES "
+                "INSERT INTO dishes (id, dish_name, description, cuisine, "
+                "instruction_text, tags_json) VALUES "
                 # 同一件事的不同写法，必须都归到「汤羹」
                 "(1, '番茄蛋花汤', NULL, NULL, '煮 10 分钟', '[\"汤\", \"家常\"]'), "
                 "(2, '老火例汤', NULL, NULL, '炖 90 分钟', '[\"老火汤\", \"家常菜\"]'), "

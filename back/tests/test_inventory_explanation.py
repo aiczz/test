@@ -2,11 +2,12 @@
 from types import SimpleNamespace
 
 from app.ai.client import AiResult
+from app.schemas.ai import AiUnderstanding
 from app.services import ai_service
 from app.services.scoring_service import HardConstraints
 
 
-def test_inventory_chat_replaces_model_claims(client, monkeypatch):
+def test_inventory_chat_replaces_model_claims(client, monkeypatch, stub_chat_understanding):
     token = client.post("/api/auth/login", json={
         "username": "demo", "password": "shishi2026",
     }).json()["access_token"]
@@ -15,7 +16,7 @@ def test_inventory_chat_replaces_model_claims(client, monkeypatch):
         "food_id": 1, "amount": 2, "unit": "节",
     })
     prompts = []
-    monkeypatch.setattr(ai_service, "_route_semantic", lambda **kwargs: None)
+    stub_chat_understanding(AiUnderstanding(intent='cook_with_my_foods', confidence=0.97))
     monkeypatch.setattr(ai_service.client, "is_configured", lambda: True)
 
     def fake_model(messages):

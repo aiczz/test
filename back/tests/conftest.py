@@ -27,7 +27,7 @@ def _hermetic_externals():
 
     开发机上 back/.env 里配了真的 AI_API_KEY，如果不隔离，
     `pytest` 会真的去调 DeepSeek：慢、要花钱、断网就红。
-    这里强制关掉 AI 与天气，让测试只验证「没有外部服务时」的确定性行为 ——
+    这里强制关掉 AI、天气与 embedding，让测试只验证「没有外部服务时」的确定性行为 ——
     这恰好也是线上没配 Key / 断网时的降级路径。
     """
     saved = (
@@ -35,10 +35,13 @@ def _hermetic_externals():
         settings.ai_api_key,
         settings.weather_enabled,
         settings.recipe_images_only,
+        settings.embedding_enabled,
     )
     settings.ai_enabled = False
     settings.ai_api_key = ""
     settings.weather_enabled = False
+    # 语义召回同样走网络；不关掉会让离线测试真的去调 embedding 服务。
+    settings.embedding_enabled = False
     # Other algorithm fixtures deliberately contain unillustrated recipes.
     # Image-specific tests explicitly enable the product filter.
     settings.recipe_images_only = False
@@ -53,6 +56,7 @@ def _hermetic_externals():
             settings.ai_api_key,
             settings.weather_enabled,
             settings.recipe_images_only,
+            settings.embedding_enabled,
         ) = saved
         weather_service.reset_cache()
         ai_client.clear_cache()
@@ -91,3 +95,29 @@ def client_fixture(session):
     client = TestClient(app)
     yield client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def stub_chat_understanding(monkeypatch):
+    """显式注入测试场景的理解合同；不按关键词猜测，也不伪装成语义质量测试。"""
+    from app.schemas.ai import AiUnderstanding
+    from app.services import ai_service, chat_context
+
+    def install(scenario):
+        def route(*, session, message, payload=None):
+            value = scenario(message, payload) if callable(scenario) else (
+                scenario.get(message) if isinstance(scenario, dict) else scenario
+            )
+            if value is None:
+                return ai_service._unavailable_route('测试没有提供这句话的结构化理解。')
+            if isinstance(value, dict):
+                value = AiUnderstanding.model_validate(value)
+            value = ai_service._validate_understanding(value)
+            if payload is not None and payload.conversation_state is not None:
+                value = ai_service._validate_understanding(
+                    chat_context.fill_pending(payload.conversation_state, value)
+                )
+            return ai_service._route_from_understanding(session, value)
+
+        monkeypatch.setattr(ai_service, '_route_smart', route)
+    return install

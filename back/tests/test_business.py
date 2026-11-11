@@ -5,6 +5,14 @@
 """
 
 from app.data.seed import DEMO_PASSWORD, DEMO_USERNAME
+from app.schemas.ai import AiUnderstanding, AiUnderstandingSlots
+
+
+def _understood(intent='meal_recommendation', **slots):
+    return AiUnderstanding(
+        intent=intent, operation='new', confidence=0.97,
+        slots=AiUnderstandingSlots(**slots),
+    )
 
 
 def _auth(client, username=DEMO_USERNAME, password=DEMO_PASSWORD) -> dict:
@@ -335,7 +343,8 @@ def test_shopping_cannot_use_others_menu(client):
 # ---------------------------------------------------------------- §20 AI 助手
 
 
-def test_ai_chat_meal_recommendation(client):
+def test_ai_chat_meal_recommendation(client, stub_chat_understanding):
+    stub_chat_understanding(_understood(people=3, dish_count=3))
     resp = client.post("/api/ai/chat", json={"message": "三个人今晚吃什么？"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -346,18 +355,21 @@ def test_ai_chat_meal_recommendation(client):
     assert "3" in body["menu"]["summary"]
 
 
-def test_ai_chat_parses_chinese_number(client):
+def test_ai_chat_parses_chinese_number(client, stub_chat_understanding):
+    stub_chat_understanding(_understood(people=2))
     body = client.post("/api/ai/chat", json={"message": "两个人晚饭推荐"}).json()
     assert "2" in body["menu"]["summary"]
 
 
-def test_ai_chat_without_login_prompts_login(client):
+def test_ai_chat_without_login_prompts_login(client, stub_chat_understanding):
+    stub_chat_understanding(_understood(intent='cook_with_my_foods'))
     body = client.post("/api/ai/chat", json={"message": "用我的食材做菜"}).json()
     assert body["intent"] == "cook_with_my_foods"
     assert "登录" in body["answer"]
 
 
-def test_ai_chat_with_my_inventory(client):
+def test_ai_chat_with_my_inventory(client, stub_chat_understanding):
+    stub_chat_understanding(_understood(intent='cook_with_my_foods'))
     header = _auth(client)
     client.post("/api/my-foods", json={"food_id": 1}, headers=header)  # 莲藕
     body = client.post(
@@ -367,7 +379,8 @@ def test_ai_chat_with_my_inventory(client):
     assert any(r["name"] == "莲藕排骨汤" for r in body["recipes"])
 
 
-def test_ai_chat_general(client):
+def test_ai_chat_general(client, stub_chat_understanding):
+    stub_chat_understanding(_understood(intent='general'))
     body = client.post("/api/ai/chat", json={"message": "你好"}).json()
     assert body["intent"] == "general"
     assert body["recipes"] == []
@@ -471,7 +484,7 @@ def test_family_constraints_are_bounds_checked(client):
     )
 
 
-def test_recipe_servings_kept_when_data_exists(client):
+def test_recipe_servings_kept_when_data_exists(client, stub_chat_understanding):
     """旧演示表（recipes）真的有 servings 列 → 照常给值，不能被一起砍掉。
 
     （清洗库那条路径的「没有数据就不编」在 tests/test_dish_tags.py 里测，
@@ -483,6 +496,7 @@ def test_recipe_servings_kept_when_data_exists(client):
 
     轨迹上那行「读取约束」是给人看的证据：写了 2 人就不该显示 3 人。
     """
+    stub_chat_understanding(_understood())
     header = _auth(client)
     body = client.post(
         "/api/ai/chat",

@@ -16,9 +16,17 @@ from sqlalchemy import text
 from sqlmodel import Session, create_engine
 from sqlmodel.pool import StaticPool
 
+from app.schemas.ai import AiUnderstanding, AiUnderstandingSlots
 from app.services import ai_daily_service, scoring_service, weather_service
 from app.services.scoring_service import HardConstraints
 from app.services.weather_service import WeatherContext
+
+
+def _understood(intent='meal_recommendation', operation='new', **slots):
+    return AiUnderstanding(
+        intent=intent, operation=operation, confidence=0.97,
+        slots=AiUnderstandingSlots(**slots),
+    )
 
 # =====================================================================
 # 最小「清洗库」测试夹具
@@ -38,7 +46,7 @@ _COMPACT_DDL = [
     )""",
     """CREATE TABLE dishes (
         id INTEGER PRIMARY KEY, dish_name TEXT, description TEXT, cuisine TEXT,
-        tags_json TEXT, instruction_text TEXT, total_weight_g REAL,
+        tags_json TEXT, instruction_text TEXT, image_url TEXT, total_weight_g REAL,
         energy_kcal REAL, protein_g REAL, fat_g REAL, cho_g REAL,
         dietary_fiber_g REAL, na_mg REAL, matched_ratio REAL
     )""",
@@ -458,7 +466,7 @@ def test_goal_keywords_all_exist_in_our_catalog(client):
     assert body["items"], "得有食材"
 
 
-def test_need_expressions_never_fall_into_chitchat(client):
+def test_need_expressions_never_fall_into_chitchat(client, stub_chat_understanding):
     """★ 用户表达了需求，就绝不能被当成闲聊敷衍过去。
 
     这一条是架构性的回归：原来是「命中固定短语才算推荐」，实测 19 条常见说法
@@ -472,20 +480,22 @@ def test_need_expressions_never_fall_into_chitchat(client):
         "想喝汤", "来点低脂的", "四个人晚餐吃点啥好",
         "我不吃香菜", "我海鲜过敏", "我不吃辣",
     ]
+    stub_chat_understanding({message: _understood() for message in need_expressions})
     wrong = []
     for message in need_expressions:
         body = client.post("/api/ai/chat", json={"message": message}).json()
-        if body["intent"] == "general":
+        if body["intent"] != "meal_recommendation" or not body["recipes"]:
             wrong.append(message)
-    assert not wrong, f"这些明确的需求被当成了闲聊：{wrong}"
+    assert not wrong, f"这些明确的需求没有进入菜谱推荐：{wrong}"
 
 
-def test_chitchat_stays_chitchat_and_answers_on_topic(client):
+def test_chitchat_stays_chitchat_and_answers_on_topic(client, stub_chat_understanding):
     """闲聊要真的在闲聊，而且要答到点子上。
 
     以前不管是「你好」「谢谢」还是「你是谁」，离线兜底都回同一段自我介绍 ——
     「谢谢」回「我是小食，可以帮你安排今天吃什么」就是典型的牛头不对马嘴。
     """
+    stub_chat_understanding(_understood(intent='general'))
     for message in ["你好", "谢谢", "你是谁", "再见", "这个App怎么用"]:
         body = client.post("/api/ai/chat", json={"message": message}).json()
         assert body["intent"] == "general", f"{message} 不该被当成要推荐"
@@ -498,11 +508,12 @@ def test_chitchat_stays_chitchat_and_answers_on_topic(client):
     assert "你好" in greeting["answer"], greeting["answer"]
 
 
-def test_declared_avoid_is_honored(client):
+def test_declared_avoid_is_honored(client, stub_chat_understanding):
     """★ 用户在对话里声明的忌口必须生效 —— 这是安全问题。
 
     「我不吃鸡蛋」如果被当成闲聊忽略掉，后面推的菜里出现鸡蛋就是事故。
     """
+    stub_chat_understanding(_understood(avoid_added=['鸡蛋']))
     body = client.post(
         "/api/ai/chat", json={"message": "我不吃鸡蛋，推荐几道菜"}
     ).json()
@@ -515,11 +526,12 @@ def test_declared_avoid_is_honored(client):
     assert "番茄炒蛋" not in names, f"声明了不吃鸡蛋却推了：{names}"
 
 
-def test_mentioned_food_drives_recall(client):
+def test_mentioned_food_drives_recall(client, stub_chat_understanding):
     """★ 点名了食材，回答就得围绕它 —— 这是「牛头不对马嘴」的直接防线。
 
     「莲藕怎么做」如果只当成普通推荐，会推一堆当季菜，跟莲藕没关系。
     """
+    stub_chat_understanding(_understood(mentioned_foods=['莲藕']))
     body = client.post("/api/ai/chat", json={"message": "莲藕怎么做", "cook_minutes": 240}).json()
     assert body["intent"] != "general"
     summary = " ".join(step["summary"] for step in body["trace"])
@@ -721,8 +733,8 @@ def test_ai_picks_outside_candidates_are_dropped():
     assert [entry["id"] for entry in picked] == [101, 102, 103]
 
 
-def test_ai_daily_cache_serves_the_whole_region_for_the_day(session):
-    """★ 一个地区一天只问一次 AI：写进缓存后，第二次直接命中，不再调模型。"""
+def test_ai_daily_cache_serves_the_whole_region_for_the_day(session, monkeypatch):
+    """一个地区一天只问一次 AI；当天天气变化也不能触发新调用。"""
     weather = _weather()
     key = ai_daily_service.build_cache_key(
         region="杭州", date_key="2026-10-05", month=10, weather=weather
@@ -735,6 +747,7 @@ def test_ai_daily_cache_serves_the_whole_region_for_the_day(session):
             "tip_body": "今天杭州天干，多吃润燥的。",
             "food_picks": [3, 6],
             "dish_picks": [103, 106],
+            "dish_pool": [101, 103, 106],
             "food_notes": {"3": "莲藕润燥"},
             "dish_notes": {"103": "汤水润肺"},
             "model": "deepseek-chat",
@@ -754,7 +767,25 @@ def test_ai_daily_cache_serves_the_whole_region_for_the_day(session):
     assert result.source == "cached"
     assert result.food_picks == [3, 6]
     assert result.dish_picks == [103, 106]
+    assert result.dish_pool == [101, 103, 106]
     assert result.food_notes[3] == "莲藕润燥"
+
+    def _unexpected_call(*args, **kwargs):
+        raise AssertionError("同一天天气变化后不应再次调用模型")
+
+    monkeypatch.setattr(ai_daily_service.client, "is_configured", lambda: True)
+    monkeypatch.setattr(ai_daily_service.client, "complete_json", _unexpected_call)
+    changed_weather = ai_daily_service.enhance_home(
+        session,
+        region="杭州",
+        date_key="2026-10-05",
+        month=10,
+        weather=_weather("cold"),
+        food_shortlist=[],
+        dish_shortlist=[],
+    )
+    assert changed_weather.source == "cached"
+    assert changed_weather.dish_pool == [101, 103, 106]
 
 
 def test_ai_daily_cache_key_is_per_region_and_date():
@@ -769,6 +800,11 @@ def test_ai_daily_cache_key_is_per_region_and_date():
         region="杭州", date_key="2026-10-05", **base
     ) != ai_daily_service.build_cache_key(
         region="杭州", date_key="2026-10-06", **base
+    )
+    assert ai_daily_service.build_cache_key(
+        region="杭州", date_key="2026-10-05", month=10, weather=_weather("dry")
+    ) == ai_daily_service.build_cache_key(
+        region="杭州", date_key="2026-10-05", month=10, weather=_weather("cold")
     )
 
 
@@ -821,6 +857,54 @@ def test_home_is_stable_for_same_region_and_day(client):
         r["name"] for r in second["recommended_recipes"]
     ]
     assert first["ai_tip"] == second["ai_tip"]
+
+
+def test_home_recipes_stay_fixed_when_same_day_weather_changes(
+    client, session, monkeypatch
+):
+    """首页精选和菜谱页候选池都使用当天快照，不随早晚天气重新洗牌。"""
+    url = "/api/home?city=杭州&month=10&date=2026-10-05"
+    baseline = client.get(url).json()
+    pool_ids = [item["id"] for item in baseline["today_recipe_pool"]]
+    assert len(pool_ids) >= 3
+
+    key = ai_daily_service.build_cache_key(
+        region="杭州", date_key="2026-10-05", month=10, weather=_weather("dry")
+    )
+    ai_daily_service._write_cache(
+        session,
+        key,
+        {
+            "tip_title": "今日推荐",
+            "tip_body": "当天缓存的推荐。",
+            "food_picks": [item["id"] for item in baseline["recommended_foods"]],
+            "dish_picks": pool_ids[:3],
+            "dish_pool": pool_ids,
+            "food_notes": {},
+            "dish_notes": {},
+            "model": "deepseek-chat",
+        },
+        "deepseek-chat",
+    )
+
+    monkeypatch.setattr(
+        weather_service, "current_weather", lambda **kwargs: _weather("dry")
+    )
+    first = client.get(url).json()
+    monkeypatch.setattr(
+        weather_service, "current_weather", lambda **kwargs: _weather("cold")
+    )
+    second = client.get(url).json()
+
+    assert first["meta"]["source"] == second["meta"]["source"] == "cached"
+    assert first["meta"]["cache_key"] == second["meta"]["cache_key"]
+    assert [item["id"] for item in first["recommended_recipes"]] == [
+        item["id"] for item in second["recommended_recipes"]
+    ]
+    assert [item["id"] for item in first["today_recipe_pool"]] == [
+        item["id"] for item in second["today_recipe_pool"]
+    ]
+    assert [item["id"] for item in second["today_recipe_pool"][:3]] == pool_ids[:3]
 
 
 def test_home_recommends_recipes_with_reasons(client):
@@ -977,7 +1061,8 @@ def test_recommend_without_foods_still_works(client):
 # =====================================================================
 
 
-def test_chat_keeps_old_contract_and_adds_trace(client):
+def test_chat_keeps_old_contract_and_adds_trace(client, stub_chat_understanding):
+    stub_chat_understanding(_understood(people=3, dish_count=3))
     body = client.post("/api/ai/chat", json={"message": "三个人今晚吃什么"}).json()
 
     # 老契约
@@ -991,8 +1076,9 @@ def test_chat_keeps_old_contract_and_adds_trace(client):
     assert body["source"] == "algorithm"
 
 
-def test_chat_trace_mentions_the_real_constraints(client):
+def test_chat_trace_mentions_the_real_constraints(client, stub_chat_understanding):
     """轨迹里读到的约束必须是真的 —— 改人数，轨迹就该跟着变。"""
+    stub_chat_understanding(_understood())
     body = client.post(
         "/api/ai/chat",
         json={"message": "今晚吃什么", "people": 6, "avoid": ["辛辣", "花生"]},
@@ -1002,7 +1088,7 @@ def test_chat_trace_mentions_the_real_constraints(client):
     assert "花生" in summary
 
 
-def test_follow_up_keeps_recommending_and_avoids_repeats(client):
+def test_follow_up_keeps_recommending_and_avoids_repeats(client, stub_chat_understanding):
     """★ 追问必须继续推荐，并且「换一批」真的是换一批。
 
     用户反馈的现象：「第一问有卡片，后面再问就没了」。
@@ -1013,6 +1099,10 @@ def test_follow_up_keeps_recommending_and_avoids_repeats(client):
       1. 追问不再掉进闲聊分支（意图继承上一轮）
       2. 已经展示过的菜会被避开（否则轮换因子固定，重问还是那三道）
     """
+    stub_chat_understanding({
+        '三个人今晚吃什么': _understood(people=3, dish_count=3),
+        '换一批呢': _understood(operation='repeat'),
+    })
     first = client.post(
         "/api/ai/chat", json={"message": "三个人今晚吃什么", "cook_minutes": 240}
     ).json()
@@ -1040,15 +1130,17 @@ def test_follow_up_keeps_recommending_and_avoids_repeats(client):
     assert any("避开" in step["summary"] for step in second["trace"])
 
 
-def test_follow_up_without_context_still_recommends(client):
+def test_follow_up_without_context_still_recommends(client, stub_chat_understanding):
     """前端没带上下文时，「换一批」也不能掉进闲聊分支。"""
+    stub_chat_understanding(_understood(operation='repeat'))
     body = client.post("/api/ai/chat", json={"message": "换一批"}).json()
     assert body["intent"] == "meal_recommendation"
     assert body["recipes"]
 
 
-def test_plain_greeting_still_has_no_recipes(client):
+def test_plain_greeting_still_has_no_recipes(client, stub_chat_understanding):
     """真正的闲聊不能被追问逻辑带偏 —— 闲聊还是不推菜。"""
+    stub_chat_understanding(_understood(intent='general'))
     body = client.post("/api/ai/chat", json={"message": "你好"}).json()
     assert body["intent"] == "general"
     assert body["recipes"] == []

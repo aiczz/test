@@ -94,7 +94,113 @@ def ingredient_cards(session, recipe_ids, *, user_id=None, missing_only=False) -
     return Followup('ingredient_cards', list(recipe_ids), answer, foods=cards, missing_only=missing_only)
 
 
+def _referenced_recipes(session, state, reference) -> tuple[list[int], str | None]:
+    """只在本会话保存的 ID 中解析引用，模型永远不直接提供数据库 ID。"""
+    recipe_ids = list(state.last_recommended_recipe_ids)
+    if not recipe_ids:
+        return [], '你想了解哪道菜？请告诉我菜名，或先让我推荐菜谱。'
+    known = {r.id: r for r in recipe_repository.list_by_ids(session, recipe_ids)}
+    if reference is None:
+        return list(state.focused_recipe_ids or recipe_ids), None
+    if reference.all:
+        return recipe_ids, None
+    if reference.ordinal is not None:
+        index = reference.ordinal - 1
+        if not 0 <= index < len(recipe_ids):
+            return [], f'上一轮共有 {len(recipe_ids)} 道菜，请重新说明序号。'
+        return [recipe_ids[index]], None
+    if reference.name:
+        selected = [i for i in recipe_ids if i in known and known[i].name.strip() == reference.name.strip()]
+        if len(selected) == 1:
+            return selected, None
+        return [], '没有在这段会话的推荐里唯一找到这道菜，请说明菜名或序号。'
+    return list(state.focused_recipe_ids or recipe_ids), None
+
+
+def _referenced_foods(session, state, reference) -> tuple[list[int], str | None]:
+    food_ids = list(state.last_recommended_food_ids)
+    if not food_ids:
+        return [], '这段会话里还没有可引用的食材，请先让我推荐食材，或直接告诉我要用哪些食材。'
+    if reference is None:
+        selected = list(state.focused_food_ids or food_ids)
+        if len(selected) > 1:
+            return [], '你指的是哪一种食材？可以说食材名字或序号；如果全部都要，请明确说“这些食材”。'
+        return selected, None
+    if reference.all:
+        return food_ids, None
+    if reference.ordinal is not None:
+        index = reference.ordinal - 1
+        if not 0 <= index < len(food_ids):
+            return [], f'上一轮共有 {len(food_ids)} 种食材，请重新说明序号。'
+        return [food_ids[index]], None
+    if reference.name:
+        known = food_insights(session, food_ids)
+        selected = [i for i in food_ids if i in known and known[i].name.strip() == reference.name.strip()]
+        if len(selected) == 1:
+            return selected, None
+        return [], '没有在这段会话的推荐里唯一找到这种食材，请说明名称或序号。'
+    return list(state.focused_food_ids or food_ids), None
+
+
+def resolve_structured(session, state, understanding, *, user_id=None) -> Followup | None:
+    """结构化追问路由：不再阅读原句，不猜测关键词，只解析真实会话引用。"""
+    operation = understanding.operation
+    if operation not in {'replace', 'detail'}:
+        return None
+    reference = understanding.reference
+    if operation == 'replace':
+        selected, error = _referenced_recipes(session, state, reference)
+        if error:
+            return Followup('recipe_replace', answer=error, clarification=True)
+        if len(selected) != 1:
+            known = {r.id: r for r in recipe_repository.list_by_ids(session, state.last_recommended_recipe_ids)}
+            names = '、'.join(f'{n}.{known[i].name}' for n, i in enumerate(state.last_recommended_recipe_ids, 1) if i in known)
+            return Followup('recipe_replace', answer=f'要替换哪一道菜？{names}。请明确一道，其余会保留。', clarification=True)
+        return Followup('recipe_replace', selected)
+
+    kind = understanding.detail_kind
+    if kind == 'food_recipes':
+        selected, error = _referenced_foods(session, state, reference)
+        if error:
+            return Followup('food_recipes', answer=error, clarification=True)
+        foods = food_insights(session, selected)
+        if not foods:
+            return Followup('food_recipes', answer='这些食材记录目前无法读取，请重新选择。', clarification=True)
+        return Followup('food_recipes', [i for i in selected if i in foods])
+
+    if kind == 'ingredient_cards' and reference is None and state.ingredient_recipe_ids:
+        selected = list(state.ingredient_recipe_ids)
+        error = None
+    else:
+        selected, error = _referenced_recipes(session, state, reference)
+    if error:
+        return Followup('recipe_detail', answer=error, clarification=True)
+    if kind == 'steps' and len(selected) > 1:
+        known = {r.id: r for r in recipe_repository.list_by_ids(session, state.last_recommended_recipe_ids)}
+        names = '、'.join(f'{n}.{known[i].name}' for n, i in enumerate(state.last_recommended_recipe_ids, 1) if i in known)
+        return Followup('recipe_detail', answer=f'你想看哪一道的做法？{names}。请明确一道。', clarification=True)
+    if kind in {'missing_ingredients', 'ingredient_cards'}:
+        return ingredient_cards(
+            session, selected, user_id=user_id,
+            missing_only=(kind == 'missing_ingredients' or state.ingredient_view == 'missing'),
+        )
+
+    blocks = []
+    for recipe_id in selected:
+        detail = recipe_service.get_detail(session, recipe_id)
+        if detail is None:
+            blocks.append('这道菜目前无法读取，原记录可能已变更。')
+        elif kind == 'ingredients':
+            blocks.append(f'{detail.name}\n' + ingredient_text(detail))
+        else:
+            steps = '\n'.join(f'{s.step_no}. {s.description}' for s in detail.steps) or '菜谱暂无做法记录。'
+            blocks.append(f'{detail.name}\n{steps}')
+    note = '\n\n以上按原菜谱记录列出，用量未按人数换算，也不代表这些食材已在库存。' if kind == 'ingredients' else ''
+    return Followup('recipe_detail', selected, '\n\n'.join(blocks) + note, detail_kind=kind)
+
+
 def resolve(session, payload, named_food_ids=(), *, user_id=None) -> Followup | None:
+    """遗留正则解析器；聊天主链路只使用上方的 resolve_structured()。"""
     state = payload.conversation_state
     message = payload.message.strip()
     recipe_ids = list(state.last_recommended_recipe_ids)
