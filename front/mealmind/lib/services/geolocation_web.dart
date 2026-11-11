@@ -1,4 +1,4 @@
-// Web 平台的浏览器定位实现。
+﻿// Web 平台的浏览器定位实现。
 //
 // ⚠️ 只在 Web 编译 —— package:web 用了 dart:js_interop，原生平台编译不过，
 //    所以必须通过 geolocation.dart 的条件导入进来。

@@ -1,4 +1,4 @@
-// 真后端的业务接口。
+﻿// 真后端的业务接口。
 //
 // 只有在 `BackendStatus.online` 为 true 时才会被调用；任何失败都向上抛，
 // 由 ContentStore 统一降级到本地假数据 —— 所以线上 PWA（没有后端）
@@ -533,7 +533,28 @@ class BackendApi {
       // 空图让 _MiniRecipeCard / DishPhoto 的占位图组件去处理（显示「暂无配图」占位）。
       recipes: recipes
           .whereType<Map<String, dynamic>>()
-          .map(_recipeFromJson)
+          .map((json) {
+            final r = json['recipe'] as Map<String, dynamic>? ?? json;
+            final base = _recipeFromJson(r);
+            // ★ 把后端推荐理由塞进 desc（同 HomePicks.fromFeed 的做法）。
+            //   这样 _MiniRecipeCard 显示的 desc 和详情弹层显示的就是理由，
+            //   而不是菜谱库的原始描述。
+            final reason = json['reason'] as String? ?? '';
+            return reason.isNotEmpty
+                ? Recipe(
+                    id: base.id,
+                    name: base.name,
+                    image: base.image,
+                    desc: reason,
+                    time: base.time,
+                    people: base.people,
+                    tags: base.tags,
+                    ingredients: base.ingredients,
+                    steps: base.steps,
+                    difficulty: base.difficulty,
+                  )
+                : base;
+          })
           .toList(),
       // ★ 推荐食材（intent == 'recommend_foods' 时才有）。
       //   和 recipes 是对称的两条链路：菜谱 ← meal_recommendation，食材 ← recommend_foods。

@@ -88,6 +88,7 @@ class DishInsight:
     name: str
     description: str | None = None
     tags: list[str] = field(default_factory=list)
+    image_url: str | None = None
     duration_minutes: int = 30
     # 时长是怎么来的：
     #   table     —— 库里有时长列（旧演示表 recipes.duration_minutes），可信
@@ -332,6 +333,7 @@ _DISH_COLUMNS = [
     "cuisine",
     "category",
     "tags_json",
+    "image_url",
     "duration_minutes",
     "servings",
     "difficulty",
@@ -363,6 +365,8 @@ def _dish_from_row(row: Mapping[str, Any]) -> DishInsight:
             duration, source = 30, "estimated"
 
     name = str(row.get("dish_name") or row.get("name") or "")
+    # ★ image_url 只从数据库列读，由离线 backfill 脚本统一填充。
+    image_url = row.get("image_url") or None
     return DishInsight(
         recipe_id=_i(row.get("id")),
         name=name,
@@ -370,6 +374,7 @@ def _dish_from_row(row: Mapping[str, Any]) -> DishInsight:
         # 和菜谱接口用同一套归一化，AI 提示词里看到的也是「汤羹」而不是「汤」，
         # 否则模型复述标签时会跟界面上显示的对不上。
         tags=canonical_dish_tags(_json_list(row.get("tags_json")), name),
+        image_url=image_url,
         duration_minutes=duration,
         duration_source=source,
         servings=max(_i(row.get("servings"), 3), 1),

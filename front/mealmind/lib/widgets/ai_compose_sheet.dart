@@ -1,4 +1,4 @@
-// AI 配菜面板 —— 导航栏 AI 模块里那个「根据我选好的食材配这一餐」的入口。
+﻿// AI 配菜面板 —— 导航栏 AI 模块里那个「根据我选好的食材配这一餐」的入口。
 //
 // 【它解决什么】
 // 以前 AI 页只有一个对话框：用户得自己把「我有什么」打出来。
@@ -460,7 +460,7 @@ class _ComposeCard extends StatelessWidget {
           SizedBox(
             height: 116,
             width: double.infinity,
-            child: DishPhoto(asset: recipe.image),
+            child: DishPhoto(imageUrl: recipe.image, name: recipe.name),
           ),
           Padding(
             padding: const EdgeInsets.all(14),

@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +8,13 @@ import '../services/auth_store.dart';
 import '../services/api_config.dart';
 
 /// Date and account scoped menu; local edits survive restarts and work offline.
+///
+/// ★ 2026-11-11 去掉所有 image 门槛：
+///   以前这里到处卡 `recipe.image.trim().isNotEmpty` —— 没图的菜加不进菜单库，
+///   load() 反序列化时直接丢掉，items getter 也过滤掉。
+///   现在 DishPhoto 已经有本地 asset 兜底 + Pollinations 懒生图 + 占位图
+///   三级策略，菜单里存没图的菜完全合法；卡 image 只会导致用户"加了但没进去"
+///   还被 SnackBar 骗说"成功"（L1422 写反了）。
 class TodayMenuStore extends ChangeNotifier {
   TodayMenuStore({String Function()? scopeProvider, DateTime Function()? clock})
     : _scopeProvider =
@@ -47,8 +54,7 @@ class TodayMenuStore extends ChangeNotifier {
         ..addAll(
           decoded
               .whereType<Map<String, dynamic>>()
-              .map(Recipe.fromJson)
-              .where((recipe) => recipe.image.trim().isNotEmpty),
+              .map(Recipe.fromJson),
         );
       notifyListeners();
     } catch (_) {
@@ -73,9 +79,7 @@ class TodayMenuStore extends ChangeNotifier {
 
   List<Recipe> get items {
     _ensureScope();
-    return List<Recipe>.unmodifiable(
-      _items.where((recipe) => recipe.image.trim().isNotEmpty),
-    );
+    return List<Recipe>.unmodifiable(_items);
   }
 
   int get count => items.length;
@@ -83,7 +87,7 @@ class TodayMenuStore extends ChangeNotifier {
   bool contains(String id) => items.any((r) => r.id == id);
   bool add(Recipe recipe) {
     _ensureScope();
-    if (recipe.image.trim().isEmpty || contains(recipe.id)) return false;
+    if (recipe.id.isEmpty || contains(recipe.id)) return false;
     _items.add(recipe);
     _changed();
     return true;
@@ -93,7 +97,7 @@ class TodayMenuStore extends ChangeNotifier {
     _ensureScope();
     var added = 0;
     for (final recipe in recipes) {
-      if (recipe.image.trim().isNotEmpty && !contains(recipe.id)) {
+      if (recipe.id.isNotEmpty && !contains(recipe.id)) {
         _items.add(recipe);
         added++;
       }
@@ -111,8 +115,7 @@ class TodayMenuStore extends ChangeNotifier {
   void replace(String oldId, Recipe recipe) {
     _ensureScope();
     final index = _items.indexWhere((r) => r.id == oldId);
-    if (recipe.image.trim().isEmpty ||
-        index < 0 ||
+    if (index < 0 ||
         (recipe.id != oldId && contains(recipe.id))) {
       return;
     }
@@ -127,7 +130,7 @@ class TodayMenuStore extends ChangeNotifier {
       ..addAll(
         {
           for (final r in recipes)
-            if (r.image.trim().isNotEmpty) r.id: r,
+            if (r.id.isNotEmpty) r.id: r,
         }.values,
       );
     _changed();

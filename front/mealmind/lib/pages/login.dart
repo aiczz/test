@@ -1,4 +1,4 @@
-// 登录 / 注册页。
+﻿// 登录 / 注册页。
 //
 // 对应说明书的认证接口：POST /api/auth/login → {access_token, token_type}
 

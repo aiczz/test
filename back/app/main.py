@@ -28,10 +28,6 @@ async def lifespan(app: FastAPI):
         # 清洗库中的食材/菜谱是原始权威数据，不灌演示内容、不覆盖主键。
         seed_all(session, include_content=not uses_compact_catalog(engine))
 
-    # 预热向量索引 + 硬约束掩码（都是懒加载，不预热首个 AI 请求会多等约 3 秒）
-    from app.services.scoring_service import warmup_catalog
-
-    warmup_catalog()
     yield
 
 

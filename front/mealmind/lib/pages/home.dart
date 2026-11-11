@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -120,7 +120,9 @@ class HomePage extends StatelessWidget {
                 const SizedBox(height: 12),
                 _RecipeRow(
                   recipes: picks.recipes,
-                  onOpenDetail: (recipe) => openRecipeDetail(context, recipe),
+                  // ★ 推荐卡片点进去只看理由摘要，不跳完整菜谱库详情。
+                  //   完整详情（食材/步骤）仍可从菜谱页进入。
+                  onOpenDetail: (recipe) => openRecipeDetail(context, recipe, fullDetail: false),
                 ),
                 const SizedBox(height: 14),
                 // ★ 删掉了 AI 小贴士卡片 —— 后端 ai_tip 本来就是给 AI 建议条用的，
@@ -1387,7 +1389,7 @@ class _RecipeCard extends StatelessWidget {
               children: [
                 AspectRatio(
                   aspectRatio: 1.55,
-                  child: DishPhoto(asset: recipe.image),
+                  child: DishPhoto(imageUrl: recipe.image, name: recipe.name),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),

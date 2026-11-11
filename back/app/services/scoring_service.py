@@ -1013,7 +1013,7 @@ def score_dishes(
                 rejected_names.append(f"{name}（不符合指定食材：{'、'.join(constraints.required_foods)}）")
             continue
         if settings.recipe_images_only and not has_free_text and not (
-            has_image(name) or str(getattr(raw, "image_url", "") or "").strip()
+            getattr(raw, "image_url", None) or has_image(name)
         ):
             continue
         tags = list(getattr(raw, "tags", None) or (insight.tags if insight else []))

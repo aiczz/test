@@ -189,6 +189,10 @@ def recommend_by_foods(
                 seen.add(ingredient.ingredient_name)
 
     return RecommendByFoodsResponse(
-        recommended_recipes=[recipe_service.to_brief(r) for r in top],
+        recommended_recipes=[
+            recipe_service.to_brief(r)
+            for r in top
+        ],
         missing_ingredients=missing,
     )
+

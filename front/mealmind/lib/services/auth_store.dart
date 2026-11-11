@@ -1,4 +1,4 @@
-// 登录状态 + token 持久化。
+﻿// 登录状态 + token 持久化。
 //
 // 和 `state/app_state.dart` 一个路子：零第三方状态管理框架，
 // 用 Flutter 自带的 ChangeNotifier + 全局单例。

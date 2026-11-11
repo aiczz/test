@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 /// A bounded, edge-to-edge photo shared by home, inventory and food details.
 class FoodPhoto extends StatelessWidget {

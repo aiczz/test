@@ -2544,6 +2544,7 @@ def _recommend_recipes(
     selected_ids = set(food_ids)
     recommendations: list[AiRecipePick] = []
     for item in chosen:
+        recipe_brief = recipe_service.to_brief(item.raw)
         insight = item.insight
         matched: list[str] = []
         if insight is not None and selected_ids:
@@ -2551,7 +2552,7 @@ def _recommend_recipes(
                 matched.append(insights[food_id].name if food_id in insights else str(food_id))
         recommendations.append(
             AiRecipePick(
-                recipe=recipe_service.to_brief(item.raw),
+                recipe=recipe_brief,
                 reason=notes.get(item.item_id) or item.reason,
                 highlights=item.highlights,
                 score=round(item.score, 3),

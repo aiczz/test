@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart' show CancelToken;
+﻿import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/material.dart';
 
 import '../data/mock.dart';
@@ -1165,7 +1165,7 @@ class _MiniRecipeCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => openRecipeDetail(context, recipe),
+        onTap: () => openRecipeDetail(context, recipe, fullDetail: false),
         child: Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -1178,7 +1178,7 @@ class _MiniRecipeCard extends StatelessWidget {
               SizedBox(
                 height: 110,
                 width: double.infinity,
-                child: DishPhoto(asset: recipe.image),
+                child: DishPhoto(imageUrl: recipe.image, name: recipe.name),
               ),
               Padding(
                 padding: const EdgeInsets.all(12),

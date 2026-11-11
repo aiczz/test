@@ -288,12 +288,14 @@ def _ensure_all_have_images(picks: list[int], shortlist: list) -> None:
     """
     from app.data import dish_images
 
-    # 先把 shortlist 里有图的、没被挑过的收集起来（按算法排序顺序）
+    def _has_image(item) -> bool:
+        return bool(item.raw.image_url) or dish_images.has_image(item.raw.name)
+
     shortlist_ids = {item.item_id for item in shortlist}
     available = [
         item.item_id
         for item in shortlist
-        if dish_images.has_image(item.raw.name)
+        if _has_image(item)
         and item.item_id not in picks
     ]
 
@@ -302,7 +304,7 @@ def _ensure_all_have_images(picks: list[int], shortlist: list) -> None:
         current = picks[i]
         # 找到这个 id 对应的 ScoredItem
         match = next((it for it in shortlist if it.item_id == current), None)
-        if match is None or not dish_images.has_image(match.raw.name):
+        if match is None or not _has_image(match):
             # 没图 → 从 available 里拿第一个
             if available:
                 picks[i] = available.pop(0)

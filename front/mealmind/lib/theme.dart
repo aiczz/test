@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 /// 食时共享配色：低饱和草木绿，搭配米白背景。
 const green900 = Color(0xFF355C45);

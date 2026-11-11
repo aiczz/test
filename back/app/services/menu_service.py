@@ -58,7 +58,7 @@ def _pick(
         session, max_duration=max_minutes, offset=0, limit=50
     )
     if settings.recipe_images_only:
-        recipes = [r for r in recipes if has_image(r.name) or (r.image_url or '').strip()]
+        recipes = [r for r in recipes if r.image_url or has_image(r.name)]
     # 排除今天已经上过的；全被排掉时退回完整列表（宁可重复也不上空白菜单）
     pool = [r for r in recipes if r.id not in exclude] or recipes
 

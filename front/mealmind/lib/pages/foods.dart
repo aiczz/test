@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -1360,7 +1360,7 @@ class _FoodRecipeSuggestionsState extends State<_FoodRecipeSuggestions> {
                   child: SizedBox(
                     width: 82,
                     height: 64,
-                    child: DishPhoto(asset: recipe.image),
+                    child: DishPhoto(imageUrl: recipe.image, name: recipe.name),
                   ),
                 ),
                 const SizedBox(width: 12),

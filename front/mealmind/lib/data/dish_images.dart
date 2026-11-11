@@ -1,4 +1,4 @@
-// GENERATED FILE -- do not edit by hand.
+﻿// GENERATED FILE -- do not edit by hand.
 // Regenerate with team/front/scripts/make-dart-image-map.ps1
 //
 // Dish name -> bundled photo.

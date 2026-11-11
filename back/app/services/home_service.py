@@ -194,10 +194,10 @@ def build_home(
 
     # ---- 3. 每天每地区只问一次 AI ----
     # ★ 图片优先排序：让 AI 在有图的候选里优先挑，避免首页 3 张卡片出现空图框。
-    # 关键：必须用 dish_images.has_image(name) 判断 —— DishInsight 没有 image 字段，
-    # getattr(item.raw, "image") 永远返回 None（之前踩了这个坑）。
-    # Python sort 稳定，只把没图的挪到后面，算法分数顺序保留。
-    region_dishes.sort(key=lambda it: 0 if dish_images.has_image(it.raw.name) else 1)
+    #   判断条件：后端 image_url（网络图）或 dish_images.has_image（本地 asset）
+    region_dishes.sort(
+        key=lambda it: 0 if (it.raw.image_url or dish_images.has_image(it.raw.name)) else 1
+    )
     region_foods.sort(key=lambda it: 0 if True else 1)  # 食材图片前端按名字 hash，后端不管
 
     enhancement = ai_daily_service.enhance_home(
@@ -254,7 +254,9 @@ def build_home(
 
     # ★ Step 4 重跑后也要做图片优先 —— 否则 Step 5 _order_by_picks 会从
     # user_dishes（没图片排序）里按原顺序抓 AI 挑好的 id，把有图的又排到后面去。
-    user_dishes.sort(key=lambda it: 0 if dish_images.has_image(it.raw.name) else 1)
+    user_dishes.sort(
+        key=lambda it: 0 if (it.raw.image_url or dish_images.has_image(it.raw.name)) else 1
+    )
     user_foods.sort(key=lambda it: 0 if True else 1)  # 食材不关心
 
     # 全被筛光的兜底：宁可给一道「可能不完全合条件」的，也不能让首页空白
@@ -289,17 +291,17 @@ def build_home(
         for item in final_foods
     ]
 
-    dish_items = [
-        HomeRecipeItem(
-            **recipe_service.to_brief(item.raw).model_dump(),
-            reason=_item_reason(
-                item, enhancement.dish_notes
-            ),
-            highlights=item.highlights,
-            score=round(item.score, 3),
+    dish_items = []
+    for item in final_dishes:
+        brief = recipe_service.to_brief(item.raw)
+        dish_items.append(
+            HomeRecipeItem(
+                **brief.model_dump(),
+                reason=_item_reason(item, enhancement.dish_notes),
+                highlights=item.highlights,
+                score=round(item.score, 3),
+            )
         )
-        for item in final_dishes
-    ]
 
     # ⚠️ 「菜单推荐」是按当季菜谱【动态组合】出来的建议，不是数据库里的实体，
     #    所以 id 固定为 0 —— 前端据此知道这是组合推荐，不是可打开的菜单详情。
