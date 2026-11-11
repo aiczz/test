@@ -108,6 +108,12 @@ class HomeFeed {
   final String date;
   final String region;
 
+  /// ★ 今日推荐候选池前 20 道（后端从 region_dishes 算法候选池截出来的）。
+  /// 菜谱页的「今日推荐」分类直接复用这个 —— 避免再跑一遍 score_dishes。
+  final List<Recipe> todayRecipes;
+  /// ★ 同理：今日推荐食材候选池前 12 个。
+  final List<Food> todayFoods;
+
   const HomeFeed({
     required this.seasonName,
     required this.month,
@@ -125,6 +131,8 @@ class HomeFeed {
     this.shortlistFoods = 0,
     this.shortlistDishes = 0,
     this.steps = const <HomeAlgoStep>[],
+    this.todayRecipes = const <Recipe>[],
+    this.todayFoods = const <Food>[],
   });
 
   /// 来源说明 —— 界面上如实标注，不把「算法结果」说成「AI 推荐」。

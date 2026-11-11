@@ -277,6 +277,37 @@ def _coerce_id_list(value, allowed: set[int], limit: int) -> list[int]:
     return result
 
 
+def _ensure_all_have_images(picks: list[int], shortlist: list) -> None:
+    """就地替换 picks 里没图的 id，换成 shortlist 里有图且未被挑过的。
+
+    关键前提：shortlist 已经在 home_service 里按「有图优先」做过稳定排序，
+    所以从前往后扫 shortlist 找到的第一个有图空位就是最匹配的替换。
+
+    候选池里如果有 ≥3 道有图的，picks 最终一定全是有图的；
+    如果候选池里有图的不足 3 道，剩下的保持原样（没办法）。
+    """
+    from app.data import dish_images
+
+    # 先把 shortlist 里有图的、没被挑过的收集起来（按算法排序顺序）
+    shortlist_ids = {item.item_id for item in shortlist}
+    available = [
+        item.item_id
+        for item in shortlist
+        if dish_images.has_image(item.raw.name)
+        and item.item_id not in picks
+    ]
+
+    # 逐个检查 picks 里的 id，没图就替换
+    for i in range(len(picks)):
+        current = picks[i]
+        # 找到这个 id 对应的 ScoredItem
+        match = next((it for it in shortlist if it.item_id == current), None)
+        if match is None or not dish_images.has_image(match.raw.name):
+            # 没图 → 从 available 里拿第一个
+            if available:
+                picks[i] = available.pop(0)
+
+
 def _coerce_notes(value, allowed: set[int]) -> dict[int, str]:
     if not isinstance(value, dict):
         return {}
@@ -441,6 +472,12 @@ def _enhance_home(
             break
         if item.item_id not in dish_picks:
             dish_picks.append(item.item_id)
+
+    # ★ 后处理：强制保证 dish_picks 里每道菜都有图。
+    # AI 会自由挑菜（可能挑没图的），但前端首页必须全有图才有好的观感。
+    # dish_shortlist 已经按「有图优先」排过序了（在 home_service 里做的），
+    # 所以从前往后找第一个有图且没被挑过的替换即可。
+    _ensure_all_have_images(dish_picks, dish_shortlist)
 
     enhancement = HomeEnhancement(
         tip_title=str(data.get("tip_title") or "").strip()[:24]

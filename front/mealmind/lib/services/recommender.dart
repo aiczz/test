@@ -99,7 +99,9 @@ class HomePicks {
       if (feed.weather != null) feed.weather!.emoji,
     ];
 
-    // 内容库已验证配图资源；首页独立接口也必须使用同样的检查。
+    // 首页菜谱卡片优先显示有图的（没图的放卡片里也不太好看），
+    // 但不再强过滤——后端 recipe_images_only=False 后推荐里不会大量出现没图的菜，
+    // 少数没图的也让它进来（卡片显示空图框+菜名）。
     final validImages = recipePool?.map((recipe) => recipe.image).toSet();
     bool hasImage(Recipe recipe) =>
         recipe.image.trim().isNotEmpty &&
@@ -108,6 +110,14 @@ class HomePicks {
         .where((pick) => hasImage(pick.item))
         .take(limit)
         .toList();
+    // 有图的不够 limit 时用没图的补齐（后端 recipe_images_only=False 后这种
+    // 情况本来就少，但以防万一别让首页出现"只推 2 道"）
+    final allPicks = feed.recipes.toList();
+    int idx = 0;
+    while (visiblePicks.length < limit && idx < allPicks.length) {
+      final pick = allPicks[idx++];
+      if (!visiblePicks.contains(pick)) visiblePicks.add(pick);
+    }
     final recipes = visiblePicks
         .map(
           (pick) => pick.reason.isEmpty

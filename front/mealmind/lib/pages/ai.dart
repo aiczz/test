@@ -608,32 +608,46 @@ class _AiPageState extends State<AiPage> {
     }
 
     // ---- 轨迹定格，出推荐 ----
+    // 后端 trace 就是**这次真实**的链路（意图识别 → 生效条件 → 召回 → 精排…）。
+    // 逐条"长"出来，而不是一次性砸出来 —— 这样动态展示的每一步都是真的，
+    // 不再是本地写死的机械文案。
+    if (usedBackendTrace && steps.length > 1) {
+      for (var shown = 1; shown <= steps.length; shown++) {
+        if (!mounted || _currentScope != requestScope) return;
+        setState(() {
+          _items[_items.length - 1] = _Item.trace(
+            steps.sublist(0, shown),
+            shown < steps.length,
+            fromBackend: true,
+          );
+        });
+        if (shown < steps.length) {
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+        }
+      }
+    } else {
+      setState(() {
+        _items[_items.length - 1] = _Item.trace(
+          steps,
+          false,
+          fromBackend: usedBackendTrace,
+        );
+      });
+    }
     setState(() {
-      _items[_items.length - 1] = _Item.trace(
-        steps,
-        false,
-        fromBackend: usedBackendTrace,
-      );
       _items.add(
         _Item.ai(
           (reply != null && reply.answer.isNotEmpty)
               ? reply.answer
               : _localAnswer(text),
-          // ★ 直接把后端返回的菜带进气泡 —— 以前只留 id 再去本地内容库查，
-          //   而本地内容库只保留「有配图」的菜，查不到就整块消失，
-          //   于是后端推荐了 3 道、界面上一张卡片都没有。
-          recipes:
-              (reply != null &&
-                  const {
-                    'meal_recommendation',
-                    'cook_with_my_foods',
-                  }.contains(reply.intent))
-              ? reply.recipes
-              : const <Recipe>[],
-          // ★ 同理，推荐食材也直接带上完整对象（见 _Item.foods 的注释）。
-          foods: (reply != null && reply.intent == 'recommend_foods')
-              ? reply.foods
-              : const <Food>[],
+          // ★ 信任后端给的 recipes 列表——有就显示，没有就不显示。
+          // 以前按 intent 硬过滤是为了防 recommend_foods 的食材卡片和菜谱混，
+          // 但那会把合法的菜谱卡片也砍了（比如 cook_with_my_foods 登录返回）。
+          // 后端已经正确分流：recommend_foods 只给 foods 列表，meal_recommendation /
+          // cook_with_my_foods 只给 recipes 列表，互不干扰。
+          recipes: reply?.recipes ?? const <Recipe>[],
+          // ★ 同理，推荐食材也直接带上完整对象。
+          foods: reply?.foods ?? const <Food>[],
           localFallback: reply == null,
           fallbackReason: reply == null ? _lastChatError : null,
           retryPrompt: reply == null ? text : null,
@@ -866,7 +880,7 @@ class _Header extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '小食 AI 助手',
+                      '你好，我是小食',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
@@ -875,7 +889,7 @@ class _Header extends StatelessWidget {
                     ),
                     SizedBox(height: 3),
                     Text(
-                      '我会结合时令、人数和家中食材给你建议',
+                      '你的家庭时令饮食助手',
                       style: TextStyle(
                         fontSize: 11.5,
                         color: Color(0xCCFFFFFF),
@@ -906,36 +920,6 @@ class _Header extends StatelessWidget {
                 shape: const StadiumBorder(),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final p in mockAiQuickPrompts)
-                GestureDetector(
-                  onTap: () => onPrompt(p),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(31),
-                      border: Border.all(color: Colors.white.withAlpha(89)),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      p,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
           ),
         ],
       ),

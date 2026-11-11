@@ -7,15 +7,18 @@ import '../widgets/brand_wordmark.dart';
 import '../data/mock.dart';
 import '../models/content.dart';
 import '../services/api_config.dart';
+import '../services/backend_api.dart';
 import '../services/city.dart';
 import '../services/content_store.dart';
 import '../services/recommender.dart';
 import '../state/app_state.dart';
 import '../state/home_feed.dart';
+import '../state/today_menu.dart';
 import '../theme.dart';
 import '../widgets/city_picker.dart';
 import '../widgets/dish_photo.dart';
 import '../widgets/food_photo.dart';
+import 'foods.dart';
 import 'recipes.dart';
 
 /// 首页 —— 对应队友原型 `homePage()`
@@ -104,7 +107,10 @@ class HomePage extends StatelessWidget {
                   subtitle: '应季鲜美 · 营养加分',
                 ),
                 const SizedBox(height: 12),
-                _FoodRow(foods: picks.foods, onOpenDetail: onOpenFoodDetail),
+                _FoodRow(
+                  foods: picks.foods,
+                  onOpenDetail: (food) => showFoodDetail(context, food),
+                ),
                 const SizedBox(height: 26),
                 _SectionHeader(
                   icon: Icons.local_dining,
@@ -114,21 +120,18 @@ class HomePage extends StatelessWidget {
                 const SizedBox(height: 12),
                 _RecipeRow(
                   recipes: picks.recipes,
-                  onOpenRecipes: onOpenRecipes,
+                  onOpenDetail: (recipe) => openRecipeDetail(context, recipe),
                 ),
                 const SizedBox(height: 14),
-                _AiTipBar(
-                  title: picks.aiTipTitle,
-                  body: picks.aiTipBody,
-                  onTap: onOpenAi,
-                ),
+                // ★ 删掉了 AI 小贴士卡片 —— 后端 ai_tip 本来就是给 AI 建议条用的，
+                //   但用户反馈这张卡片只是"跳转 AI 对话"，没有独立的信息密度，
+                //   还占了首页一屏高度。首页现在是纯推荐流。
                 const SizedBox(height: 20),
-                _QuickActions(
-                  picks: picks,
-                  onOpenFoods: onOpenFoods,
-                  onOpenRecipes: onOpenRecipes,
-                  onOpenAi: onOpenAi,
-                ),
+                // ★ 删掉了「快速选一餐」和「去选食材」两个按钮 ——
+                //   「快速选一餐」和上面 Hero 轮播里的 AI 助手功能冲突，
+                //   「去选食材」和底部导航栏的食材 tab 功能完全重叠。
+                //   首页现在是「看推荐 → 点卡片弹详情 → + 按钮快速加进菜单/库存」
+                //   的纯浏览+轻操作模式，不需要再堆按钮。
               ],
             );
           },
@@ -1227,13 +1230,6 @@ class _FoodCard extends StatelessWidget {
 
   const _FoodCard({required this.food, required this.onTap});
 
-  /// 卡片底部那个小标签。
-  ///
-  /// 有功效标签（如「增强人体免疫力」）就用它；没有就退回食材分类
-  /// （蔬菜 / 水果 / 肉蛋 …）。
-  ///
-  /// 为什么必须有兜底：清洗库里 590 个核心食材**只有 124 个（21%）带功效标签**，
-  /// 不做兜底的话 79% 的卡片下面就是一块空白，跟旁边有标签的卡片放在一起很怪。
   ({String text, Color color}) get _chip {
     if (food.tags.isNotEmpty) {
       return (text: food.tags.first, color: brand700);
@@ -1243,13 +1239,6 @@ class _FoodCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 这张卡片以前点了没反应 —— 现在点开食材详情
-    //
-    // ⚠️ 这里曾经有个 bug：卡片把「名字 + 标签」画了两遍
-    //    （先一个 Expanded 块，下面又一个 Padding 块）。
-    //    卡片高度是固定的，于是两块互相挤压 —— 有标签的卡片被裁得只剩一块，
-    //    看起来"正常"；没标签的卡片（79%）就露出**重复的食材名**。
-    //    现在恢复成原型的设计：图片 → 名字（一次）→ 标签。
     final chip = _chip;
 
     return _PressCard(
@@ -1258,46 +1247,85 @@ class _FoodCard extends StatelessWidget {
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: cardDeco(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            AspectRatio(aspectRatio: 1.8, child: FoodPhoto(asset: food.image)),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    food.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: ink,
-                    ),
-                  ),
-                  if (chip.text.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 4,
-                      ),
-                      decoration: tagDeco(),
-                      child: Text(
-                        chip.text,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AspectRatio(aspectRatio: 1.8, child: FoodPhoto(asset: food.image)),
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        food.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: chip.color,
-                          fontWeight: FontWeight.w600,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: ink,
                         ),
                       ),
-                    ),
-                  ],
-                ],
+                      if (chip.text.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 4,
+                          ),
+                          decoration: tagDeco(),
+                          child: Text(
+                            chip.text,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: chip.color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            // ★ 右上角 + 按钮：一键加入我的食材库存
+            Positioned(
+              top: 6,
+              right: 6,
+              child: _AddBadge(
+                alreadyAdded: false,
+                onAdd: () async {
+                  try {
+                    final foodIdInt = int.tryParse(food.id);
+                    if (foodIdInt == null) return;
+                    await BackendApi.instance.addMyFood(
+                      foodId: foodIdInt,
+                    );
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('「${food.name}」已加入我的食材'),
+                        duration: const Duration(milliseconds: 1200),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: brand700,
+                        shape: const StadiumBorder(),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('添加失败：$e'),
+                        backgroundColor: brand900,
+                      ),
+                    );
+                  }
+                },
               ),
             ),
           ],
@@ -1313,9 +1341,9 @@ class _FoodCard extends StatelessWidget {
 
 class _RecipeRow extends StatelessWidget {
   final List<Recipe> recipes;
-  final VoidCallback onOpenRecipes;
+  final ValueChanged<Recipe> onOpenDetail;
 
-  const _RecipeRow({required this.recipes, required this.onOpenRecipes});
+  const _RecipeRow({required this.recipes, required this.onOpenDetail});
 
   @override
   Widget build(BuildContext context) {
@@ -1327,7 +1355,7 @@ class _RecipeRow extends StatelessWidget {
           Expanded(
             child: _RecipeCard(
               recipe: recipes[i],
-              onOpenRecipes: onOpenRecipes,
+              onOpenDetail: () => onOpenDetail(recipes[i]),
             ),
           ),
         ],
@@ -1338,504 +1366,131 @@ class _RecipeRow extends StatelessWidget {
 
 class _RecipeCard extends StatelessWidget {
   final Recipe recipe;
-  final VoidCallback onOpenRecipes;
+  final VoidCallback onOpenDetail;
 
-  const _RecipeCard({required this.recipe, required this.onOpenRecipes});
+  const _RecipeCard({required this.recipe, required this.onOpenDetail});
 
   @override
   Widget build(BuildContext context) {
+    final alreadyAdded = TodayMenuStore.instance.contains(recipe.id);
+
     return _PressCard(
       borderRadius: BorderRadius.circular(rCard),
-      onTap: onOpenRecipes,
+      onTap: onOpenDetail,
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: cardDeco(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            AspectRatio(
-              aspectRatio: 1.55,
-              child: DishPhoto(asset: recipe.image),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    recipe.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: ink,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    recipe.desc,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 10, color: muted),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    recipe.people.isEmpty
-                        ? recipe.time
-                        : '${recipe.time} · ${recipe.people}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 9, color: muted),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// =====================================================================
-// AI 建议条
-// =====================================================================
-
-class _AiTipBar extends StatelessWidget {
-  /// 后端给的标题/正文。为空时退回本地写死的文案 ——
-  /// 保证后端离线时这一块不会变成空白。
-  final String? title;
-  final String? body;
-  final VoidCallback onTap;
-
-  const _AiTipBar({required this.onTap, this.title, this.body});
-
-  @override
-  Widget build(BuildContext context) {
-    // 这条建议以前点了没反应 —— 现在点进 AI 助手
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [brand50, Color(0xFFF3F9EF)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: brand700,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(
-                Icons.auto_awesome,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title ?? mockAiTip.title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: ink,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    body ?? mockAiTip.body,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: muted,
-                      height: 1.6,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // 右侧箭头暗示这里可以点
-            const Icon(Icons.chevron_right, size: 18, color: brand700),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// =====================================================================
-// 快捷操作
-// =====================================================================
-
-class _QuickActions extends StatelessWidget {
-  final HomePicks picks;
-  final VoidCallback onOpenFoods;
-  final VoidCallback onOpenRecipes;
-  final VoidCallback onOpenAi;
-
-  const _QuickActions({
-    required this.picks,
-    required this.onOpenFoods,
-    required this.onOpenRecipes,
-    required this.onOpenAi,
-  });
-
-  void _openQuickMealPicker(BuildContext context) {
-    final recipes = picks.recipes.isNotEmpty
-        ? picks.recipes
-        : ContentStore.instance.recipes;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _QuickMealSheet(
-        recipes: recipes,
-        onOpenRecipe: (recipe) => openRecipeDetail(context, recipe),
-        onOpenRecipes: onOpenRecipes,
-        onOpenAi: onOpenAi,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton(
-            onPressed: () => _openQuickMealPicker(context),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: brand100),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: const StadiumBorder(),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.casino_outlined, size: 17, color: brand700),
-                SizedBox(width: 6),
-                Text(
-                  '快速选一餐',
-                  style: TextStyle(
-                    color: brand700,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
+                AspectRatio(
+                  aspectRatio: 1.55,
+                  child: DishPhoto(asset: recipe.image),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        recipe.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: ink,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        recipe.desc,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: muted),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        recipe.people.isEmpty
+                            ? recipe.time
+                            : '${recipe.time} · ${recipe.people}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 9, color: muted),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: FilledButton(
-            onPressed: onOpenFoods,
-            style: FilledButton.styleFrom(
-              backgroundColor: brand600,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: const StadiumBorder(),
-            ),
-            child: const Text(
-              '去选食材',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickMealSheet extends StatefulWidget {
-  final List<Recipe> recipes;
-  final ValueChanged<Recipe> onOpenRecipe;
-  final VoidCallback onOpenRecipes;
-  final VoidCallback onOpenAi;
-
-  const _QuickMealSheet({
-    required this.recipes,
-    required this.onOpenRecipe,
-    required this.onOpenRecipes,
-    required this.onOpenAi,
-  });
-
-  @override
-  State<_QuickMealSheet> createState() => _QuickMealSheetState();
-}
-
-class _QuickMealSheetState extends State<_QuickMealSheet> {
-  int _index = 0;
-
-  void _next() {
-    if (widget.recipes.length < 2) return;
-    setState(() => _index = (_index + 1) % widget.recipes.length);
-  }
-
-  void _closeThen(VoidCallback action) {
-    Navigator.pop(context);
-    WidgetsBinding.instance.addPostFrameCallback((_) => action());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewPaddingOf(context).bottom;
-    if (widget.recipes.isEmpty) {
-      return Container(
-        padding: EdgeInsets.fromLTRB(22, 12, 22, 24 + bottom),
-        decoration: const BoxDecoration(
-          color: page,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _SheetHandle(),
-            const SizedBox(height: 24),
-            const Icon(Icons.no_meals_outlined, size: 42, color: muted),
-            const SizedBox(height: 12),
-            const Text(
-              '暂时没有合适的菜谱',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => _closeThen(widget.onOpenRecipes),
-              child: const Text('查看全部菜谱'),
+            // ★ 右上角 + 按钮：一键加入今日菜单
+            Positioned(
+              top: 6,
+              right: 6,
+              child: _AddBadge(
+                alreadyAdded: alreadyAdded,
+                onAdd: () {
+                  final added = TodayMenuStore.instance.add(recipe);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        added
+                            ? '「${recipe.name}」已加入今日菜单'
+                            : '「${recipe.name}」已经在菜单里了',
+                      ),
+                      duration: const Duration(milliseconds: 1200),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: brand700,
+                      shape: const StadiumBorder(),
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
-      );
-    }
-
-    final recipe = widget.recipes[_index];
-    return Container(
-      padding: EdgeInsets.fromLTRB(18, 12, 18, 20 + bottom),
-      decoration: const BoxDecoration(
-        color: page,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _SheetHandle(),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: brand100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 19,
-                  color: brand700,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '今日一餐灵感',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      '已按家庭人数、口味和忌口筛选',
-                      style: TextStyle(fontSize: 11.5, color: muted),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: _next,
-                tooltip: '换一个推荐',
-                icon: const Icon(Icons.refresh_rounded, color: brand700),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            child: Container(
-              key: ValueKey(recipe.id),
-              clipBehavior: Clip.antiAlias,
-              decoration: cardDeco(radius: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AspectRatio(
-                    aspectRatio: 2.15,
-                    child: DishPhoto(asset: recipe.image),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          recipe.name,
-                          style: const TextStyle(
-                            fontSize: 21,
-                            fontWeight: FontWeight.w900,
-                            color: ink,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          recipe.desc,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            color: muted,
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 7,
-                          runSpacing: 7,
-                          children: [
-                            _MealMeta(
-                              icon: Icons.schedule_rounded,
-                              text: recipe.time,
-                            ),
-                            // 份量可能没有数据（清洗库没有份量列），
-                            // 空的时候整块不显示，而不是显示一个编的「3人份」
-                            if (recipe.people.isNotEmpty)
-                              _MealMeta(
-                                icon: Icons.people_outline_rounded,
-                                text: recipe.people,
-                              ),
-                            _MealMeta(
-                              icon: Icons.local_dining_outlined,
-                              text: recipe.difficulty,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _next,
-                  icon: const Icon(Icons.casino_outlined, size: 17),
-                  label: const Text('换一个'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    foregroundColor: brand700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () =>
-                      _closeThen(() => widget.onOpenRecipe(recipe)),
-                  icon: const Icon(Icons.menu_book_rounded, size: 17),
-                  label: const Text('查看做法'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    backgroundColor: brand600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton.icon(
-                onPressed: () => _closeThen(widget.onOpenAi),
-                icon: const Icon(Icons.auto_awesome, size: 15),
-                label: const Text('让 AI 帮我搭配'),
-              ),
-              TextButton(
-                onPressed: () => _closeThen(widget.onOpenRecipes),
-                child: const Text('查看全部菜谱'),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
 }
 
-class _SheetHandle extends StatelessWidget {
-  const _SheetHandle();
+// =====================================================================
+// 卡片右上角的圆形 + / ✓ 按钮
+//
+// 两个卡片（食材卡、菜谱卡）共用这一个小组件。
+// - 未加入时显示 + 号，半透明黑底白圆
+// - 已加入时显示 ✓，绿色底（避免用户重复加）
+// =====================================================================
+
+class _AddBadge extends StatelessWidget {
+  final bool alreadyAdded;
+  final VoidCallback onAdd;
+
+  const _AddBadge({required this.alreadyAdded, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return InkWell(
+      onTap: alreadyAdded ? null : onAdd,
+      borderRadius: BorderRadius.circular(99),
       child: Container(
-        width: 42,
-        height: 4,
+        width: 30,
+        height: 30,
         decoration: BoxDecoration(
-          color: line,
-          borderRadius: BorderRadius.circular(99),
+          color: alreadyAdded ? brand600 : Colors.black.withValues(alpha: 0.48),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1.5),
+        ),
+        child: Icon(
+          alreadyAdded ? Icons.check : Icons.add,
+          size: 18,
+          color: Colors.white,
         ),
       ),
     );
   }
 }
 
-class _MealMeta extends StatelessWidget {
-  final IconData icon;
-  final String text;
 
-  const _MealMeta({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: tagDeco(),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: brand700),
-          const SizedBox(width: 4),
-          Text(
-            text.isEmpty ? '待补充' : text,
-            style: const TextStyle(
-              fontSize: 11,
-              color: brand700,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

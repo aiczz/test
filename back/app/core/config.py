@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     app_name: str = "食时 API"
     api_prefix: str = "/api"
     debug: bool = True
-    # Product recommendations only include recipes with an image.
-    recipe_images_only: bool = True
+    # 推荐候选里要不要排除没有图片的菜。
+    # 改成 False 才能让 10000 道菜都能进推荐（之前设 True 时，推荐池会被
+    # 提前过滤掉一大批没图的菜，导致 AI 最后可能只剩 2 道可选）。
+    recipe_images_only: bool = False
     ai_response_cache_seconds: int = 300
     ai_interactive_budget_seconds: int = 18
     ai_routing_timeout_seconds: float = 3
@@ -116,6 +118,25 @@ class Settings(BaseSettings):
     ai_daily_cache_enabled: bool = True
     # 首页留给 AI 的候选数量（算法先筛出这么多，AI 在里面挑最终展示的）
     ai_home_shortlist: int = 8
+
+    # ---- Embedding / 向量检索（RAG 语义精排）----
+    # 和 Chat 模型可以是同一个服务（DeepSeek 也有 embedding），也可以独立。
+    # Project2 用的是 qwen3.7-text-embedding-flash（1024 维），效果不错。
+    embedding_enabled: bool = True
+    embedding_base_url: str = "https://maas.qianwenaiapi.com/compatible-mode/v1"
+    embedding_api_key: str = ""            # 留空则回退 ai_api_key
+    embedding_model: str = "qwen3.7-text-embedding-flash"
+    embedding_dim: int = 1024
+    embedding_timeout_seconds: int = 60
+    # 向量索引文件路径（相对于 back/）
+    vector_index_path: str = "data/embeddings_dishes.npz"
+    # RAG 第二路召回条数：用户给自由文本时，从全库按语义捞这么多道并入候选池
+    rag_recall_k: int = 60
+
+    @property
+    def embedding_configured(self) -> bool:
+        key = self.embedding_api_key.strip() or self.ai_api_key.strip()
+        return bool(self.embedding_enabled and key and self.embedding_base_url.strip())
 
     # ---- 天气（首页推荐要考虑「今天什么天气」）----
     # Open-Meteo 免费且不需要 key。取不到就退回按月份的时令气候估算，

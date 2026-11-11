@@ -43,6 +43,17 @@ class HealthGoal:
     # 用户说「家里有健身的」，推出来的还是山药和石榴。
     prefer_high_protein: bool = False
 
+    # ★ 「这个诉求要排除哪些口味/做法/食材」。
+    #
+    # 这是为了让推荐**自洽**的关键。比如用户说「润燥润肺」，
+    # 我们不能一边推润肺的雪梨，一边又推带青红椒/辣椒/咖喱的刺激菜
+    # —— 虽然青红椒炒鱿鱼的配料里有鱿鱼（滋阴）被功效匹配到了，
+    # 但青红椒本身会加重燥热，和「润燥」是矛盾的。
+    #
+    # 只写**标签命中**即可：硬约束掩码会检查 DishInsight.tags 和
+    # DishInsight.main_ingredients，命中其中任何一个就踢出候选。
+    exclude_tags: list[str] = field(default_factory=list)
+
     def as_prompt_line(self) -> str:
         if self.prefer_high_protein:
             return (
@@ -84,16 +95,22 @@ _GOALS: list[HealthGoal] = [
             "食欲不振", "积食", "胃不好",
         ],
         effect_keywords=["健脾", "养胃", "补脾", "健胃", "开胃", "消食", "导滞", "健脾宽中"],
+        # 脾胃弱的时候，辣/油炸/生冷都会加重负担
+        exclude_tags=["辣", "麻辣", "香辣", "辣椒", "油炸", "生冷"],
     ),
     HealthGoal(
         name="润燥润肺",
-        phrases=["润燥", "润肺", "嗓子干", "咽干", "口干", "咳嗽", "秋燥", "干燥"],
+        phrases=["润燥", "润肺", "嗓子干", "咽干", "口干", "咳嗽", "秋燥", "干燥", "嗓子疼", "润喉"],
         effect_keywords=["润肺", "润燥", "生津", "止咳", "滋阴", "润心肺", "生津止渴"],
+        # 嗓子/喉咙不舒服的时候，任何刺激性的东西都会雪上加霜
+        exclude_tags=["辣", "麻辣", "香辣", "青红椒", "辣椒", "泡椒", "咖喱", "芥末", "花椒"],
     ),
     HealthGoal(
         name="清热降火",
         phrases=["上火", "清热", "降火", "火气", "燥热", "长痘", "口疮"],
         effect_keywords=["清热", "降火", "解毒", "清热润燥", "清热降火", "消暑"],
+        # 火气大的时候吃油炸/烘烤会加重，辛辣本身就是"上火"的来源
+        exclude_tags=["辣", "麻辣", "香辣", "辣椒", "油炸", "红烧", "咖喱"],
     ),
     HealthGoal(
         name="安神助眠",
@@ -167,6 +184,44 @@ def extract_goal(message: str) -> HealthGoal | None:
     return best[1] if best else None
 
 
+def extract_goal_semantic(message: str) -> HealthGoal | None:
+    """关键词优先，命中不了再用向量找最近邻诉求。
+
+    【为什么要有这一层】
+    用户说「嗓子疼想喝点润喉的」——「嗓子疼」「润喉」都不在 phrases 里，
+    关键词路径判成无诉求，最后推出来的是土豆炖排骨。
+    向量匹配能把这句话落到「润燥润肺」上（实测余弦 0.66）。
+
+    【为什么先走关键词】
+    关键词是确定性的，向量是概率性的。能确定的时候就不该交给概率。
+    只有关键词判不出来时才多花一次 embedding 调用（约 0.3~1s）。
+    """
+    goal = extract_goal(message)
+    if goal is not None:
+        return goal
+    if not message or not message.strip():
+        return None
+    try:
+        from app.services.retrieval.embed_client import embed_text, is_embedding_configured
+        from app.services.retrieval.goal_index import get_goal_index
+
+        if not is_embedding_configured():
+            return None
+        index = get_goal_index()
+        if not index.available:
+            return None
+        vector = embed_text(message.strip())
+        if vector is None:
+            return None
+        hit = index.match(vector)
+        if hit is None:
+            return None
+        name, _sim = hit
+        return next((g for g in _GOALS if g.name == name), None)
+    except Exception:  # noqa: BLE001 —— 向量只是增强，绝不能让需求解析挂掉
+        return None
+
+
 def effect_keywords_of(goal: HealthGoal | None) -> list[str]:
     return list(goal.effect_keywords) if goal else []
 
@@ -175,9 +230,19 @@ def goal_fit(effect_tags: set[str], keywords: list[str]) -> float:
     """这个食材/菜品和诉求的契合度（0~1）。
 
     `effect_tags` 是该食材（或菜品所有食材）的功效标签集合。
-    命中 2 个关键词就算满分 —— 再多没有额外信息量。
+
+    【为什么按「匹配精度」算，而不是数命中了几个】
+    effects_json 里有大量宽泛标签，比如猪肉的「滋阴润燥」——
+    它同时命中「滋阴」和「润燥」。更要命的是菜品功效是**所有配料取并集**：
+    一道麻辣香锅有十几样配料，随便都能凑出 3 个相关标签，
+    于是「嗓子疼想润喉」推出来的是麻辣香锅。
+    改成 命中数 ÷ 该菜总标签数（精度），配料越多分母越大，
+    真正靠主料对症的菜（雪梨、川贝、银耳）才能浮上来。
     """
     if not keywords or not effect_tags:
         return 0.0
-    hits = sum(1 for keyword in keywords if any(keyword in tag for tag in effect_tags))
-    return min(hits / 2.0, 1.0)
+    matched = {tag for tag in effect_tags if any(keyword in tag for keyword in keywords)}
+    if not matched:
+        return 0.0
+    precision = len(matched) / max(len(effect_tags), 2)
+    return min(precision * 3.0, 1.0)

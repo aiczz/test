@@ -39,6 +39,8 @@ from typing import Any
 
 from sqlmodel import Session
 
+from app.core.database import engine
+
 from app.data.dish_images import has_image
 from app.core.config import settings
 from app.repositories import food_repository, recipe_repository
@@ -54,6 +56,16 @@ from app.repositories.catalog_insight_repository import (
 )
 from app.services.need_service import HealthGoal, effect_keywords_of, goal_fit
 from app.services.weather_service import WeatherContext
+
+# RAG 语义精排 —— 可选，不可用时自动跳过
+try:
+    from app.services.retrieval import DishVectorIndex, embed_text, is_embedding_configured
+    _RAG_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    _RAG_AVAILABLE = False
+    DishVectorIndex = None  # type: ignore[assignment,misc]
+    embed_text = None  # type: ignore[assignment,misc]
+    is_embedding_configured = None  # type: ignore[assignment,misc]
 
 # =====================================================================
 # 权重 —— 全部集中在这里，改权重不用翻代码
@@ -77,6 +89,134 @@ W_GOAL = 2.4
 # 权重刻意给小（0.6，比人气还低）：它只是**同等条件下**的偏好，
 # 绝不能盖过时令(3.0)/天气(1.6)/营养(1.2)/口味偏好(1.8)。
 W_IMAGE = 0.6
+
+# RAG 语义精排 —— 用户自由文本（"清爽不上火"、"给健身的人吃"）的语义匹配度。
+#
+# 【为什么权重能压过时令】
+# 用户明确打字说出需求时，这句话的优先级应该高于"客观时令"——
+# 权重 3.4 略高于 W_SEASON(3.0)，保证"我想吃清爽降火的"在 11 月也能推丝瓜，
+# 而不是被一堆应季炖菜挤掉。
+# 语义不可用时（没配 embedding、索引文件不存在）自动跳过，不影响主链路。
+W_SEMANTIC = 3.4
+
+# 余弦相似度的绝对刻度。实测 qwen3.7-text-embedding-flash 在本项目菜库上：
+#   无关菜 ≈ 0.30~0.38，一般相关 ≈ 0.40~0.45，强相关 ≈ 0.48~0.55
+# 低于 LOW 视为不相关，高于 HIGH 视为强相关。用绝对刻度而不是 min-max，
+# 避免"候选集里全是 0.44~0.50"时把噪声放大成 0~1。
+_SEMANTIC_LOW = 0.38
+_SEMANTIC_HIGH = 0.52
+
+
+def _calibrate_semantic(raw: float) -> float:
+    """把原始余弦映射到 0~1 的语义契合度。"""
+    span = _SEMANTIC_HIGH - _SEMANTIC_LOW
+    return max(0.0, min(1.0, (raw - _SEMANTIC_LOW) / span))
+
+
+# 全库静态字段缓存 —— 硬约束掩码要在召回**之前**算出来，
+# 所以需要把每道菜的菜名/配料/时长一次性拿全。
+# 命中一次约 2.5s（10000 道），之后常驻内存，每次请求只做集合运算（毫秒级）。
+_MASK_BASE_CACHE: dict[int, tuple] | None = None
+
+
+def _mask_base(session: Session) -> dict[int, tuple]:
+    """{dish_id: (name, tags, mains, all_names, duration, duration_reliable)}"""
+    global _MASK_BASE_CACHE
+    if _MASK_BASE_CACHE is not None:
+        return _MASK_BASE_CACHE
+    recipes, _ = recipe_repository.list_recipes(session, limit=10000)
+    ids = [int(getattr(r, "id", 0)) for r in recipes]
+    insights = dish_insights(session, ids)
+    base: dict[int, tuple] = {}
+    for recipe in recipes:
+        rid = int(getattr(recipe, "id", 0))
+        insight = insights.get(rid)
+        name = str(getattr(recipe, "name", "") or (insight.name if insight else ""))
+        tags = tuple(getattr(recipe, "tags", None) or (insight.tags if insight else []))
+        mains = tuple(getattr(insight, "main_ingredients", None) or ())
+        alls = tuple(getattr(insight, "all_ingredient_names", None) or ())
+        if insight is not None:
+            duration = int(insight.duration_minutes or 0)
+            reliable = insight.duration_source in {"table", "text"}
+        else:
+            duration = int(getattr(recipe, "duration_minutes", 0) or 0)
+            reliable = True
+        base[rid] = (name, tags, mains, alls, duration, reliable)
+    _MASK_BASE_CACHE = base
+    return base
+
+
+def _hard_constraint_allowed_ids(
+    session: Session,
+    constraints,  # HardConstraints
+    required_ingredients,
+    *,
+    allow_no_image: bool,
+    health_goal=None,  # HealthGoal | None
+) -> set[int] | None:
+    """把硬约束提前算成一个 id 集合，交给语义召回限定检索范围。
+
+    【为什么要在召回前算】
+    原来先召回 Top-60 再过滤：如果 60 条里 40 条含忌口或超时长，
+    真正合规的好菜（第 61~80 名）就永远轮不到。
+    先过滤再召回，同样的算力买到的是 60 条**全都可用**的候选。
+
+    注意：这里只做"召回范围收窄"，最终结果仍走原来的逐条过滤，
+    所以两边逻辑不完全一致也不会出错，最坏只是少召回几道。
+    """
+    try:
+        base = _mask_base(session)
+    except Exception:  # noqa: BLE001 —— 拿不到就当不限制
+        return None
+    if not base:
+        return None
+
+    avoid_terms = _avoid_terms(constraints.avoid)
+    allowed: set[int] = set()
+    for rid, (name, tags, mains, alls, duration, reliable) in base.items():
+        if not is_recommendable_dish_name(name):
+            continue
+        if settings.recipe_images_only and not allow_no_image and not has_image(name):
+            continue
+        if "汤羹" in constraints.excluded_categories and (
+            "汤" in name or any("汤" in tag for tag in tags)
+        ):
+            continue
+        if _hits_avoid(avoid_terms, name, list(tags), mains, alls):
+            continue
+        # ★ 食养诉求自带排除标签（润燥不吃辣、清热不吃油炸等）
+        goal_exclude = (getattr(health_goal, "exclude_tags", None) or [])
+        if goal_exclude:
+            # tags/mains/alls 都是 _mask_base 里预计算好的 tuple/list
+            blob = f"{name} {' '.join(tags)} {' '.join(mains)} {' '.join(alls)}"
+            if any(tag in blob for tag in goal_exclude):
+                continue
+        if not required_ingredients.matches(alls, constraints.required_foods):
+            continue
+        if constraints.require_known_time and not reliable:
+            continue
+        if reliable and duration > constraints.cook_minutes:
+            continue
+        allowed.add(rid)
+    return allowed
+
+
+def warmup_catalog() -> None:
+    """预热向量索引与硬约束掩码。
+
+    两者都是懒加载：不预热的话，用户发的**第一条** AI 对话要多等约 3 秒
+    （10000 道菜的配料/时长批量加载）。启动时加载好，把这段时间挪到启动阶段。
+    """
+    try:
+        if DishVectorIndex is not None:  # type: ignore[truthy-function]
+            DishVectorIndex().available
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        with Session(engine) as session:
+            _mask_base(session)
+    except Exception:  # noqa: BLE001
+        pass
 
 # 每日轮换的「池子」大小。
 #
@@ -706,6 +846,7 @@ def score_dishes(
     rejected_names: list[str] | None = None,
     health_goal: HealthGoal | None = None,
     user_id: int | None = None,
+    free_text: str | None = None,
 ) -> list[ScoredItem]:
     """按综合打分挑菜。
 
@@ -746,8 +887,86 @@ def score_dishes(
             if i not in exclude_ids
         ]
 
+    # ★ health_goal.exclude_tags 轻量过滤 —— 只查当前 ids 的 DishInsight，
+    #   不触发全库 _mask_base 缓存（那玩意儿第一次调用要 2.5s + 会污染测试 session）。
+    #   这个过滤专门负责「润燥不吃辣、清热不吃油炸」等食养诉求自带的黑名单，
+    #   用户显式说的忌口（constraints.avoid）仍然由后面的逐条过滤处理。
+    goal_exclude = (getattr(health_goal, "exclude_tags", None) or [])
+    if goal_exclude:
+        _ins = dish_insights(session, ids)
+        _filtered: list[int] = []
+        for _i in ids:
+            _insight = _ins.get(int(_i))
+            if _insight is None:
+                _filtered.append(_i)
+                continue
+            _blob = " ".join([
+                str(getattr(_insight, "name", "")),
+                " ".join(getattr(_insight, "tags", None) or []),
+                " ".join(getattr(_insight, "main_ingredients", None) or []),
+                " ".join(getattr(_insight, "all_ingredient_names", None) or []),
+            ])
+            if not any(_tag in _blob for _tag in goal_exclude):
+                _filtered.append(_i)
+        ids = _filtered
+
     if not ids:
         return []
+
+    # ★ RAG 语义 —— 两件事：
+    #   ① 第二路召回：用户给了自由文本时，从全库按语义捞 top-K 并入候选池。
+    #      否则「想吃清爽降火的」在 11 月只能看到炖菜（丝瓜是夏季菜，不在时令池里）。
+    #   ② 语义打分：在合并后的候选集内算余弦，按绝对刻度映射到 0~1。
+    #   不可用时（没配 embedding、索引不存在）semantic_fit 全为 0，自然降级。
+    semantic_scores: dict[int, float] = {}  # dish_id → 0~1
+    has_free_text = bool(free_text and free_text.strip())
+    rag_query_text: str | None = None
+    if has_free_text:
+        rag_query_text = free_text.strip()  # type: ignore[union-attr]
+    elif goal_keywords:
+        # 没有自由文本但有食养诉求 → 把诉求关键词拼起来当 query
+        rag_query_text = "、".join(goal_keywords)
+    if (
+        rag_query_text
+        and _RAG_AVAILABLE
+        and is_embedding_configured()  # type: ignore[union-attr]
+        and DishVectorIndex is not None  # type: ignore[union-attr]
+    ):
+        try:
+            vec_index = DishVectorIndex()  # 单例，懒加载
+            if vec_index.available:
+                query_vec = embed_text(rag_query_text)  # type: ignore[union-attr]
+                if query_vec is not None:
+                    # ① 第二路召回（仅自由文本；食养诉求走原本的功效召回）
+                    if has_free_text:
+                        extra = vec_index.top_k(
+                            query_vec,
+                            settings.rag_recall_k,
+                            allowed_ids=_hard_constraint_allowed_ids(
+                                session,
+                                constraints,
+                                required_ingredients,
+                                allow_no_image=has_free_text,
+                                health_goal=health_goal,
+                            ),
+                        )
+                        seen = set(ids)
+                        blocked = exclude_ids or set()
+                        merged = list(ids)
+                        for dish_id in extra:
+                            if dish_id not in seen and dish_id not in blocked:
+                                merged.append(dish_id)
+                                seen.add(dish_id)
+                        ids = merged
+
+                    # ② 候选集内语义打分（绝对刻度，不做 min-max ——
+                    #    全部候选都在 0.4~0.5 时，min-max 会把噪声放大成 0~1）
+                    sims = vec_index.sims_for(query_vec, ids)
+                    if sims is not None:
+                        for i, did in enumerate(ids):
+                            semantic_scores[did] = _calibrate_semantic(float(sims[i]))
+        except Exception:  # noqa: BLE001 —— RAG 是增强，绝不能让主链路挂
+            semantic_scores = {}
 
     insights = dish_insights(session, ids, season=season_char_of(month))
     raw_by_id = {
@@ -793,7 +1012,7 @@ def score_dishes(
             if rejected_names is not None:
                 rejected_names.append(f"{name}（不符合指定食材：{'、'.join(constraints.required_foods)}）")
             continue
-        if settings.recipe_images_only and not (
+        if settings.recipe_images_only and not has_free_text and not (
             has_image(name) or str(getattr(raw, "image_url", "") or "").strip()
         ):
             continue
@@ -905,6 +1124,9 @@ def score_dishes(
         # 营销式长标题已经在准入那一步剔除了，这里不再重复降权
         salt = daily_salt(region or "national", date_key, "dish", name)
 
+        # ---- RAG 语义匹配度 ----
+        semantic_fit = semantic_scores.get(recipe_id, 0.0)
+
         quality = (
             W_SEASON * season_fit
             + W_WEATHER * weather_fit
@@ -916,6 +1138,8 @@ def score_dishes(
             + (W_IMAGE if has_image(name) else 0.0)
             # 时长没依据、又明显超预算的：降权而不是删掉
             - overtime_penalty
+            # ★ RAG 语义精排 —— 用户自由文本/诉求关键词的语义匹配
+            + W_SEMANTIC * semantic_fit
         )
         if recipe_id in liked:
             quality += 0.6
@@ -954,6 +1178,7 @@ def score_dishes(
                     "popularity": popularity,
                     "daily": salt,
                     "goal": goal_score,
+                    "semantic": semantic_fit,
                 },
                 insight=insight,
                 highlights=highlights[:3],
@@ -969,11 +1194,27 @@ def score_dishes(
             item, weather=weather, constraints=constraints, health_goal=health_goal
         )
 
-    # ★ 两种场景用两种选法：
+    # ★ 三种场景三种选法：
     #   · 传了 food_ids（「用我的食材配菜 / 能做什么」）→ 相关性优先，不轮换
+    #   · 用户明确提了需求（free_text）→ 按质量直排，不轮换：
+    #     轮换会把最对症的挤出去，用户刚说完「想降火」却看到麻辣鸡，像没听懂
     #   · 没传（首页每日推荐）→ 档位 + 每日轮换
     if food_ids:
         return _select_by_relevance(scored, food_ids=food_ids, limit=limit)
+    if has_free_text:
+        scored.sort(key=lambda item: (-item.band, -item.quality, item.item_id))
+        # 同名菜去重：库里同名菜很多（如 5 道「宫保鸡丁」），
+        # 放开图片限制后候选池变大，不去重会出现一整屏同名菜。
+        seen_names: set[str] = set()
+        unique: list[ScoredItem] = []
+        for item in scored:
+            key = (item.name or "").strip()
+            if key and key in seen_names:
+                continue
+            if key:
+                seen_names.add(key)
+            unique.append(item)
+        return unique[:limit] if limit else unique
     picked = _select_with_rotation(
         scored, limit=limit, pool_size=ROTATE_POOL_DISH
     )

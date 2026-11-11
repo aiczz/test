@@ -247,6 +247,25 @@ class _Route:
     clarification: str | None = None
 
 
+_INTENT_SHORT_LABELS = {
+    "meal_recommendation": "推荐菜谱",
+    "recommend_foods": "推荐食材",
+    "cook_with_my_foods": "用我的食材做菜",
+    "general": "闲聊 / 问答",
+}
+
+
+def _intent_summary(intent: str, source: str, why: str = "") -> str:
+    """轨迹第一步：先说清楚这句话被当成了什么。
+
+    source=ai 是模型按语义判的，rules 是关键词规则兜的 ——
+    如实标出来，用户才知道这句是被「理解」了还是被「匹配」了。
+    """
+    label = _INTENT_SHORT_LABELS.get(intent, intent)
+    basis = "语义判定" if source == "ai" else "关键词规则"
+    return f"识别为「{label}」（{basis}）" + (f"；依据：{why}" if why else "")
+
+
 def _mentioned_foods(session: Session | None, message: str) -> tuple[list[int], list[str]]:
     """从用户的话里认出他提到的食材（含别名）。
 
@@ -410,7 +429,7 @@ def _route_semantic(
             (g for g in need_service.all_goals() if g.name == raw_goal), None
         )
     if goal is None:
-        goal = need_service.extract_goal(message)
+        goal = need_service.extract_goal_semantic(message)
 
     # 点名食材 / 忌口：一律以**库里的名字**为准（模型可能给口语化的说法），
     # 所以这里不是直接采信模型，而是拿它当线索再走一遍确定性识别 ——
@@ -506,8 +525,8 @@ def _route(
             target = 'meal_recommendation'
         else:
             target = inherited if inherited in {'meal_recommendation', 'cook_with_my_foods', 'recommend_foods'} else 'meal_recommendation'
-        return _Route(intent=target, follow_up=False, health_goal=need_service.extract_goal(message))
-    goal = need_service.extract_goal(message)
+        return _Route(intent=target, follow_up=False, health_goal=need_service.extract_goal_semantic(message))
+    goal = need_service.extract_goal_semantic(message)
     mentioned_ids, mentioned_names = _mentioned_foods(session, message)
     avoid_added = _declared_avoid(message, mentioned_names)
 
@@ -761,6 +780,43 @@ def _coerce_picks(value: Any, allowed: set[int], limit: int) -> list[dict[str, A
     return result
 
 
+def _patch_picks(
+    picks: list[dict[str, Any]],
+    allowed: set[int],
+    candidates: list[ScoredItem],
+    count: int,
+    health_goal: Any,
+) -> None:
+    """原地补齐 picks：缺了就补，reason 空了也补。
+
+    模型可能返回 picks=[{id:1, reason:""}, {id:2, reason:""}] ——
+    长度刚好但 reason 全空（或者少给一个 id）。这两种情况都在这里兜底：
+    - 长度不够 → 从 candidates 按顺序补 id
+    - reason 为空 → 用 _auto_reason_for 拼一条（做法/主料/时长/营养维度齐全）
+
+    不抛异常，绝不影响上游流程。
+    """
+    seen: set[int] = {int(p["id"]) for p in picks}
+    for entry in picks:
+        rid = int(entry["id"])
+        reason = str(entry.get("reason") or "").strip()
+        if not reason:
+            item = next((c for c in candidates if c.item_id == rid), None)
+            if item is not None:
+                entry["reason"] = _auto_reason_for(item, health_goal)
+
+    # 长度不够 → 从候选按算法分数顺序补
+    if len(picks) < count:
+        for c in candidates:
+            if c.item_id in seen or c.item_id not in allowed:
+                continue
+            reason = _auto_reason_for(c, health_goal)
+            picks.append({"id": c.item_id, "reason": reason})
+            seen.add(c.item_id)
+            if len(picks) >= count:
+                break
+
+
 # =====================================================================
 # 对话
 # =====================================================================
@@ -811,8 +867,17 @@ def _food_prompt(
 请输出 JSON：
 {{
   "answer": "给用户的一段话，2~3 句，说清为什么这几样适合他现在的需求",
-  "picks": [{{"id": 食材id, "reason": "一句话理由（不超过 20 字）"}}]
+  "picks": [{{"id": 食材id, "reason": "一句 10~20 字的解释"}}]
 }}
+
+reason 写法规则：
+- 必须**引用候选行里的具体数据**，不能说「适合大多数人」；
+- 对「健身」：讲「蛋白含量高 / 低脂」；
+- 对「补铁补钙」：讲「含铁量 / 钙量」；
+- 对「时令诉求」：讲「本月正应季」；
+- ✅ 好例子："蛋白 24.6g，健身首选"
+- ✅ 好例子："11 月应季，润燥"
+- ❌ 坏例子："营养丰富，老少咸宜"
 
 要求：
 - picks 选 {count} 个，按推荐优先级排序，id 必须来自候选清单；
@@ -864,19 +929,7 @@ def _answer_food_recommendation(
             ms=1,
         )
     )
-    # 意图是怎么判出来的，如实标出来
-    trace.append(
-        AiTraceStep(
-            agent="意图识别",
-            summary=(
-                "按语义判断：这句话是「想要食材推荐」"
-                + (f" —— {route.why}" if route.why else "")
-                if route.source == "ai"
-                else "按关键词判断：这句话是「想要食材推荐」（AI 未启用，走规则兜底）"
-            ),
-            ms=0,
-        )
-    )
+    # 意图这一步统一由 chat() 在最前面插入 —— 这里不再重复记一遍
     if route.health_goal is not None:
         trace.append(
             AiTraceStep(
@@ -968,6 +1021,7 @@ def _answer_food_recommendation(
         if result.ok:
             raw_answer = str(result.data.get("answer") or "").strip()
             picks = _coerce_picks(result.data.get("picks"), allowed, count)
+            _patch_picks(picks, allowed, candidates, count, health_goal)
             if raw_answer:
                 answer, rejected_claim = checked_text(raw_answer, '')
                 answer = answer or None
@@ -1174,10 +1228,19 @@ def _chat_with_context(session: Session, user_id: int | None, payload: AiChatReq
     result.conversation_state = state
     result.effective_context = effective
     result.excluded_categories = state.excluded_categories
-    result.trace.insert(0, AiTraceStep(agent="本次生效条件", summary=_constraints_block(
-        HardConstraints.from_profile(resolved)) + (
-            "；排除品类：" + "、".join(state.excluded_categories) if state.excluded_categories else ""
-        )))
+    result.trace.insert(0, AiTraceStep(
+        agent="意图识别",
+        summary=_intent_summary(route.intent, route.source, route.why)
+        + ("；本轮不进入推荐链路" if route.intent == "general" else ""),
+        status="info",
+        ms=0,
+    ))
+    # 闲聊没有约束可言，别把「3 人用餐/45 分钟/少盐」摆在它前面
+    if route.intent != "general":
+        result.trace.insert(1, AiTraceStep(agent="本次生效条件", summary=_constraints_block(
+            HardConstraints.from_profile(resolved)) + (
+                "；排除品类：" + "、".join(state.excluded_categories) if state.excluded_categories else ""
+            )))
     return result
 
 
@@ -1259,17 +1322,20 @@ def _chat_once(
     weather = _weather_for(payload, month)
     trace: list[AiTraceStep] = []
 
-    trace.append(
-        AiTraceStep(
-            agent="读取约束",
-            summary=(
-                f"读取约束：{_constraints_block(constraints)}"
-                f"；天气 {weather.description}"
-            ),
-            status="info",
-            ms=3,
+    # 闲聊不读约束、不召回 —— 轨迹里只留「意图识别」和「直接问答」两步，
+    # 否则会出现"读了 45 分钟时限/少盐，然后直接闲聊"这种自相矛盾的展示。
+    if intent != "general":
+        trace.append(
+            AiTraceStep(
+                agent="读取约束",
+                summary=(
+                    f"读取约束：{_constraints_block(constraints)}"
+                    f"；天气 {weather.description}"
+                ),
+                status="info",
+                ms=3,
+            )
         )
-    )
 
     # ---- 需求解析：把「我气血不足，想吃点补气血的」变成可执行的筛选条件 ----
     #   这一步以前完全没有 —— 于是模型手里只有时令/天气素材，
@@ -1493,6 +1559,7 @@ def _chat_once(
         if result.ok:
             raw_answer = str(result.data.get("answer") or "").strip()
             picks = _coerce_picks(result.data.get("picks"), allowed, count)
+            _patch_picks(picks, allowed, candidates, count, health_goal)
             if raw_answer:
                 answer, rejected_claim = checked_text(raw_answer, '')
                 answer = answer or None
@@ -1520,13 +1587,30 @@ def _chat_once(
         )
 
     chosen, accepted, adjusted = _verified_selection(candidates, picks, baseline, count, trace, requirements=meal_policy)
+    # 先留一份模型给的逐菜理由：整餐复核可能换菜，但留下的那些原来的 reason 还有用 ——
+    # 别把 picks 整个清空，而是按最终 chosen 的 id 重新整理一份
+    model_picks_by_id = {int(p.get("id")): str(p.get("reason") or "") for p in picks if p.get("id") is not None}
     if not accepted:
         answer, picks, source, model_name = None, [], "algorithm", None
     else:
         source = "ai"
         model_name = result.model
         if adjusted:
-            answer, picks = None, []
+            answer = None
+            # 按最终 chosen 的 id 重排 picks：留下的菜带原 reason，换走的菜丢掉
+            picks = [
+                {"id": item.item_id, "reason": model_picks_by_id.get(item.item_id, "")}
+                for item in chosen
+            ]
+        else:
+            # 没换菜，直接按 chosen 顺序重排 picks（去掉不在 chosen 里的）
+            chosen_ids = {item.item_id for item in chosen}
+            picks = [p for p in picks if int(p.get("id", -1)) in chosen_ids]
+            if len(picks) != len(chosen):
+                picks = [
+                    {"id": item.item_id, "reason": model_picks_by_id.get(item.item_id, "")}
+                    for item in chosen
+                ]
 
     if constraints.required_foods:
         # A free-form explanation must not claim unrelated "balancing" dishes.
@@ -1541,8 +1625,13 @@ def _chat_once(
             status="ok",
         ))
     elif answer is None:
-        # ★ 兜底：和改造前的行为完全一致
-        answer = _rule_answer(
+        # 限定食材时不能引用逐菜理由 —— 模型的理由里可能提到别的食材（"牛肉补充"），
+        # 那会跟"只展示配料符合条件的菜谱"自相矛盾。
+        composed = (
+            None if constraints.required_foods
+            else _answer_from_reasons(chosen, picks, health_goal)
+        )
+        answer = composed or _rule_answer(
             session=session,
             intent=intent,
             constraints=constraints,
@@ -1564,10 +1653,12 @@ def _chat_once(
     recipes = []
     for item in chosen:
         brief = recipe_service.to_brief(item.raw)
-        if notes.get(item.item_id):
-            brief = brief.model_copy(
-                update={"description": notes[item.item_id]}
-            )
+        # 统一覆盖 description：模型给了 reason 就用它；
+        # 没有就用候选数据自动生成一行，**绝对不要**用菜谱原始 description
+        # （原始 description 里混了「请勿转载」「用户评论」「营销语」等脏数据）
+        desc = notes.get(item.item_id) or _auto_reason_for(item, health_goal)
+        if desc:
+            brief = brief.model_copy(update={"description": desc})
         recipes.append(brief)
 
     trace.append(
@@ -1693,6 +1784,20 @@ def _general_chat(
     ai_ms = 0
     failure_note = "后端尚未启用模型服务，使用简短提示。"
     context_facts = ''
+    # 把**本项目的天气数据**交给模型 —— 之前这段闲聊链路压根没把 weather 传进提示词，
+    # 于是用户问「今天天气怎么样」，模型只会答「我无法获取实时天气」。
+    # 我们明明接了 Open-Meteo，这个数据必须用上。
+    weather_facts = ''
+    if weather is not None:
+        temp = getattr(weather, 'temperature_c', None)
+        basis = {'live': '实时数据', 'estimated': '按季节估算，非实时'}.get(
+            getattr(weather, 'source', 'unknown'), '来源未知'
+        )
+        weather_facts = (
+            f"{getattr(weather, 'city', None) or '当前城市'}：{getattr(weather, 'description', '')}"
+            + (f"，{temp:.0f}℃" if temp is not None else '')
+            + f"（{basis}）"
+        )
     if conversation_state:
         foods = food_insights(session, conversation_state.last_recommended_food_ids) if conversation_state.last_recommended_food_ids else {}
         recipes = recipe_repository.list_by_ids(session, conversation_state.last_recommended_recipe_ids) if conversation_state.last_recommended_recipe_ids else []
@@ -1714,10 +1819,14 @@ def _general_chat(
                     "role": "user",
                     "content": f"""【用户的话】{message}
 【本会话引用对象】{context_facts}
+【本地天气】{weather_facts or '未取到'}
 请输出 JSON：{{"answer": "2~3 句口语化回答"}}
 要求：
 - **先判断用户到底在说什么**：打招呼就打招呼，道谢就道谢，问你是谁就介绍自己，
   不要把每种话都答成同一段自我介绍；
+- 用户问天气、冷热、穿衣、要不要带伞时，**直接使用【本地天气】这条数据回答**，
+  不要说「我无法获取实时天气」；只有当它标注为「按季节估算」时，
+  才说明这是按季节判断、没取到实时数据；
 - 不要推荐具体菜名（这一轮没有给候选清单）；
 - 知识问题直接解释，其他话题按问题作答，不要强行转到饮食推荐；
 - 全部用简体中文。""",
@@ -1805,6 +1914,93 @@ def _order_candidates(
             ordered.append(item)
             seen.add(item.item_id)
     return ordered[:limit]
+
+
+def _auto_reason_for(item: ScoredItem, health_goal: Any) -> str:
+    """模型没给 reason 时，用候选里的真实数据自动拼一行。
+
+    尽量用**非营养**维度开头（做法/风味/主料），营养数据当补充 ——
+    全是数字的 reason 看着像体检报告，不像人写的推荐。
+    """
+    parts: list[str] = []
+    ins = item.insight
+    if ins is not None:
+        # ---- 1. 时令（如果直接关联了 seasonal_dish_links）----
+        if getattr(ins, 'season_linked', False):
+            parts.append("应季菜")
+
+        # ---- 2. 做法/风味（从 tags 里挑最有信息量的）----
+        #    用子串匹配：标签是"快手菜"，hint 是"快手"；标签是"红烧卤味"，hint 是"红烧"
+        #    常见 hint：清蒸 / 红烧 / 凉拌 / 炖 / 家常 / 快手 / 清淡 / 香辣 / 下饭菜
+        method_hints = [
+            '清蒸', '红烧', '凉拌', '炖', '焖', '煮粥', '煮', '炒', '烤', '炸', '煎',
+            '家常', '快手', '清淡', '香辣', '麻辣', '糖醋', '酸汤', '葱香', '蒜香',
+            '滋补', '下饭', '佐酒', '开胃', '爽口', '快手菜', '下饭菜', '凉菜', '汤',
+        ]
+        tags = getattr(ins, 'tags', None) or []
+        hit_methods: list[str] = []
+        for t in tags:
+            for h in method_hints:
+                if h in t and t not in hit_methods:
+                    hit_methods.append(t)
+                    break
+        if hit_methods:
+            parts.append('/'.join(hit_methods[:2]))
+
+        # ---- 3. 主料（菜的"灵魂"，过滤掉脏的：开头是 / 的）----
+        mains = getattr(ins, 'main_ingredients', None) or []
+        clean_mains = [m.strip('/').strip() for m in mains if m and not m.strip('/').startswith('/')]
+        if clean_mains:
+            parts.append("用" + "、".join(clean_mains[:2]) + "做")
+
+        # ---- 4. 时长（如果可信）----
+        dur = getattr(ins, 'duration_minutes', None)
+        src = getattr(ins, 'duration_source', '')
+        if dur and src in {'table', 'text'}:
+            parts.append(f"{dur}分钟出锅")
+
+        # ---- 5. 营养（只挑一个最突出的，别全堆）----
+        protein = getattr(ins, 'protein_g', None)
+        sodium = getattr(ins, 'na_mg', None)
+        if sodium is not None and sodium < 300:
+            parts.append(f"低钠{sodium:.0f}mg")
+        elif protein is not None and protein >= 20:
+            parts.append(f"高蛋白{protein:.1f}g")
+
+    # 健康诉求的契合度（作为收尾）
+    if health_goal is not None and getattr(health_goal, 'name', None):
+        parts.append(f"契合{health_goal.name}")
+
+    return "，".join(parts) if parts else ""
+
+
+def _answer_from_reasons(
+    chosen: list[ScoredItem],
+    picks: list[dict[str, Any]],
+    health_goal: Any,
+) -> str | None:
+    """整餐复核换菜后，用同一轮模型给的逐菜理由重说一遍。
+
+    不再二次调模型（一次请求只调一次是这套系统的成本约束），
+    也不退回"现在是秋季，用餐人数设为 3 人…"那种模板。
+    """
+    reasons = {
+        str(p.get("id")): str(p.get("reason") or "").strip()
+        for p in picks
+        if p.get("reason")
+    }
+    parts = []
+    for item in chosen:
+        reason = reasons.get(str(item.item_id))
+        if not reason:
+            continue
+        # 理由可能很长，取第一句、限长，避免回答变成一堵墙
+        head = reason.split("。")[0].strip()
+        parts.append(f"{item.name}——{head[:36]}")
+    if len(parts) < 2:
+        return None
+    lead = f"按你说的「{health_goal.name}」，" if health_goal is not None else "按你说的口味，"
+    return lead + "给你挑了这几道：" + "；".join(parts) + "。"
 
 
 def _rule_answer(
@@ -1938,8 +2134,60 @@ def _chat_prompt(
     food_ids: list[int] | None = None,
     preferences: list[str] | None = None,
 ) -> str:
+    # ==================================================================
+    # cook_with_my_foods —— 专用精简 prompt
+    #   原来和 meal_recommendation 共用同一个长模板（时令/天气/逐菜库存核对…），
+    #   导致回答变成"今天晴17℃…你家里有XX…第1道菜已核对XX主料…"这种大段冗长文字。
+    #   用户现在明确想要：直接、快速、只关心"用家里的食材能做啥"。
+    # ==================================================================
+    if intent == "cook_with_my_foods":
+        inventory, _details = _inventory_facts(session, user_id, candidates)
+        cand_lines = _candidate_lines(session, candidates, food_ids)
+        return f"""【用户的话】{message}
+【意图】用家里已有的食材做菜
+【家里现有食材】{inventory or "暂无可确认的已登记库存"}
+【家庭约束】{_constraints_block(constraints)}
+{'【★ 用户的核心诉求】' + health_goal.as_prompt_line() if health_goal is not None else ''}
+
+【候选菜品】（只能从这里挑；每道都**至少用到了家里已登记的一样食材**）
+{chr(10).join(cand_lines)}
+
+请输出 JSON：
+{{
+  "answer": "给用户的一段回答，**1~2 句**，直接说结论，口语化",
+  "picks": [
+    {{
+      "id": 菜品id,
+      "reason": "一句 10~20 字的解释"
+    }}
+  ]
+}}
+
+answer 写法（极简）：
+- 第一句直接告诉用户"用你家里的 XX、XX 可以做这几道"；
+- 第二句只补一个最关键的信息（"刚好 {constraints.cook_minutes:.0f} 分钟能做" / "口味清淡" / "高蛋白"）；
+- **不要**逐道列菜名、不要逐道解释、不要写时令/天气/季节。
+- ✅ 好例子："用你家里的鸡胸肉、木耳和番茄，可以做这三道菜。刚好 {constraints.cook_minutes:.0f} 分钟能做完。"
+- ❌ 坏例子："现在是秋季，今天晴 17℃……（逐道核对每道菜的库存）……"
+
+reason 写法（极简）：
+- **只讲"用到了家里的什么食材 + 做法/时长"**，不要营养数据堆砌；
+- ✅ 好例子："用到家里的鸡胸肉、木耳，快炒 15 分钟"
+- ✅ 好例子："用到家里的番茄、鸡蛋，家常快手"
+- ❌ 坏例子："蛋白 24g 钠 89mg 能量 150kcal"（像体检报告，不适合这种场景）
+
+硬性要求：
+- picks 必须**正好 {min(count, len(candidates))} 个**，少一个都不行；
+- 每一项都要有 id 和 reason，reason 不能为空；
+- 全部简体中文。"""
+
+    # ==================================================================
+    # meal_recommendation / recommend_foods —— 通用长模板（保持不变）
+    # ==================================================================
     owned = ""
     if intent == "cook_with_my_foods":
+        # 上面 cook_with_my_foods 已 early return，这行理论上不会到；
+        # 但保险起见保留（如果未来新增 cook_with_my_foods 的其他调用路径）
         inventory, details = _inventory_facts(session, user_id, candidates)
         owned = (
             f"【用户在我的食材中实际登记的库存】{inventory}\n"
@@ -1977,14 +2225,31 @@ def _chat_prompt(
 
 请输出 JSON：
 {{
-  "answer": "给用户的一段回答，2~4 句，口语化，要说清为什么推荐这几道",
-  "picks": [{{"id": 菜品id, "reason": "一句话理由"}}]
+  "answer": "给用户的一段回答，2~4 句，口语化，**每句都要用到候选行里的具体数据**",
+  "picks": [
+    {{
+      "id": 菜品id,
+      "reason": "对这道菜的一句解释，15~30 字"
+    }}
+  ]
 }}
 
-要求：
-- picks 选 {min(count, len(candidates))} 个，id 必须来自上面的候选清单；
-- **先回答用户问的诉求**，再补充时令/天气作为辅助理由；
-- 如果用户说了「用我家的食材」，要明确说明这几道用到了他现有的哪些食材；
+**reason 写法规则（这是整套推荐最关键的一步）：**
+- 必须**引用候选行里的具体数据**，不能凭空说「这道菜很适合」；
+- 对「健身减脂」：讲「蛋白 XXg、能量 XXkcal、钠 XXmg 符合饮食目标」；
+- 对「补气血/润燥」：讲「用了 XX、XX 等应季/带功效的食材」；
+- 对「用我家的食材」：讲「用到了你已登记的 XX、XX」；
+- 对「时间紧」：讲「时长 XX 分钟，符合可用时间」；
+- ✅ 好例子："蛋白 24g、钠 89mg，低脂高蛋白"
+- ✅ 好例子："用了你登记的鸡胸肉、木耳，25 分钟能出锅"
+- ❌ 坏例子："这道菜营养均衡，适合大多数人"（没引数据）
+- ❌ 坏例子："清淡又健康"（没引数据）
+
+answer 写法规则：
+- 第一句先回应用户的核心诉求（健身、补气血、时间紧…）；
+- 每道菜都要带它的 reason 里的那个具体点，不要重复 "时令/天气" 这种泛泛的话；
+- picks 选 {min(count, len(candidates))} 个——数组长度**必须等于**这个数，
+  每一项都要有 id 和 reason，缺一个都不行；id 必须来自上面的候选清单；
 - 全部用简体中文。"""
 
 
@@ -2084,7 +2349,7 @@ def _recommend_recipes(
     )
 
     # ---- 附带的食养诉求（用户在配菜面板里写的那句补充要求）----
-    health_goal = need_service.extract_goal(payload.message or "")
+    health_goal = need_service.extract_goal_semantic(payload.message or "")
     if health_goal is not None:
         trace.append(
             AiTraceStep(
@@ -2100,6 +2365,22 @@ def _recommend_recipes(
     # ---- 3. 综合打分召回候选 ----
     t0 = time.perf_counter()
     shortlist = 24
+    # ★ free_text = 用户补充一句 + meal_goal 下拉的自然语言描述，一起喂给 RAG。
+    # 这样"这一餐更看重快手优先"会被翻译成自然语言拼进去，
+    # embedding 模型能理解"快手优先"对应时长短的菜。
+    _MEAL_GOAL_TEXT = {
+        "balanced": "荤素搭配、做法多样均衡的一餐",
+        "quick": "快手优先、烹饪时间短的快手菜",
+        "fewer_purchases": "减少额外采购、尽量用家里已有的主料",
+        "pantry": "多用家里现有食材、少开新菜",
+    }
+    meal_goal_text = _MEAL_GOAL_TEXT.get(payload.meal_goal, "")
+    free_text_parts = []
+    if (payload.message or "").strip():
+        free_text_parts.append((payload.message or "").strip())
+    if meal_goal_text:
+        free_text_parts.append(meal_goal_text)
+    free_text = "，".join(free_text_parts) if free_text_parts else None
     candidates = scoring_service.score_dishes(
         session,
         month=month,
@@ -2113,6 +2394,7 @@ def _recommend_recipes(
         limit=shortlist,
         user_id=user_id,
         health_goal=health_goal,
+        free_text=free_text,
     )
 
     relaxed = False
@@ -2129,6 +2411,7 @@ def _recommend_recipes(
             limit=shortlist,
             user_id=user_id,
             health_goal=health_goal,
+            free_text=free_text,
         )
         relaxed = True
 

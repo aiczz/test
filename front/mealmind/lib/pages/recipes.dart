@@ -9,6 +9,7 @@ import '../services/api_config.dart';
 import '../services/auth_store.dart';
 import '../services/backend_api.dart';
 import '../services/content_store.dart';
+import '../state/home_feed.dart';
 import '../state/today_menu.dart';
 import '../theme.dart';
 import '../widgets/dish_photo.dart';
@@ -96,13 +97,15 @@ class _RecipesPageState extends State<RecipesPage> {
   }
 
   List<Recipe> get _visible {
-    Iterable<Recipe> list = ContentStore.instance.recipes.where(
-      (recipe) => recipe.image.trim().isNotEmpty,
-    );
+    // ★ 「今日推荐」是特殊分类：用 HomeFeedStore 从后端拿的候选池，
+    //  不走 ContentStore 全量筛选 —— 避免重复跑一遍 score_dishes。
+    //  后端没返回时（离线 / 老后端）退化成全量。
+    Iterable<Recipe> list = _category == '今日推荐'
+        ? (HomeFeedStore.instance.feed?.todayRecipes ??
+            ContentStore.instance.recipes)
+        : ContentStore.instance.recipes;
 
-    if (_category != '全部') {
-      // 分类名和后端返回的规范标签是同一个字符串（后端已经把「家常」「家常菜」
-      // 归一成「家常菜」了），所以这里是干净的等值匹配。
+    if (_category != '全部' && _category != '今日推荐') {
       list = list.where((r) => r.tags.contains(_category));
     }
 
@@ -113,7 +116,14 @@ class _RecipesPageState extends State<RecipesPage> {
       );
     }
 
-    return list.toList();
+    // 有图的排前面，没图的也显示（全 10000 道菜都要在菜谱页里）
+    final sorted = list.toList()
+      ..sort((a, b) {
+        final aHas = a.image.trim().isNotEmpty ? 0 : 1;
+        final bHas = b.image.trim().isNotEmpty ? 0 : 1;
+        return aHas.compareTo(bHas);
+      });
+    return sorted;
   }
 
   Future<void> _toggleFavorite(String id) async {
@@ -757,6 +767,14 @@ class _CategoryIndexState extends State<_CategoryIndex> {
               count: widget.total,
               active: widget.selected == '全部',
               onTap: () => widget.onSelect('全部'),
+            ),
+            // ★ 「今日推荐」特殊分类 —— 后端已经算好了候选池（和首页推荐同源），
+            //  不是后端 tags 表里的，所以不能走循环渲染。
+            _CategoryChip(
+              label: '今日推荐',
+              count: HomeFeedStore.instance.feed?.todayRecipes.length ?? 0,
+              active: widget.selected == '今日推荐',
+              onTap: () => widget.onSelect('今日推荐'),
             ),
             for (final tag in visible)
               _CategoryChip(

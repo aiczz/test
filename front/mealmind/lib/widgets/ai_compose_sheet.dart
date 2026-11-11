@@ -365,6 +365,17 @@ class _AiComposeSheetState extends State<AiComposeSheet> {
 
                 if (_result != null) ...[
                   const SizedBox(height: 20),
+                  // ★ 防御性提示：显示后端推荐了几道。
+                  // 以前 cards 被过滤成 0 张时，整个结果区什么都不渲染，
+                  // 用户只能看到文字 answer 和 trace，不知道是后端没返回还是前端过滤了。
+                  Text(
+                    '后端返回 ${_result!.recommendations.length} 道推荐菜',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: muted,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                   _ResultView(result: _result!, onAdd: _addToTodayMenu),
                 ],
               ],

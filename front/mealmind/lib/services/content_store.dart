@@ -10,7 +10,6 @@
 //    界面照常能用，只是数据来源不同（sourceLabel 会如实说明）。
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 
 import '../data/mock.dart';
 import '../models/content.dart';
@@ -70,15 +69,11 @@ class ContentStore extends ChangeNotifier {
       // 菜谱要翻页：清洗库有 10000 道，只拉第一页的话「全部菜谱」永远只有 50 道。
       final allRecipes = await BackendApi.instance.fetchAllRecipes();
 
-      // 只展示有真实配图的菜谱，同时排除资源路径存在但文件缺失的情况。
-      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-      final assets = manifest.listAssets().toSet();
-      final recipes = allRecipes
-          .where(
-            (recipe) =>
-                recipe.image.trim().isNotEmpty && assets.contains(recipe.image),
-          )
-          .toList();
+      // ★ 不再在这里过滤图片：
+      // 后端 clean catalog 有 10000 道菜，但 asset manifest 里只注册了 625 张本地配图，
+      // 这里一过滤就把剩下 9375 道菜全丢了——菜谱页里「只有 625 道」就是这么来的。
+      // 图片展示交给 UI 层各自处理（recipes.dart/recommender.dart/卡片组件）。
+      final recipes = allRecipes;  // 全量 10000 道，不过滤！
 
       // 时令要单独拉一次：/api/foods 返回的 FoodBrief 只带 season_score、
       // 不带季节名，光靠它没法判断「这个月」哪些是当季的。
@@ -92,9 +87,7 @@ class ContentStore extends ChangeNotifier {
       // 空白界面比假数据更糟，演示时尤其明显。
       _foods = foods.isEmpty ? mockFoods : foods;
       _recipes = allRecipes.isEmpty
-          ? mockRecipes
-                .where((recipe) => assets.contains(recipe.image))
-                .toList()
+          ? mockRecipes  // 离线时还是用 mock 的（mock 里全是有图的）
           : recipes;
       _seasonalIds = seasonalIds;
       _recipeTagGroups = _visibleTagGroups(tagGroups, _recipes);
