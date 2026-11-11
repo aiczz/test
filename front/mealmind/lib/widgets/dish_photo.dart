@@ -1,4 +1,4 @@
-﻿﻿import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../data/dish_images.dart';
 import '../services/api_config.dart';
