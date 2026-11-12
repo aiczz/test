@@ -19,7 +19,7 @@ def test_inventory_chat_replaces_model_claims(client, monkeypatch, stub_chat_und
     stub_chat_understanding(AiUnderstanding(intent='cook_with_my_foods', confidence=0.97))
     monkeypatch.setattr(ai_service.client, "is_configured", lambda: True)
 
-    def fake_model(messages):
+    def fake_model(messages, **kwargs):
         prompts.append(messages[-1]["content"])
         return AiResult(ok=True, model="fake", data={
             "answer": "我看不到你的冰箱，但你有龙虾，保证低钠润肺。",

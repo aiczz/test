@@ -8,12 +8,22 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import OrderedDict
+from threading import RLock
 
 import httpx
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# 同一句话在聊天里可能被重复检索（重问、换数量、详情追问），
+# 每次重新调用 embedding 服务要 1s 以上，还会挤占模型的交互预算。
+# 这里做一个很小的 LRU + TTL 缓存，只缓存查询文本。
+_QUERY_CACHE_TTL = 900.0
+_QUERY_CACHE_MAX = 256
+_query_cache: OrderedDict[str, tuple[float, list[float]]] = OrderedDict()
+_query_lock = RLock()
 
 
 def is_embedding_configured() -> bool:
@@ -31,11 +41,20 @@ def embed_text(text: str, *, timeout: int | None = None) -> list[float] | None:
     if not is_embedding_configured():
         return None
 
+    text = text.strip()
+    cache_key = f"{settings.embedding_base_url}|{settings.embedding_model}|{text}"
+    now = time.monotonic()
+    with _query_lock:
+        hit = _query_cache.get(cache_key)
+        if hit and hit[0] > now:
+            _query_cache.move_to_end(cache_key)
+            return list(hit[1])
+
     api_key = settings.embedding_api_key.strip() or settings.ai_api_key.strip()
     url = settings.embedding_base_url.rstrip("/") + "/embeddings"
     payload = {
         "model": settings.embedding_model,
-        "input": text.strip(),
+        "input": text,
     }
 
     effective_timeout = timeout or settings.embedding_timeout_seconds
@@ -77,7 +96,13 @@ def embed_text(text: str, *, timeout: int | None = None) -> list[float] | None:
                 settings.embedding_dim, len(emb),
             )
             return None
-        return [float(v) for v in emb]
+        vec = [float(v) for v in emb]
+        with _query_lock:
+            _query_cache[cache_key] = (time.monotonic() + _QUERY_CACHE_TTL, vec)
+            _query_cache.move_to_end(cache_key)
+            while len(_query_cache) > _QUERY_CACHE_MAX:
+                _query_cache.popitem(last=False)
+        return list(vec)
 
     except httpx.TimeoutException:
         logger.warning("Embedding 超时")

@@ -28,7 +28,10 @@ class Settings(BaseSettings):
     # 提前过滤掉一大批没图的菜，导致 AI 最后可能只剩 2 道可选）。
     recipe_images_only: bool = False
     ai_response_cache_seconds: int = 300
-    ai_interactive_budget_seconds: int = 18
+    # 一次交互里允许模型工作的总时长。必须小于前端 60s 的 receiveTimeout，
+    # 但也不能太短：18s 时「语义理解 + 召回」一慢，最后的选菜就被跳过、
+    # 悄悄退回规则选前几条。45s 只作为防挂死的上限，正常请求远用不到。
+    ai_interactive_budget_seconds: int = 45
     ai_routing_timeout_seconds: float = 3
     ai_failure_cooldown_seconds: int = 30
 

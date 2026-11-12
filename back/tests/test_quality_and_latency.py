@@ -66,6 +66,24 @@ def test_preview_and_expired_budget_do_not_call_model(monkeypatch):
         assert not ai_client.complete_json([]).called
 
 
+def test_finalize_call_keeps_a_floor_when_budget_is_exhausted(monkeypatch):
+    """理解/召回再慢，最后的模型定稿也不能被挤成 0 秒。"""
+    monkeypatch.setattr(settings, 'ai_enabled', True)
+    monkeypatch.setattr(settings, 'ai_api_key', 'test-only')
+    calls = []
+    def network(messages, **kwargs):
+        calls.append(kwargs.get('timeout'))
+        return ai_client.AiResult(ok=True, data={'answer': '家常菜建议'}, model='fake')
+    monkeypatch.setattr(ai_client, '_network_complete_json', network)
+    with ai_client.request_options(budget=-1):
+        assert not ai_client.complete_json([]).called
+        result = ai_client.complete_json(
+            [{'role': 'user', 'content': 'finalize'}], min_timeout=8,
+        )
+    assert result.ok and len(calls) == 1
+    assert 0 < calls[0] <= 8
+
+
 def test_algorithm_preview_endpoint_skips_model(client, monkeypatch):
     monkeypatch.setattr(settings, 'ai_enabled', True)
     monkeypatch.setattr(settings, 'ai_api_key', 'test-only')

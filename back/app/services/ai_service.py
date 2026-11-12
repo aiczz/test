@@ -256,6 +256,8 @@ class _Route:
     veg_count: int | None = None
     require_ingredients: list[str] = field(default_factory=list)
     understanding: AiUnderstanding | None = None
+    # 理解层真实耗时，进轨迹用于定位「哪一步慢」，不影响业务判断。
+    elapsed_ms: int = 0
 
 
 _INTENT_SHORT_LABELS = {
@@ -674,6 +676,7 @@ def _route_semantic(
             understanding = chat_context.fill_pending(state, understanding)
             understanding = _validate_understanding(understanding)
         route = _route_from_understanding(session, understanding)
+        route.elapsed_ms = result.elapsed_ms or 0
     except (ValidationError, ValueError, TypeError) as exc:
         logger.info('语义理解合同校验失败：%s', exc)
         return _unavailable_route(
@@ -1487,6 +1490,7 @@ def _chat_with_context(session: Session, user_id: int | None, payload: AiChatReq
             summary=_intent_summary(route.intent, route.source, route.why)
             + ('；本轮不进入推荐链路' if route.intent == 'general' else ''),
             status='info',
+            ms=route.elapsed_ms,
         ),
         AiTraceStep(
             agent='状态归并',
@@ -1852,7 +1856,7 @@ def _chat_once(
                 ),
             },
         ]
-        result = client.complete_json(messages)
+        result = client.complete_json(messages, min_timeout=8)
         ai_ms = result.elapsed_ms
         if getattr(result, 'cached', False):
             trace.append(AiTraceStep(agent='响应缓存', summary='完全相同的模型输入命中短期缓存，未再次调用模型', ms=0))

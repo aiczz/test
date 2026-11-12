@@ -59,13 +59,23 @@ from app.services.weather_service import WeatherContext
 
 # RAG 语义精排 —— 可选，不可用时自动跳过
 try:
-    from app.services.retrieval import DishVectorIndex, embed_text, is_embedding_configured
+    from app.services.retrieval import (
+        DishVectorIndex,
+        embed_text,
+        get_vector_index,
+        is_embedding_configured,
+    )
     _RAG_AVAILABLE = True
 except Exception:  # noqa: BLE001
     _RAG_AVAILABLE = False
     DishVectorIndex = None  # type: ignore[assignment,misc]
     embed_text = None  # type: ignore[assignment,misc]
+    get_vector_index = None  # type: ignore[assignment,misc]
     is_embedding_configured = None  # type: ignore[assignment,misc]
+
+# 查询向量最多等 3 秒。正常情况 <1s；服务抖动时宁可退回关键词召回，
+# 也不能让一次「候选召回」把整个交互预算吃光。
+_QUERY_EMBED_TIMEOUT_SECONDS = 3
 
 # =====================================================================
 # 权重 —— 全部集中在这里，改权重不用翻代码
@@ -204,12 +214,12 @@ def _hard_constraint_allowed_ids(
 def warmup_catalog() -> None:
     """预热向量索引与硬约束掩码。
 
-    两者都是懒加载：不预热的话，用户发的**第一条** AI 对话要多等约 3 秒
-    （10000 道菜的配料/时长批量加载）。启动时加载好，把这段时间挪到启动阶段。
+    两者都是懒加载：不预热的话，用户发的**第一条** AI 对话要多等 7~15 秒
+    （读 npz + 10000 道菜的配料/时长批量加载）。启动时加载好，把这段时间挪到启动阶段。
     """
     try:
-        if DishVectorIndex is not None:  # type: ignore[truthy-function]
-            DishVectorIndex().available
+        if get_vector_index is not None:  # type: ignore[truthy-function]
+            get_vector_index().available  # type: ignore[operator]
     except Exception:  # noqa: BLE001
         pass
     try:
@@ -933,9 +943,13 @@ def score_dishes(
         and DishVectorIndex is not None  # type: ignore[union-attr]
     ):
         try:
-            vec_index = DishVectorIndex()  # 单例，懒加载
+            # 必须用进程级单例。每次 new 一个会重新读 40MB 的 npz，
+            # 首个请求白等好几秒，启动预热也失去意义。
+            vec_index = get_vector_index()  # type: ignore[operator]
             if vec_index.available:
-                query_vec = embed_text(rag_query_text)  # type: ignore[union-attr]
+                query_vec = embed_text(  # type: ignore[union-attr]
+                    rag_query_text, timeout=_QUERY_EMBED_TIMEOUT_SECONDS,
+                )
                 if query_vec is not None:
                     # ① 第二路召回（仅自由文本；食养诉求走原本的功效召回）
                     if has_free_text:

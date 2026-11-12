@@ -1,4 +1,4 @@
-﻿// 首页推荐流与 AI 配菜的数据模型。
+// 首页推荐流与 AI 配菜的数据模型。
 //
 // 这些结构对应后端本次新增的字段：
 //   GET  /api/home          → HomeFeed（含 weather / meta / reason / highlights）

@@ -110,13 +110,20 @@ def failure_message(result: AiResult) -> str:
     return "暂时无法连接模型服务，请稍后重试。"
 
 
-def complete_json(messages, *, max_tokens=None, temperature=None, timeout=None) -> AiResult:
+def complete_json(
+    messages, *, max_tokens=None, temperature=None, timeout=None, min_timeout=None,
+) -> AiResult:
     if not is_configured():
         return AiResult.skipped('模型未配置或本次请求使用算法预览')
     deadline = _request.get()[1]
     remaining = deadline - time.monotonic() if deadline is not None else None
-    if remaining is not None and remaining <= 0:
-        return AiResult.skipped('交互时间预算已用完')
+    if remaining is not None:
+        # 最后一次「在候选内定稿」不能被前面的召回/理解挤成 0 秒：
+        # 宁可多等这几秒，也不要因为预算见底就悄悄退回规则选前几条。
+        if min_timeout is not None:
+            remaining = max(remaining, min_timeout)
+        if remaining <= 0:
+            return AiResult.skipped('交互时间预算已用完')
     payload = build_payload(messages, max_tokens=max_tokens, temperature=temperature)
     key = hashlib.sha256(json.dumps([
         settings.ai_base_url, settings.ai_api_key, payload,
