@@ -27,7 +27,6 @@ from app.data.dish_tags import (
     canonical_dish_tags,
     canonical_tag,
 )
-from app.data.food_images import has_image as food_has_image
 from app.data.food_tags import derive_food_tags
 
 
@@ -189,23 +188,6 @@ def _food(row: Mapping[str, Any]) -> FoodRecord:
     )
 
 
-# 清洗库里有数百条「不是食材的名字」：OCR 碎片（`/一勺鸡精/鸡汁`）、
-# 单位词（`克`、`勺`）、目录分隔符等。它们的 is_edible 也是 1，
-# 直接放进食材库只会让用户看到一堆乱码，所以在展示层挡掉。
-# 注意：这里只挡「明显不是名字」的，不做质量判断 —— 扩展食材照常展示。
-_FOOD_NAME_PREFIXES = ("/", ".", "_", "¼", "½", "⅓", "(", "（", "、")
-_NON_FOOD_NAMES = frozenset({"克", "勺", "主料", "辅料", "配料"})
-
-
-def _displayable_food_name(name: str) -> bool:
-    text = name.strip()
-    if not text or text in _NON_FOOD_NAMES:
-        return False
-    if text.startswith(_FOOD_NAME_PREFIXES):
-        return False
-    return "/" not in text and "\\" not in text
-
-
 def list_foods(
     session: Session,
     *,
@@ -214,11 +196,13 @@ def list_foods(
     offset: int,
     limit: int,
 ) -> tuple[list[FoodRecord], int]:
-    # 全部可食用食材都进食材库（不再只限 is_core_raw = 1），
-    # 但「有实拍图」的排在前面：图库只逐张核对过一部分名字，
-    # 没图的不是不展示，只是排在后面，避免前几屏全是通用占位图。
-    clauses = ["is_edible = 1"]
-    params: dict[str, Any] = {}
+    # 展示层只暴露核心原生食材（is_core_raw = 1）：
+    # 这些食材有完整的营养/功效/时令数据，能作为独立实体展示。
+    # 另外 7000+ 条「扩展食材」只是菜谱里出现过的原料名称（很多是 OCR 碎片），
+    # 没有营养数值、没有功效标签、没有时令，不适合作为食材库条目，
+    # 只在菜谱详情的配料里引用。完整目录仍保留给菜谱配料关联和检索。
+    clauses = ["is_edible = 1", "is_core_raw = 1"]
+    params: dict[str, Any] = {"offset": offset, "limit": limit}
     if keyword:
         clauses.append("name LIKE :keyword")
         params["keyword"] = f"%{keyword}%"
@@ -241,46 +225,24 @@ def list_foods(
         else:
             clauses.append("1 = 0")
     where = " AND ".join(clauses)
-    candidates = [
-        (int(row["id"]), str(row["name"]))
-        for row in session.execute(
-            text(f"SELECT id, name FROM ingredients WHERE {where}"), params
-        ).mappings()
-        if _displayable_food_name(str(row["name"]))
-    ]
-    candidates.sort(key=lambda item: (0 if food_has_image(item[1]) else 1, item[0]))
-    total = len(candidates)
-    page = candidates[offset : offset + limit] if limit > 0 else []
-    if not page:
-        return [], total
-
-    ids = [item[0] for item in page]
-    order = {value: index for index, value in enumerate(ids)}
-    records: list[FoodRecord] = []
-    # SQLite 的变量数有上限（老版本只有 999），「一次拉全 8000 个食材」
-    # 不能拼成一条巨大的 IN —— 按 900 一批查。
-    for start in range(0, len(ids), 900):
-        chunk = ids[start : start + 900]
-        params = {f"id_{index}": value for index, value in enumerate(chunk)}
-        placeholders = ", ".join(f":{key}" for key in params)
-        rows = session.execute(
-            text(
-                f"SELECT {_food_select(session)} FROM ingredients "
-                f"WHERE id IN ({placeholders})"
-            ),
-            params,
-        ).mappings()
-        records.extend(_food(row) for row in rows)
-    records.sort(key=lambda item: order[item.id])
-    return records, total
+    total = session.execute(
+        text(f"SELECT COUNT(*) FROM ingredients WHERE {where}"), params
+    ).scalar_one()
+    rows = session.execute(
+        text(
+            f"SELECT {_food_select(session)} FROM ingredients "
+            f"WHERE {where} ORDER BY id LIMIT :limit OFFSET :offset"
+        ),
+        params,
+    ).mappings()
+    return [_food(row) for row in rows], int(total)
 
 
 def get_food(session: Session, food_id: int) -> FoodRecord | None:
-    # 食材详情对整库开放 —— 列表里能点进来的，详情必须也能打开。
     row = session.execute(
         text(
             f"SELECT {_food_select(session)} FROM ingredients "
-            "WHERE id = :id AND is_edible = 1"
+            "WHERE id = :id AND is_core_raw = 1"
         ),
         {"id": food_id},
     ).mappings().first()

@@ -53,11 +53,7 @@ def _compact_engine():
                 "(1, '鸡肉', 'core', NULL, '禽肉', '禽肉', 1, 1, 'approved', 20, "
                 "'优质蛋白', 167, 19.3, 9.4, 1.3, '[\"补充蛋白质\"]'), "
                 "(2, '鸡胸肉', 'variant', 1, '禽肉', '禽肉', 0, 1, 'approved', 10, "
-                "'低脂', 133, 19.4, 5, 2.5, '[\"低脂\"]'), "
-                "(3, '秘制调味料', 'variant', NULL, '调味料', '调味料', 0, 1, "
-                "'review', 1, NULL, NULL, NULL, NULL, NULL, NULL), "
-                "(4, '/盐', 'variant', NULL, '调味料', '调味料', 0, 1, "
-                "'review', 1, NULL, NULL, NULL, NULL, NULL, NULL)"
+                "'低脂', 133, 19.4, 5, 2.5, '[\"低脂\"]')"
             )
         )
         connection.execute(
@@ -89,16 +85,12 @@ def _compact_engine():
 
 def test_compact_catalog_food_recipe_and_parent_inference():
     with Session(_compact_engine()) as session:
-        # 食材库现在放全部可食用食材（不再只限 is_core_raw = 1），
-        # 但排序是「有实拍图优先」：
-        #   · 鸡肉、鸡胸肉在图库里 → 排前面（同组按 id）
-        #   · 秘制调味料没有图 → 排最后
-        #   · '/盐' 是 OCR 碎片，展示层直接挡掉，计入 total
+        # 食材库只展示核心原生食材（is_core_raw = 1），
+        # 鸡胸肉是 variant 所以不出现在列表里，但仍参与菜谱配料推断。
         foods, total = food_repository.list_foods(session, offset=0, limit=20)
-        assert total == 3
-        assert [food.name for food in foods] == ["鸡肉", "鸡胸肉", "秘制调味料"]
+        assert total == 1
+        assert foods[0].name == "鸡肉"
         assert foods[0].category == "meat_egg"
-        assert foods[-1].category == "seasoning"
 
         # 核心食材“鸡肉”能推出使用子类“鸡胸肉”的菜谱。
         inferred = recipe_repository.list_by_food(session, 1)
@@ -116,11 +108,6 @@ def test_compact_catalog_food_recipe_and_parent_inference():
         assert food_detail is not None
         assert food_detail.recommended_recipes[0].id == 10
 
-        # 列表里能点进来的扩展食材（非核心），详情也必须打得开。
-        variant_detail = food_service.get_detail(session, 2)
-        assert variant_detail is not None
-        assert variant_detail.name == "鸡胸肉"
-
 
 def test_compact_catalog_search_and_season():
     with Session(_compact_engine()) as session:
@@ -135,7 +122,7 @@ def test_compact_catalog_search_and_season():
 
         # 批量取时令的口径必须和单条一致，否则整库列表和详情页的
         # 「当季」标记会互相打架。
-        batch = food_repository.get_seasons(session, [1, 2, 3])
+        batch = food_repository.get_seasons(session, [1, 2])
         assert set(batch) == {1}
         single = food_repository.get_season(session, 1)
         assert batch[1].season_score == single.season_score

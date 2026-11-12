@@ -104,8 +104,7 @@ class BackendApi {
 
   /// GET /api/foods/seasonal（说明书 §10.2）
   ///
-  /// 全部食材（核心 + 扩展，约 8000 条）一次拿全（一个请求）。
-  /// 后端已按「有实拍图优先」排好序，这里保持返回顺序即可。
+  /// 590 个核心食材，后端 page_size 上限放宽后一次就能拿全（一个请求）。
   /// 万一对面的后端还是老版本（上限 100，传大会 422），退回按页拉。
   Future<List<Food>> fetchAllFoods() async {
     try {
@@ -948,8 +947,7 @@ class BackendApi {
     Object? serverImage,
     String? category,
   ) {
-    // 1) 图库逐张核对过的食材名（1112 个）按中文名精确命中，
-    //    590 个核心食材全都在其中。
+    // 1) 590 个核心食材都有自己的实拍配图，按中文名精确命中。
     //    这张表是图库逐张核对后生成的，见 lib/data/ingredient_images.dart。
     final exact = kIngredientImageByName[name];
     if (exact != null) return exact;
