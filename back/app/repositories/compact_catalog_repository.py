@@ -27,6 +27,7 @@ from app.data.dish_tags import (
     canonical_dish_tags,
     canonical_tag,
 )
+from app.data.food_images import has_image as food_has_image
 from app.data.food_tags import derive_food_tags
 
 
@@ -188,6 +189,23 @@ def _food(row: Mapping[str, Any]) -> FoodRecord:
     )
 
 
+# 清洗库里有数百条「不是食材的名字」：OCR 碎片（`/一勺鸡精/鸡汁`）、
+# 单位词（`克`、`勺`）、目录分隔符等。它们的 is_edible 也是 1，
+# 直接放进食材库只会让用户看到一堆乱码，所以在展示层挡掉。
+# 注意：这里只挡「明显不是名字」的，不做质量判断 —— 扩展食材照常展示。
+_FOOD_NAME_PREFIXES = ("/", ".", "_", "¼", "½", "⅓", "(", "（", "、")
+_NON_FOOD_NAMES = frozenset({"克", "勺", "主料", "辅料", "配料"})
+
+
+def _displayable_food_name(name: str) -> bool:
+    text = name.strip()
+    if not text or text in _NON_FOOD_NAMES:
+        return False
+    if text.startswith(_FOOD_NAME_PREFIXES):
+        return False
+    return "/" not in text and "\\" not in text
+
+
 def list_foods(
     session: Session,
     *,
@@ -196,10 +214,11 @@ def list_foods(
     offset: int,
     limit: int,
 ) -> tuple[list[FoodRecord], int]:
-    # 展示层只暴露清洗后的核心原生食材；完整目录仍保留给菜谱配料关联和检索。
-    # 这样既避免把 6000+ 条目录当成用户食材，也不破坏 dish_ingredients 的逻辑链。
-    clauses = ["is_edible = 1", "is_core_raw = 1"]
-    params: dict[str, Any] = {"offset": offset, "limit": limit}
+    # 全部可食用食材都进食材库（不再只限 is_core_raw = 1），
+    # 但「有实拍图」的排在前面：图库只逐张核对过一部分名字，
+    # 没图的不是不展示，只是排在后面，避免前几屏全是通用占位图。
+    clauses = ["is_edible = 1"]
+    params: dict[str, Any] = {}
     if keyword:
         clauses.append("name LIKE :keyword")
         params["keyword"] = f"%{keyword}%"
@@ -222,24 +241,46 @@ def list_foods(
         else:
             clauses.append("1 = 0")
     where = " AND ".join(clauses)
-    total = session.execute(
-        text(f"SELECT COUNT(*) FROM ingredients WHERE {where}"), params
-    ).scalar_one()
-    rows = session.execute(
-        text(
-            f"SELECT {_food_select(session)} FROM ingredients "
-            f"WHERE {where} ORDER BY id LIMIT :limit OFFSET :offset"
-        ),
-        params,
-    ).mappings()
-    return [_food(row) for row in rows], int(total)
+    candidates = [
+        (int(row["id"]), str(row["name"]))
+        for row in session.execute(
+            text(f"SELECT id, name FROM ingredients WHERE {where}"), params
+        ).mappings()
+        if _displayable_food_name(str(row["name"]))
+    ]
+    candidates.sort(key=lambda item: (0 if food_has_image(item[1]) else 1, item[0]))
+    total = len(candidates)
+    page = candidates[offset : offset + limit] if limit > 0 else []
+    if not page:
+        return [], total
+
+    ids = [item[0] for item in page]
+    order = {value: index for index, value in enumerate(ids)}
+    records: list[FoodRecord] = []
+    # SQLite 的变量数有上限（老版本只有 999），「一次拉全 8000 个食材」
+    # 不能拼成一条巨大的 IN —— 按 900 一批查。
+    for start in range(0, len(ids), 900):
+        chunk = ids[start : start + 900]
+        params = {f"id_{index}": value for index, value in enumerate(chunk)}
+        placeholders = ", ".join(f":{key}" for key in params)
+        rows = session.execute(
+            text(
+                f"SELECT {_food_select(session)} FROM ingredients "
+                f"WHERE id IN ({placeholders})"
+            ),
+            params,
+        ).mappings()
+        records.extend(_food(row) for row in rows)
+    records.sort(key=lambda item: order[item.id])
+    return records, total
 
 
 def get_food(session: Session, food_id: int) -> FoodRecord | None:
+    # 食材详情对整库开放 —— 列表里能点进来的，详情必须也能打开。
     row = session.execute(
         text(
             f"SELECT {_food_select(session)} FROM ingredients "
-            "WHERE id = :id AND is_core_raw = 1"
+            "WHERE id = :id AND is_edible = 1"
         ),
         {"id": food_id},
     ).mappings().first()
@@ -282,6 +323,36 @@ def get_food_season(session: Session, food_id: int) -> FoodSeasonRecord | None:
         {"id": food_id},
     ).mappings().first()
     return _season(row) if row else None
+
+
+def get_food_seasons(
+    session: Session, food_ids: list[int]
+) -> dict[int, FoodSeasonRecord]:
+    """一次取回一批食材的时令信息。
+
+    食材库现在是整库（约 8000 条），前端一次全拿。如果每道食材都单独
+    `get_food_season`，就是 8000 次 SQL —— 实测 23 秒，整页打不开。
+    排序口径与单条版本一致：月份记录优先，其次按 id 取第一条。
+    """
+    if not food_ids:
+        return {}
+    result: dict[int, FoodSeasonRecord] = {}
+    for start in range(0, len(food_ids), 900):
+        chunk = food_ids[start : start + 900]
+        params = {f"id_{index}": value for index, value in enumerate(chunk)}
+        placeholders = ", ".join(f":{key}" for key in params)
+        rows = session.execute(
+            text(
+                "SELECT sf.ingredient_id, sf.level, sf.time_name, sf.season, "
+                "sf.note, sf.recommendation_reason "
+                f"FROM seasonal_food sf WHERE sf.ingredient_id IN ({placeholders}) "
+                "ORDER BY CASE WHEN sf.level = '月份' THEN 0 ELSE 1 END, sf.id"
+            ),
+            params,
+        ).mappings()
+        for row in rows:
+            result.setdefault(int(row["ingredient_id"]), _season(row))
+    return result
 
 
 def list_seasonal(

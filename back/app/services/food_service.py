@@ -35,7 +35,9 @@ def list_foods(
         offset=offset,
         limit=page_size,
     )
-    items = [to_brief(f, food_repository.get_season(session, f.id)) for f in rows]
+    # 整库一次全拿时 rows 有七八千条，时令必须批量查 —— 逐条查要 20 多秒。
+    seasons = food_repository.get_seasons(session, [food.id for food in rows])
+    items = [to_brief(food, seasons.get(food.id)) for food in rows]
     return items, total
 
 

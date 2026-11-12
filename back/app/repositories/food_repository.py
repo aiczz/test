@@ -58,6 +58,23 @@ def get_season(session: Session, food_id: int) -> FoodSeason | None:
     ).first()
 
 
+def get_seasons(
+    session: Session, food_ids: list[int]
+) -> dict[int, FoodSeason]:
+    """批量取时令 —— 食材库整库展示时不能一条一条查。"""
+    if not food_ids:
+        return {}
+    if uses_compact_catalog(session.get_bind()):
+        return compact.get_food_seasons(session, food_ids)
+    rows = session.exec(
+        select(FoodSeason).where(col(FoodSeason.food_id).in_(food_ids))
+    ).all()
+    result: dict[int, FoodSeason] = {}
+    for row in rows:
+        result.setdefault(row.food_id, row)
+    return result
+
+
 def list_seasonal(
     session: Session,
     *,
