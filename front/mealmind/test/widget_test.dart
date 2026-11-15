@@ -28,16 +28,13 @@ void main() {
     expect(find.text('AI'), findsOneWidget);
     expect(find.text('我的'), findsOneWidget);
 
-    final homeCarousel = find.byType(PageView).first;
-    await tester.drag(homeCarousel, const Offset(-360, 0));
-    await tester.pumpAndSettle();
-    expect(find.text('看看家里\n有什么'), findsOneWidget);
-    expect(find.text('管理我的食材'), findsOneWidget);
-
-    await tester.drag(homeCarousel, const Offset(-360, 0));
-    await tester.pumpAndSettle();
-    expect(find.text('不知道吃什么？\n问问 AI'), findsOneWidget);
-    expect(find.text('打开 AI 助手'), findsOneWidget);
+    // 新版首页是一整页：眉标 + 节气大字 + 今日宜三行 + 家庭约束条 + 两个入口。
+    // 旧首页那三屏 Hero 轮播（「看看家里有什么」「不知道吃什么？问问 AI」）
+    // 是 PageView 结构，改版后已经不存在了。
+    expect(find.text('今日宜'), findsOneWidget);
+    expect(find.text('看全部菜谱'), findsOneWidget);
+    expect(find.text('问 AI 怎么搭配'), findsOneWidget);
+    expect(find.text('少盐'), findsWidgets);
 
     await tester.tap(find.text('食材'));
     await tester.pumpAndSettle();
@@ -116,23 +113,37 @@ void main() {
     expect(find.text('我家的食材'), findsWidgets);
   });
 
-  testWidgets('首页快速选一餐打开轻量推荐面板', (tester) async {
+  testWidgets('首页两个入口能真的把人带到菜谱页和 AI 页', (tester) async {
     await tester.pumpWidget(ShishiApp(key: UniqueKey()));
 
-    final quickMeal = find.text('快速选一餐');
+    // 旧首页的「快速选一餐」面板是队友主动删掉的（home.dart 里留了注释：
+    // 「和 Hero 轮播里的 AI 助手功能冲突」），所以这条用例改成守现在的两个入口。
+    final toRecipes = find.text('看全部菜谱');
     await tester.scrollUntilVisible(
-      quickMeal,
+      toRecipes,
       260,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    await tester.tap(quickMeal);
+    await tester.tap(toRecipes);
     await tester.pumpAndSettle();
+    // IndexedStack 会把没选中的页停在 offstage，所以首页内容应该查不到了。
+    expect(find.text('今日宜'), findsNothing);
 
-    expect(find.text('今日一餐灵感'), findsOneWidget);
-    expect(find.text('换一个'), findsOneWidget);
-    expect(find.text('查看做法'), findsOneWidget);
-    expect(find.text('让 AI 帮我搭配'), findsOneWidget);
+    await tester.tap(find.text('首页'));
+    await tester.pumpAndSettle();
+    expect(find.text('今日宜'), findsOneWidget);
+
+    final toAi = find.text('问 AI 怎么搭配');
+    await tester.scrollUntilVisible(
+      toAi,
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(toAi);
+    await tester.pumpAndSettle();
+    expect(find.text('今日宜'), findsNothing);
   });
 
   testWidgets('注册页用邮箱验证码，离线时明确拒绝而不是假装通过', (tester) async {
