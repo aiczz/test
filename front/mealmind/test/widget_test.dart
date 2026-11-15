@@ -6,7 +6,7 @@ import 'package:mealmind/main.dart';
 import 'package:mealmind/models/content.dart';
 import 'package:mealmind/pages/admin.dart';
 import 'package:mealmind/pages/foods.dart';
-import 'package:mealmind/pages/home.dart';
+import 'package:mealmind/pages/home_editorial.dart';
 import 'package:mealmind/pages/login.dart';
 import 'package:mealmind/pages/profile.dart';
 import 'package:mealmind/services/api_config.dart';
@@ -497,7 +497,7 @@ void main() {
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();
     expect(
-      find.descendant(of: find.byType(HomePage), matching: find.text('5 人')),
+      find.descendant(of: find.byType(HomeEditorial), matching: find.text('5 人')),
       findsWidgets,
       reason: '首页的家庭约束条没跟着档案更新',
     );

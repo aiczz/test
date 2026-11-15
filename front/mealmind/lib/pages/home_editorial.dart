@@ -22,6 +22,7 @@ import '../services/recommender.dart';
 import '../state/app_state.dart';
 import '../state/home_feed.dart';
 import '../widgets/dish_photo.dart';
+import '../widgets/lazy_photo.dart';
 
 // ---------- 色板 ----------
 
@@ -203,9 +204,9 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hero = picks.recipes.isNotEmpty ? picks.recipes.first : null;
-    final asset = (hero == null || hero.image.isEmpty)
-        ? 'assets/images/splash.png'
-        : hero.image;
+    final heroName = hero?.name ?? '';
+    final heroImage = (hero == null || hero.image.isEmpty) ? null : hero.image;
+    final heroFallback = heroImage ?? 'assets/images/splash.png';
 
     return ClipRect(
       child: Stack(
@@ -217,7 +218,12 @@ class _Hero extends StatelessWidget {
           RepaintBoundary(
             child: ImageFiltered(
               imageFilter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: DishPhoto(asset: asset, fit: BoxFit.cover),
+              child: LazyPhoto(
+                kind: 'recipe',
+                name: heroName,
+                fallback: heroFallback,
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           DecoratedBox(
@@ -241,12 +247,29 @@ class _Hero extends StatelessWidget {
               children: <Widget>[
                 _TopBar(picks: picks, t: t),
                 const Spacer(),
+                Opacity(
+                  opacity: 0.62 + 0.38 * _easeOut(_Span(0.08, 0.34).at(t)),
+                  child: const Text(
+                    '今天吃什么',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      letterSpacing: 3.4,
+                      color: Color(0xCCF7F3EA),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: <Widget>[
                     Expanded(child: _SeasonTitle(picks: picks, t: t)),
                     const SizedBox(width: 12),
-                    if (hero != null) _InsetPhoto(asset: asset, t: t),
+                    if (hero != null)
+                      _InsetPhoto(
+                        name: heroName,
+                        fallback: heroFallback,
+                        t: t,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -306,21 +329,25 @@ class _TopBar extends StatelessWidget {
           ),
           const Spacer(),
           if (picks.sourceLabel != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: _paper.withValues(alpha: 0.45),
-                  width: 0.8,
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _paper.withValues(alpha: 0.45),
+                    width: 0.8,
+                  ),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                borderRadius: BorderRadius.circular(2),
-              ),
-              child: Text(
-                picks.sourceLabel!,
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  color: _paper,
-                  letterSpacing: 0.4,
+                child: Text(
+                  picks.sourceLabel!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 9.5,
+                    color: _paper,
+                    letterSpacing: 0.4,
+                  ),
                 ),
               ),
             ),
@@ -340,15 +367,21 @@ class _SeasonTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = _seasonLabel(picks);
     final chars = name.split('');
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: <Widget>[
-        for (var i = 0; i < chars.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: _brushChar(chars[i], i),
-          ),
-      ],
+    // 96sp 的展示字不该跟着系统字号放大（1.5 倍时会直接把一行撑爆），
+    // 但也不能截断——所以整体等比缩到可用宽度以内。
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          for (var i = 0; i < chars.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: _brushChar(chars[i], i),
+            ),
+        ],
+      ),
     );
   }
 
@@ -410,9 +443,14 @@ class _Caption extends StatelessWidget {
 }
 
 class _InsetPhoto extends StatelessWidget {
-  const _InsetPhoto({required this.asset, required this.t});
+  const _InsetPhoto({
+    required this.name,
+    required this.fallback,
+    required this.t,
+  });
 
-  final String asset;
+  final String name;
+  final String fallback;
   final double t;
 
   @override
@@ -440,7 +478,12 @@ class _InsetPhoto extends StatelessWidget {
             child: SizedBox(
               width: 104,
               height: 78,
-              child: DishPhoto(asset: asset, fit: BoxFit.cover),
+              child: LazyPhoto(
+                kind: 'recipe',
+                name: name,
+                fallback: fallback,
+                fit: BoxFit.cover,
+              ),
             ),
           ),
         ),
@@ -581,22 +624,27 @@ class _SheetHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: _paperDim),
-                child: Text(
-                  tag,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: _inkSoft,
-                    letterSpacing: 0.6,
+              Flexible(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: _paperDim),
+                  child: Text(
+                    tag,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: _inkSoft,
+                      letterSpacing: 0.6,
+                    ),
                   ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text(
                 '${count.toString().padLeft(2, '0')} 道',
+                maxLines: 1,
                 style: const TextStyle(
                   fontSize: 10.5,
                   color: _inkSoft,
@@ -646,7 +694,11 @@ class _DishRow extends StatelessWidget {
                   child: SizedBox(
                     width: 78,
                     height: 78,
-                    child: DishPhoto(asset: recipe.image, fit: BoxFit.cover),
+                    child: DishPhoto(
+                      name: recipe.name,
+                      imageUrl: recipe.image.isEmpty ? null : recipe.image,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -760,13 +812,28 @@ class _SheetFooter extends StatelessWidget {
     final note = picks.notes.isNotEmpty
         ? picks.notes.first
         : '按当季食材与家庭条件筛出，做法见菜谱详情';
+    // 家庭约束得在首页露出来 —— 否则「改了人数，推荐跟着变」这件事
+    // 只能靠对比前后截图才看得出来。
+    final profile = AppState.instance.profile;
+    final minutes = profile.cookMinutes.round();
     return Opacity(
       opacity: 0.62 + 0.38 * v,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Container(height: 0.8, color: _ink.withValues(alpha: 0.18)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: <Widget>[
+              _Tag(text: '${profile.people} 人'),
+              _Tag(text: '$minutes 分钟内'),
+              if (profile.lowSodium) const _Tag(text: '少盐'),
+              for (final p in profile.preferences.take(2)) _Tag(text: p),
+            ],
+          ),
+          const SizedBox(height: 12),
           Text(
             note,
             style: const TextStyle(fontSize: 12, height: 1.7, color: _inkSoft),
@@ -822,12 +889,16 @@ class _SheetButton extends StatelessWidget {
               : Border.all(color: _inkSoft.withValues(alpha: 0.45), width: 0.9),
           borderRadius: BorderRadius.circular(2),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.5,
-            letterSpacing: 0.5,
-            color: filled ? _paper : _inkSoft,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 12.5,
+              letterSpacing: 0.5,
+              color: filled ? _paper : _inkSoft,
+            ),
           ),
         ),
       ),
