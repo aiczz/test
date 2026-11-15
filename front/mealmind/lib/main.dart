@@ -6,7 +6,11 @@ import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'models/content.dart';
 import 'pages/ai.dart';
 import 'pages/foods.dart';
-import 'pages/home_editorial.dart';
+// 首页用「经典版」（队友维护的多页轮播版）。
+// 节令历书版仍在 lib/pages/home_editorial.dart，要切回去只改下面两行：
+//   import 'pages/home_editorial.dart';
+//   HomeEditorial(...)
+import 'pages/home.dart';
 import 'pages/login.dart';
 import 'pages/profile.dart';
 import 'pages/recipes.dart';
@@ -312,7 +316,7 @@ class _RootShellState extends State<RootShell> {
       body: IndexedStack(
         index: _index,
         children: [
-          HomeEditorial(
+          HomePage(
             onOpenFoods: () => _selectTab(1),
             onOpenRecipes: () => _selectTab(2),
             onOpenAi: () => _selectTab(3),
