@@ -34,6 +34,8 @@ COMPACT_CATALOG_TABLES = {
 }
 
 STATE_TABLES = {
+    "image_cache",
+    "image_generation_budget",
     "users",
     "user_preferences",
     "login_logs",

@@ -15,6 +15,7 @@ from app.api.routes import (
     favorites,
     foods,
     home,
+    images,
     menus,
     my_foods,
     profile,
@@ -23,6 +24,7 @@ from app.api.routes import (
 )
 
 api_router = APIRouter()
+api_router.include_router(images.router)
 
 api_router.include_router(home.router)
 api_router.include_router(foods.router)

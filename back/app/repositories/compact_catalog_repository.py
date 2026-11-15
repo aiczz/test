@@ -324,6 +324,22 @@ def list_all_foods(session: Session) -> list[FoodRecord]:
     return rows
 
 
+_recipe_image_cache: WeakKeyDictionary = WeakKeyDictionary()
+
+
+def _recipe_image_select(session: Session) -> str:
+    """Older compact catalogs have no optional image column; keep them readable."""
+    bind = session.get_bind()
+    available = _recipe_image_cache.get(bind)
+    if available is None:
+        available = any(
+            column["name"] == "image_url"
+            for column in inspect(bind).get_columns("dishes")
+        )
+        _recipe_image_cache[bind] = available
+    return "d.image_url" if available else "NULL AS image_url"
+
+
 def _recipe(row: Mapping[str, Any]) -> RecipeRecord:
     name = str(row["dish_name"])
     # ★ image_url 只从数据库列读，由离线 backfill 脚本统一填充。
@@ -572,7 +588,7 @@ def list_recipes(
     params.update({"offset": offset, "limit": limit})
     rows = session.execute(
         text(
-            "SELECT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, d.image_url, "
+            f"SELECT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, {_recipe_image_select(session)}, "
             "d.instruction_text, NULL AS season_recommendation "
             f"FROM dishes d WHERE {where} ORDER BY d.id LIMIT :limit OFFSET :offset"
         ),
@@ -596,7 +612,7 @@ def search_recipes(
     params.update({"offset": offset, "limit": limit})
     rows = session.execute(
         text(
-            "SELECT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, d.image_url, "
+            f"SELECT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, {_recipe_image_select(session)}, "
             "d.instruction_text, NULL AS season_recommendation "
             f"FROM dishes d WHERE {where} ORDER BY d.id LIMIT :limit OFFSET :offset"
         ),
@@ -608,7 +624,7 @@ def search_recipes(
 def get_recipe(session: Session, recipe_id: int) -> RecipeRecord | None:
     row = session.execute(
         text(
-            "SELECT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, d.image_url, "
+            f"SELECT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, {_recipe_image_select(session)}, "
             "d.instruction_text, NULL AS season_recommendation "
             "FROM dishes d WHERE d.id = :id"
         ),
@@ -671,7 +687,7 @@ def list_recipes_by_food(
     # 除精确食材外，同时匹配其核心食材和直接子类，例如“鸡肉”可推出鸡胸/鸡腿菜谱。
     rows = session.execute(
         text(
-            "SELECT DISTINCT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, d.image_url, "
+            f"SELECT DISTINCT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, {_recipe_image_select(session)}, "
             "d.instruction_text, NULL AS season_recommendation "
             "FROM dishes d JOIN dish_ingredients di ON di.dish_id = d.id "
             "LEFT JOIN ingredients child ON child.id = di.ingredient_id "
@@ -695,7 +711,7 @@ def list_recipes_by_ids(session: Session, recipe_ids: list[int]) -> list[RecipeR
         params[key] = recipe_id
     rows = session.execute(
         text(
-            "SELECT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, d.image_url, "
+            f"SELECT d.id, d.dish_name, d.description, d.cuisine, d.tags_json, {_recipe_image_select(session)}, "
             "d.instruction_text, NULL AS season_recommendation FROM dishes d "
             f"WHERE d.id IN ({', '.join(placeholders)})"
         ),

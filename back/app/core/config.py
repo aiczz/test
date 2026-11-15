@@ -23,6 +23,20 @@ class Settings(BaseSettings):
     app_name: str = "食时 API"
     api_prefix: str = "/api"
     debug: bool = True
+    # 图片按需生成使用独立服务和密钥；不会复用对话模型密钥。
+    image_generation_enabled: bool = False
+    image_generation_url: str = ""
+    image_api_key: str = ""
+    image_model: str = ""
+    image_size: str = "1024x1024"
+    image_timeout_seconds: int = 150
+    image_retry_seconds: int = 300
+    image_max_attempts: int = 3
+    image_daily_limit: int = 40
+    image_storage_dir: str = "data/generated_images"
+    image_asset_dir: str = "../front/mealmind/assets/images"
+    # URL 响应的下载域名白名单；留空时只接受 b64_json 响应。
+    image_download_hosts: list[str] = []
     # 推荐候选里要不要排除没有图片的菜。
     # 改成 False 才能让 10000 道菜都能进推荐（之前设 True 时，推荐池会被
     # 提前过滤掉一大批没图的菜，导致 AI 最后可能只剩 2 道可选）。

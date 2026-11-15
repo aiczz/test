@@ -46,7 +46,7 @@ void showFoodDetail(BuildContext context, Food food) {
               borderRadius: BorderRadius.circular(rCard),
               child: AspectRatio(
                 aspectRatio: 1.8,
-                child: FoodPhoto(asset: food.image),
+                child: FoodPhoto(asset: food.image, name: food.name),
               ),
             ),
             const SizedBox(height: 18),
@@ -1048,7 +1048,7 @@ class _FoodInventoryCard extends StatelessWidget {
             children: [
               AspectRatio(
                 aspectRatio: 1.8,
-                child: FoodPhoto(asset: food.image),
+                child: FoodPhoto(asset: food.image, name: food.name),
               ),
               Expanded(
                 child: Padding(

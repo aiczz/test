@@ -1,5 +1,7 @@
 """清洗后六表内容库的兼容性测试。"""
 
+import pytest
+
 from sqlalchemy import text
 from sqlmodel import Session, create_engine
 from sqlmodel.pool import StaticPool
@@ -8,7 +10,7 @@ from app.repositories import food_repository, recipe_repository
 from app.services import food_service, recipe_service
 
 
-def _compact_engine():
+def _compact_engine(with_images=False):
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -79,6 +81,10 @@ def _compact_engine():
             )
         )
         connection.execute(text("INSERT INTO seasonal_dish_links VALUES ('sf1', 10, 'ingredient')"))
+    if with_images:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE dishes ADD COLUMN image_url TEXT"))
+            connection.execute(text("UPDATE dishes SET image_url = 'https://example.com/dish.jpg'"))
     return engine
 
 
@@ -110,11 +116,13 @@ def test_compact_catalog_food_recipe_and_parent_inference():
         assert food_detail.recommended_recipes[0].id == 10
 
 
-def test_compact_catalog_search_and_season():
-    with Session(_compact_engine()) as session:
+@pytest.mark.parametrize("with_images", [False, True])
+def test_compact_catalog_search_and_season(with_images):
+    with Session(_compact_engine(with_images)) as session:
         rows, total = recipe_repository.search(session, "鸡胸", offset=0, limit=10)
         assert total == 1
         assert rows[0].id == 10
+        assert rows[0].image_url == ("https://example.com/dish.jpg" if with_images else None)
 
         seasonal = food_repository.list_seasonal(session, month=9, limit=10)
         assert len(seasonal) == 1

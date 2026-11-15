@@ -1254,7 +1254,7 @@ class _FoodCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AspectRatio(aspectRatio: 1.8, child: FoodPhoto(asset: food.image)),
+                AspectRatio(aspectRatio: 1.8, child: FoodPhoto(asset: food.image, name: food.name)),
                 Padding(
                   padding: const EdgeInsets.all(10),
                   child: Column(

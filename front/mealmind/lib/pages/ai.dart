@@ -1097,7 +1097,7 @@ class _MiniFoodCard extends StatelessWidget {
               SizedBox(
                 width: 92,
                 height: 92,
-                child: FoodPhoto(asset: food.image),
+                child: FoodPhoto(asset: food.image, name: food.name),
               ),
               Expanded(
                 child: Padding(
