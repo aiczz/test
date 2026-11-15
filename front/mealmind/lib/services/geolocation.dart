@@ -1,4 +1,4 @@
-// 定位入口。
+﻿// 定位入口。
 //
 // 真正的实现在 geolocation_web.dart（Web）或 geolocation_stub.dart（其他平台）。
 //

@@ -108,3 +108,9 @@ class HomeResponse(BaseModel):
     recommended_recipes: list[HomeRecipeItem] = []
     weather: HomeWeather | None = None
     meta: HomeMeta | None = None
+
+    # ★ 今日推荐候选池前 20 道（和首页推荐来自同一个算法）
+    # 前端菜谱页的「今日推荐」分类直接用这个，避免再跑一遍 score_dishes。
+    today_recipe_pool: list[RecipeBrief] = []
+    # ★ 同理：今日推荐食材候选池前 12 个
+    today_food_pool: list[FoodBrief] = []

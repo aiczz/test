@@ -1,4 +1,4 @@
-// 真后端的业务接口。
+﻿// 真后端的业务接口。
 //
 // 只有在 `BackendStatus.online` 为 true 时才会被调用；任何失败都向上抛，
 // 由 ContentStore 统一降级到本地假数据 —— 所以线上 PWA（没有后端）
@@ -527,10 +527,34 @@ class BackendApi {
       toolsUsed: ((data['tools_used'] as List?) ?? const <dynamic>[])
           .map((e) => e.toString())
           .toList(),
+      // ★ 不再按 image 过滤！后端 clean catalog 的 dishes 表**没有图片列**，
+      // 所以 RecipeBrief.image 全部是 null（前端 parse 后是空串）。
+      // 以前这里又砍了一次——后端返回 3 道，前端全过滤 → 界面上一张卡片都没有。
+      // 空图让 _MiniRecipeCard / DishPhoto 的占位图组件去处理（显示「暂无配图」占位）。
       recipes: recipes
           .whereType<Map<String, dynamic>>()
-          .map(_recipeFromJson)
-          .where((recipe) => recipe.image.trim().isNotEmpty)
+          .map((json) {
+            final r = json['recipe'] as Map<String, dynamic>? ?? json;
+            final base = _recipeFromJson(r);
+            // ★ 把后端推荐理由塞进 desc（同 HomePicks.fromFeed 的做法）。
+            //   这样 _MiniRecipeCard 显示的 desc 和详情弹层显示的就是理由，
+            //   而不是菜谱库的原始描述。
+            final reason = json['reason'] as String? ?? '';
+            return reason.isNotEmpty
+                ? Recipe(
+                    id: base.id,
+                    name: base.name,
+                    image: base.image,
+                    desc: reason,
+                    time: base.time,
+                    people: base.people,
+                    tags: base.tags,
+                    ingredients: base.ingredients,
+                    steps: base.steps,
+                    difficulty: base.difficulty,
+                  )
+                : base;
+          })
           .toList(),
       // ★ 推荐食材（intent == 'recommend_foods' 时才有）。
       //   和 recipes 是对称的两条链路：菜谱 ← meal_recommendation，食材 ← recommend_foods。
@@ -599,11 +623,9 @@ class BackendApi {
       recommendations: picks
           .whereType<Map<String, dynamic>>()
           .map(_recommendationFromJson)
-          .where(
-            (item) =>
-                item.recipe.id.isNotEmpty &&
-                item.recipe.image.trim().isNotEmpty,
-          )
+          // 只过滤 id 为空的（那真的是后端漏了）；不过滤 image——
+          // dishes 表本来就没有图片列，空图让 UI 层 DishPhoto 占位组件处理。
+          .where((item) => item.recipe.id.isNotEmpty)
           .toList(),
       trace: _traceFromJson(data['trace']),
       source: data['source'] as String? ?? 'algorithm',
@@ -726,6 +748,16 @@ class BackendApi {
     final season =
         (data['season'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
 
+    // ★ 今日推荐候选池（后端已经算好了，和首页推荐来自同一个 region_dishes 算法池）
+    final todayRecipes = ((data['today_recipe_pool'] as List?) ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .map((json) => _recipeFromJson(json))
+        .toList();
+    final todayFoods = ((data['today_food_pool'] as List?) ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .map((json) => _foodFromJson(json))
+        .toList();
+
     return HomeFeed(
       seasonName: season['name'] as String? ?? '',
       month: (season['month'] as num?)?.toInt() ?? DateTime.now().month,
@@ -756,7 +788,6 @@ class BackendApi {
               score: (json['score'] as num?)?.toDouble(),
             ),
           )
-          .where((pick) => pick.item.image.trim().isNotEmpty)
           .toList(),
       aiTipTitle: data['ai_tip_title'] as String? ?? '',
       aiTip: data['ai_tip'] as String? ?? '',
@@ -773,6 +804,8 @@ class BackendApi {
           .whereType<Map<String, dynamic>>()
           .map(HomeAlgoStep.fromJson)
           .toList(),
+      todayRecipes: todayRecipes,
+      todayFoods: todayFoods,
     );
   }
 

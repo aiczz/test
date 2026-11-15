@@ -38,6 +38,7 @@ from app.schemas.home import (
 from app.services import ai_daily_service, food_service, recipe_service, scoring_service
 from app.services import weather_service
 from app.services.scoring_service import HardConstraints, ScoredItem
+from app.data import dish_images
 
 # 月份 → 季节名。前端顶部那个「秋季 · 9月」的 pill 用的就是它。
 _MONTH_TO_SEASON = {
@@ -192,6 +193,13 @@ def build_home(
     )
 
     # ---- 3. 每天每地区只问一次 AI ----
+    # ★ 图片优先排序：让 AI 在有图的候选里优先挑，避免首页 3 张卡片出现空图框。
+    #   判断条件：后端 image_url（网络图）或 dish_images.has_image（本地 asset）
+    region_dishes.sort(
+        key=lambda it: 0 if (it.raw.image_url or dish_images.has_image(it.raw.name)) else 1
+    )
+    region_foods.sort(key=lambda it: 0 if True else 1)  # 食材图片前端按名字 hash，后端不管
+
     enhancement = ai_daily_service.enhance_home(
         session,
         region=region_key,
@@ -244,6 +252,13 @@ def build_home(
         limit=20,
     )
 
+    # ★ Step 4 重跑后也要做图片优先 —— 否则 Step 5 _order_by_picks 会从
+    # user_dishes（没图片排序）里按原顺序抓 AI 挑好的 id，把有图的又排到后面去。
+    user_dishes.sort(
+        key=lambda it: 0 if (it.raw.image_url or dish_images.has_image(it.raw.name)) else 1
+    )
+    user_foods.sort(key=lambda it: 0 if True else 1)  # 食材不关心
+
     # 全被筛光的兜底：宁可给一道「可能不完全合条件」的，也不能让首页空白
     if not user_foods:
         user_foods = region_foods
@@ -276,17 +291,17 @@ def build_home(
         for item in final_foods
     ]
 
-    dish_items = [
-        HomeRecipeItem(
-            **recipe_service.to_brief(item.raw).model_dump(),
-            reason=_item_reason(
-                item, enhancement.dish_notes
-            ),
-            highlights=item.highlights,
-            score=round(item.score, 3),
+    dish_items = []
+    for item in final_dishes:
+        brief = recipe_service.to_brief(item.raw)
+        dish_items.append(
+            HomeRecipeItem(
+                **brief.model_dump(),
+                reason=_item_reason(item, enhancement.dish_notes),
+                highlights=item.highlights,
+                score=round(item.score, 3),
+            )
         )
-        for item in final_dishes
-    ]
 
     # ⚠️ 「菜单推荐」是按当季菜谱【动态组合】出来的建议，不是数据库里的实体，
     #    所以 id 固定为 0 —— 前端据此知道这是组合推荐，不是可打开的菜单详情。
@@ -314,6 +329,22 @@ def build_home(
             ms=int((time.perf_counter() - started) * 1000),
         )
     )
+
+    # ★ 前端菜谱页/食材页的「今日推荐」tab 直接用这两个候选池，
+    # 避免前端再跑一遍 score_dishes / score_foods —— 已经带回来了。
+    #
+    # ★★★ 关键：必须用 user_dishes[:20]（带用户约束过滤后的池），
+    # 不是 region_dishes[:20]（无用户约束的 AI 共享池）——
+    # 否则菜谱页「今日推荐」里会出现用户忌口的菜，
+    # 和首页最终展示的 3 道（从 user_dishes 来）对不上。
+    pool_source_dishes = user_dishes or region_dishes  # user_dishes 全空才回退
+    pool_source_foods = user_foods or region_foods
+    recipe_pool_briefs = [
+        recipe_service.to_brief(item.raw) for item in pool_source_dishes[:20]
+    ]
+    food_pool_briefs = [
+        food_service.to_brief(item.raw) for item in pool_source_foods[:12]
+    ]
 
     return HomeResponse(
         season=HomeSeason(name=season, month=current_month, region=region),
@@ -345,4 +376,6 @@ def build_home(
             shortlist_dishes=len(region_dishes),
             steps=steps,
         ),
+        today_recipe_pool=recipe_pool_briefs,
+        today_food_pool=food_pool_briefs,
     )

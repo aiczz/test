@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -46,7 +46,7 @@ void showFoodDetail(BuildContext context, Food food) {
               borderRadius: BorderRadius.circular(rCard),
               child: AspectRatio(
                 aspectRatio: 1.8,
-                child: FoodPhoto(asset: food.image),
+                child: FoodPhoto(asset: food.image, name: food.name),
               ),
             ),
             const SizedBox(height: 18),
@@ -1048,7 +1048,7 @@ class _FoodInventoryCard extends StatelessWidget {
             children: [
               AspectRatio(
                 aspectRatio: 1.8,
-                child: FoodPhoto(asset: food.image),
+                child: FoodPhoto(asset: food.image, name: food.name),
               ),
               Expanded(
                 child: Padding(
@@ -1360,7 +1360,7 @@ class _FoodRecipeSuggestionsState extends State<_FoodRecipeSuggestions> {
                   child: SizedBox(
                     width: 82,
                     height: 64,
-                    child: DishPhoto(asset: recipe.image),
+                    child: DishPhoto(imageUrl: recipe.image, name: recipe.name),
                   ),
                 ),
                 const SizedBox(width: 12),

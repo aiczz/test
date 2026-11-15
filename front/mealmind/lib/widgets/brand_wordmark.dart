@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 /// Original calligraphy and tagline from the login transition artwork.
 class BrandWordmark extends StatelessWidget {

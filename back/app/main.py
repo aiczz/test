@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
     with Session(engine) as session:
         # 清洗库中的食材/菜谱是原始权威数据，不灌演示内容、不覆盖主键。
         seed_all(session, include_content=not uses_compact_catalog(engine))
+
     yield
 
 

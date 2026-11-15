@@ -1,4 +1,4 @@
-import '../widgets/menu_actions.dart';
+﻿import '../widgets/menu_actions.dart';
 
 import 'dart:async';
 
@@ -9,6 +9,7 @@ import '../services/api_config.dart';
 import '../services/auth_store.dart';
 import '../services/backend_api.dart';
 import '../services/content_store.dart';
+import '../state/home_feed.dart';
 import '../state/today_menu.dart';
 import '../theme.dart';
 import '../widgets/dish_photo.dart';
@@ -96,13 +97,15 @@ class _RecipesPageState extends State<RecipesPage> {
   }
 
   List<Recipe> get _visible {
-    Iterable<Recipe> list = ContentStore.instance.recipes.where(
-      (recipe) => recipe.image.trim().isNotEmpty,
-    );
+    // ★ 「今日推荐」是特殊分类：用 HomeFeedStore 从后端拿的候选池，
+    //  不走 ContentStore 全量筛选 —— 避免重复跑一遍 score_dishes。
+    //  后端没返回时（离线 / 老后端）退化成全量。
+    Iterable<Recipe> list = _category == '今日推荐'
+        ? (HomeFeedStore.instance.feed?.todayRecipes ??
+            ContentStore.instance.recipes)
+        : ContentStore.instance.recipes;
 
-    if (_category != '全部') {
-      // 分类名和后端返回的规范标签是同一个字符串（后端已经把「家常」「家常菜」
-      // 归一成「家常菜」了），所以这里是干净的等值匹配。
+    if (_category != '全部' && _category != '今日推荐') {
       list = list.where((r) => r.tags.contains(_category));
     }
 
@@ -113,7 +116,14 @@ class _RecipesPageState extends State<RecipesPage> {
       );
     }
 
-    return list.toList();
+    // 有图的排前面，没图的也显示（全 10000 道菜都要在菜谱页里）
+    final sorted = list.toList()
+      ..sort((a, b) {
+        final aHas = a.image.trim().isNotEmpty ? 0 : 1;
+        final bHas = b.image.trim().isNotEmpty ? 0 : 1;
+        return aHas.compareTo(bHas);
+      });
+    return sorted;
   }
 
   Future<void> _toggleFavorite(String id) async {
@@ -758,6 +768,14 @@ class _CategoryIndexState extends State<_CategoryIndex> {
               active: widget.selected == '全部',
               onTap: () => widget.onSelect('全部'),
             ),
+            // ★ 「今日推荐」特殊分类 —— 后端已经算好了候选池（和首页推荐同源），
+            //  不是后端 tags 表里的，所以不能走循环渲染。
+            _CategoryChip(
+              label: '今日推荐',
+              count: HomeFeedStore.instance.feed?.todayRecipes.length ?? 0,
+              active: widget.selected == '今日推荐',
+              onTap: () => widget.onSelect('今日推荐'),
+            ),
             for (final tag in visible)
               _CategoryChip(
                 label: tag.name,
@@ -920,7 +938,7 @@ class _RecipeListCard extends StatelessWidget {
               // ⚠️ tag 必须和 _RecipeDetailSheet 那边完全一致，否则不会有动画。
               child: Hero(
                 tag: 'recipe-image-${recipe.id}',
-                child: DishPhoto(asset: recipe.image),
+                child: DishPhoto(imageUrl: recipe.image, name: recipe.name),
               ),
             ),
             Expanded(
@@ -1054,7 +1072,11 @@ class _RecipeListCard extends StatelessWidget {
 ///
 /// 公开函数 —— 菜单页的菜品格子也走这里，
 /// 保证「从菜谱页点」和「从菜单点」看到的是同一个详情。
-void openRecipeDetail(BuildContext context, Recipe recipe) {
+void openRecipeDetail(
+  BuildContext context,
+  Recipe recipe, {
+  bool fullDetail = true,
+}) {
   // ⚠️ 这里特意【不用】showModalBottomSheet。
   //
   //   它建出来的是 ModalBottomSheetRoute（PopupRoute），而 Flutter 的 Hero
@@ -1086,7 +1108,10 @@ void openRecipeDetail(BuildContext context, Recipe recipe) {
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.vertical(top: Radius.circular(rBlock)),
             ),
-            child: _RecipeDetailSheet(recipe: recipe),
+            child: _RecipeDetailSheet(
+              recipe: recipe,
+              fullDetail: fullDetail,
+            ),
           ),
         ),
       ),
@@ -1111,7 +1136,11 @@ void openRecipeDetail(BuildContext context, Recipe recipe) {
 class _RecipeDetailSheet extends StatefulWidget {
   final Recipe recipe;
 
-  const _RecipeDetailSheet({required this.recipe});
+  /// false = 只显示摘要（图 + 菜名 + 理由 + 标签 + 时长 + 加入菜单），
+  /// 不显示食材/步骤/营养 —— 首页推荐/AI 推荐的场景用这个。
+  final bool fullDetail;
+
+  const _RecipeDetailSheet({required this.recipe, this.fullDetail = true});
 
   @override
   State<_RecipeDetailSheet> createState() => _RecipeDetailSheetState();
@@ -1127,7 +1156,9 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
   void initState() {
     super.initState();
     recipe = widget.recipe;
-    _loadFullDetail();
+    // 只在 fullDetail 时才去拉完整详情（食材/步骤）。
+    // 推荐场景只看理由摘要，拉了也是白拉，还会 setState 触发视觉抖动。
+    if (widget.fullDetail) _loadFullDetail();
   }
 
   /// 补拉一次详情，把 ingredients / steps 填上。
@@ -1173,7 +1204,7 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                   child: Hero(
                     // 和列表卡片那张缩略图配对（tag 必须一模一样）
                     tag: 'recipe-image-${recipe.id}',
-                    child: DishPhoto(asset: recipe.image),
+                    child: DishPhoto(imageUrl: recipe.image, name: recipe.name),
                   ),
                 ),
                 Positioned(
@@ -1222,15 +1253,19 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Text(
-                    '${recipe.desc}。选用当季食材，味道清甜自然，适合一家人慢慢享用。',
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      color: muted,
-                      height: 1.7,
+                  // ★ 只显示后端给的原始 desc（推荐场景里这就是 reason）。
+                  // 以前硬拼了一段 "选用当季食材..." 假尾巴 —— 删掉，理由不该前端编。
+                  if (recipe.desc.isNotEmpty) ...[
+                    Text(
+                      recipe.desc,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        color: muted,
+                        height: 1.7,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
+                    const SizedBox(height: 14),
+                  ],
 
                   // ---- 标签 ----
                   Wrap(
@@ -1274,96 +1309,99 @@ class _RecipeDetailSheetState extends State<_RecipeDetailSheet> {
                   ),
                   const SizedBox(height: 24),
 
-                  // ---- 所需食材 ----
-                  if (recipe.qualityNotes.isNotEmpty ||
-                      recipe.durationNote.isNotEmpty) ...[
-                    Text(
-                      recipe.qualityNotes.isNotEmpty
-                          ? recipe.qualityNotes.join('\n')
-                          : recipe.durationNote,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: muted,
-                        height: 1.5,
+                  // ---- 食材/步骤/营养 —— 只在 fullDetail 时显示 ----
+                  // 推荐场景（首页/AI 推荐）只看理由摘要，不需要展开完整做法。
+                  if (widget.fullDetail) ...[
+                    if (recipe.qualityNotes.isNotEmpty ||
+                        recipe.durationNote.isNotEmpty) ...[
+                      Text(
+                        recipe.qualityNotes.isNotEmpty
+                            ? recipe.qualityNotes.join('\n')
+                            : recipe.durationNote,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: muted,
+                          height: 1.5,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  if (recipe.ingredients.isNotEmpty) ...[
-                    const _SectionTitle(text: '所需食材'),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final ing in recipe.ingredients)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 11,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: brand50,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              ing,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                color: ink,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // ---- 做法步骤 ----
-                  if (recipe.steps.isNotEmpty) ...[
-                    const _SectionTitle(text: '做法步骤'),
-                    const SizedBox(height: 12),
-                    for (var i = 0; i < recipe.steps.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                      const SizedBox(height: 16),
+                    ],
+                    if (recipe.ingredients.isNotEmpty) ...[
+                      const _SectionTitle(text: '所需食材'),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final ing in recipe.ingredients)
                             Container(
-                              width: 26,
-                              height: 26,
-                              alignment: Alignment.center,
-                              decoration: const BoxDecoration(
-                                color: brand700,
-                                shape: BoxShape.circle,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 11,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: brand50,
+                                borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
-                                '${i + 1}',
+                                ing,
                                 style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
+                                  fontSize: 12.5,
+                                  color: ink,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 3),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // ---- 做法步骤 ----
+                    if (recipe.steps.isNotEmpty) ...[
+                      const _SectionTitle(text: '做法步骤'),
+                      const SizedBox(height: 12),
+                      for (var i = 0; i < recipe.steps.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 26,
+                                height: 26,
+                                alignment: Alignment.center,
+                                decoration: const BoxDecoration(
+                                  color: brand700,
+                                  shape: BoxShape.circle,
+                                ),
                                 child: Text(
-                                  recipe.steps[i],
+                                  '${i + 1}',
                                   style: const TextStyle(
-                                    fontSize: 13.5,
-                                    color: ink,
-                                    height: 1.7,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 3),
+                                  child: Text(
+                                    recipe.steps[i],
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      color: ink,
+                                      height: 1.7,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    const SizedBox(height: 10),
+                      const SizedBox(height: 10),
+                    ],
                   ],
 
                   // ---- 底部操作 ----

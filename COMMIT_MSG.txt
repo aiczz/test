@@ -1,0 +1,20 @@
+feat: image_url field + reason-only detail sheet + clean lazy-image experiments
+
+== Backend ==
+- ALTER TABLE dishes ADD COLUMN image_url TEXT DEFAULT NULL
+- RecipeBrief / DishInsight / RecipeRecord all carry image_url
+- compact_catalog_repository & catalog_insight_repository SELECT d.image_url
+- home_service, ai_service, food_service, my_food_service: to_brief passes image through
+- removed Pollinations lazy-image experiment (image_gen_service.py) —
+  back to simple: HAS_IMAGE_NAMES for ordering, asset fallback on frontend
+
+== Frontend ==
+- DishPhoto: support http, relative paths (auto-prefix apiBase), and asset;
+  graceful fallback to placeholder
+- RecipeDetailSheet: fullDetail flag — home/ai recs open reason-only sheet,
+  recipe list opens full detail (ingredients + steps)
+- RecipeDetailSheet: removed hardcoded tail reason ("选用当季食材...")
+- backend_api: ai recommend reason field now injected into Recipe.desc
+- today_menu.dart: removed all recipe.image non-empty gates — any recipe
+  can enter the menu even without a picture
+- Dart analyze clean, all imports verified

@@ -5,6 +5,7 @@
 """
 
 from app.models.ai_cache import AiDailyCache
+from app.models.image_cache import ImageCache, ImageBudget
 from app.models.favorite import Favorite
 from app.models.recipe_feedback import RecipeFeedback
 from app.models.food import Food, FoodSeason

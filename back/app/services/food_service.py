@@ -76,5 +76,8 @@ def get_detail(session: Session, food_id: int) -> FoodDetail | None:
             common_methods=food.common_methods,
             texture=food.texture,
         ),
-        recommended_recipes=[recipe_service.to_brief(r) for r in recipes],
+        recommended_recipes=[
+            recipe_service.to_brief(r)
+            for r in recipes
+        ],
     )

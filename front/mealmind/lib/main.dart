@@ -12,7 +12,9 @@ import 'pages/profile.dart';
 import 'pages/recipes.dart';
 import 'services/api_config.dart';
 import 'services/auth_store.dart';
+import 'services/city.dart';
 import 'services/content_store.dart';
+import 'services/geolocation.dart';
 import 'state/app_state.dart';
 import 'state/home_feed.dart';
 import 'state/today_menu.dart';
@@ -41,11 +43,40 @@ class _Bootstrap extends StatefulWidget {
 class _BootstrapState extends State<_Bootstrap> {
   late final Future<void> _ready = _prepare();
 
+  /// 启动时后台自动定位，成功就把默认城市换成最近的那个。
+  ///
+  /// 故意不 await：浏览器定位要弹权限请求，用户拒绝 / 超时（10s）
+  /// / 非 Web 平台都会静默返回 null，默认城市就不变。整个流程
+  /// 不影响启动速度 —— HomeFeedStore 监听了 CityStore，成功覆盖后
+  /// 它会自动重算首页推荐。
+  Future<void> _autoDetectCity() async {
+    CityStore.instance.setDetecting(true);
+    try {
+      final coords = await currentCoordinates();
+      if (coords != null) {
+        CityStore.instance.selectByCoordinates(coords.$1, coords.$2);
+        debugPrint('[AutoGeo] 自动定位成功 → ${CityStore.instance.city.name}');
+      } else {
+        CityStore.instance.setDetectError(geolocationUnsupportedHint);
+        debugPrint('[AutoGeo] 自动定位失败，保持默认城市');
+      }
+    } catch (e) {
+      CityStore.instance.setDetectError('定位异常：$e');
+      debugPrint('[AutoGeo] 自动定位异常：$e');
+    }
+  }
+
   Future<void> _prepare() async {
     // ★ 字体预热：首页那两款字体合计 12 MB，Flutter Web 是「用到才下」。
     //   等首页第一次绘制时才去拉，字会晚一步才换上，看起来就是登录进去卡了一下。
     //   这里不 await —— 让它和下面的后端探测并行跑，两边都在品牌屏期间完成。
     unawaited(_preloadDisplayFonts());
+
+    // ★ 自动定位（后台 fire-and-forget）
+    //   浏览器会弹权限请求，用户拒绝 / 超时（10s）/ 非 Web 平台都会静默失败，
+    //   保持默认城市（现在是杭州）。成功覆盖后，HomeFeedStore 监听到变化
+    //   会自动重算推荐 —— 不需要我们手动触发。
+    unawaited(_autoDetectCity());
 
     // 恢复上次的登录状态（token 存在本地）
     await AuthStore.instance.restore();

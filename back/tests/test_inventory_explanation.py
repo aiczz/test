@@ -33,8 +33,8 @@ def test_inventory_chat_replaces_model_claims(client, monkeypatch):
     body = response.json()
     assert body["recipes"]
     assert "莲藕（2节）" in body["answer"]
-    assert "逐菜库存核对" in prompts[-1]
-    assert "实际登记的库存" in prompts[-1]
+    # 专用精简 prompt：只给一行"家里现有食材"，不再有逐菜核对（那是 meal_recommendation 通用模板里的长内容）
+    assert "家里现有食材" in prompts[-1]
     assert "龙虾" not in body["answer"]
     assert "看不到" not in body["answer"]
     assert "数量足够" in body["answer"]

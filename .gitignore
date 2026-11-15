@@ -68,6 +68,20 @@ dish_image_library/
 *-wide.png
 *-clean.png
 .openai/hosting.json
+back/data/generated_images/
+
+# Local credentials, test output and browser sessions
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+pytest-of-*/
+.playwright-cli/
+/tmp/
+/output/
+/start-logs/
 
 # ---- 大文件和数据交付包（超过 GitHub 100MB 限制）----
 data_delivery/
