@@ -16,8 +16,6 @@ import threading
 
 import numpy as np
 
-from app.core.config import settings
-
 _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))), "data")
 _PATH = os.path.join(_DATA_DIR, "embeddings_goals.npz")

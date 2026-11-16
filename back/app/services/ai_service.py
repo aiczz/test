@@ -952,7 +952,6 @@ def _answer_food_recommendation(
 
     典型输入：「家里有健身的」「想补点钙」「体检说血脂高」「随便推荐点食材」。
     """
-    message = payload.message
     count = payload.recommendation_count
 
     constraints = _constraints(session, user_id, payload)

@@ -291,7 +291,6 @@ def _ensure_all_have_images(picks: list[int], shortlist: list) -> None:
     def _has_image(item) -> bool:
         return bool(item.raw.image_url) or dish_images.has_image(item.raw.name)
 
-    shortlist_ids = {item.item_id for item in shortlist}
     available = [
         item.item_id
         for item in shortlist

@@ -19,6 +19,8 @@ from app.models.verification_code import VerificationCode
 
 __all__ = [
     "AiDailyCache",
+    "ImageCache",
+    "ImageBudget",
     "Favorite",
     "RecipeFeedback",
     "Food",

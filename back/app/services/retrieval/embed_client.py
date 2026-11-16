@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-import time
 
 import httpx
 
@@ -39,7 +38,6 @@ def embed_text(text: str, *, timeout: int | None = None) -> list[float] | None:
     }
 
     effective_timeout = timeout or settings.embedding_timeout_seconds
-    started = time.perf_counter()
     try:
         with httpx.Client(timeout=effective_timeout) as client:
             response = client.post(
@@ -50,7 +48,6 @@ def embed_text(text: str, *, timeout: int | None = None) -> list[float] | None:
                 },
                 json=payload,
             )
-        elapsed_ms = int((time.perf_counter() - started) * 1000)
 
         if response.status_code != 200:
             body = response.text[:200].replace("\n", " ")

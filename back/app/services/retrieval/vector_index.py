@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import os
-import time
 from threading import RLock
 
 import numpy as np
