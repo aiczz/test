@@ -83,8 +83,20 @@ def test_service_repairs_extra_soup_and_discards_stale_model_description(session
     monkeypatch.setattr(settings, 'ai_api_key', 'test-only')
     monkeypatch.setattr(ai_service.scoring_service, 'score_dishes', lambda *a, **kw: pool)
     old_description = '鸡汤搭配排骨汤和菠菜。'
-    monkeypatch.setattr(ai_client, '_network_complete_json', lambda *a, **kw: ai_client.AiResult(ok=True,
-        data={'answer': old_description, 'picks': [{'id': c.item_id} for c in pool[:3]]}))
+    calls = {'n': 0}
+
+    def network(*a, **kw):
+        # 第 1 次：模型选了两道汤（会被复核器换掉一道），并给出一段
+        # 描述「被换掉的菜」的过期回答；第 2 次起：换菜后的文案补写调用，
+        # 必须描述**最终定稿**的菜 —— 不能再复读过期回答。
+        calls['n'] += 1
+        if calls['n'] == 1:
+            return ai_client.AiResult(ok=True,
+                data={'answer': old_description, 'picks': [{'id': c.item_id} for c in pool[:3]]})
+        return ai_client.AiResult(ok=True,
+            data={'answer': '鸡肉汤、清炒菠菜和蒸豆腐这样荤素搭配更均衡，汤也只有一道。', 'picks': []})
+
+    monkeypatch.setattr(ai_client, '_network_complete_json', network)
     if mode == 'chat':
         result = ai_service.chat(session, None, AiChatRequest(message='推荐三道菜'))
         final_ids = [r.id for r in result.recipes]

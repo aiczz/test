@@ -35,8 +35,12 @@ def test_ai_selects_from_a_real_pool_not_a_preselected_menu(session, catalogue, 
     def network(messages, **kwargs):
         prompt = messages[-1]['content']
         candidates = list(map(int, re.findall(r'^(\d+) \|', prompt, re.M)))
+        if len(candidates) <= 3:
+            # 换菜后的文案补写调用：候选只有最终定稿的几道，直接描述它们即可
+            names = [n.strip() for n in re.findall(r'^\d+ \| (.+?) \|', prompt, re.M)]
+            return ai_client.AiResult(ok=True, data={'answer': '、'.join(names) + '，这几道搭配着吃正好。', 'picks': []})
         assert 3 < len(candidates) <= 24
-        assert all(s in prompt for s in ('必须满足', '尽量满足', '少洗锅', '完整配料记录', '时长来源', '未确认已有的主料'))
+        assert all(s in prompt for s in ('必须满足', '搭配硬规则', '汤最多一道', '少洗锅', '完整配料记录', '时长来源', '未确认已有的主料'))
         chosen.extend([i for i in candidates if i != baseline[0]][-3:])
         return ai_client.AiResult(ok=True, data={'answer': '按条件选好了。', 'picks': [{'id': i} for i in chosen]})
     monkeypatch.setattr(ai_client, '_network_complete_json', network)
