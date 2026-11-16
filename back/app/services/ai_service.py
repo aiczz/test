@@ -84,7 +84,7 @@ _INTENT_KEYWORDS: list[tuple[str, list[str]]] = [
     (
         "cook_with_my_foods",
         [
-            "我有什么", "现有食材", "家里有", "库存", "用这些", "冰箱", "我的食材",
+            "我有什么", "现有食材", "库存", "用这些", "冰箱", "我的食材",
             "我家的食材", "家里的食材", "我家食材", "家里食材", "我家有的",
             "我有的", "现有材料", "家里有什么", "用我的",
         ],
@@ -130,6 +130,36 @@ _WEATHER_HINTS = (
 
 def _asks_about_weather(message: str) -> bool:
     return any(hint in message for hint in _WEATHER_HINTS)
+
+
+# 「家里有老人」问的是人群不是库存；「家里有什么」「家里有土豆」才是库存。
+# 裸短语「家里有」两头都接不住（老人→误判库存，土豆→不匹配漏判），
+# 所以单独判：后面跟疑问/指示词，或者句子里真的提到了某个食材。
+_INVENTORY_TAIL_WORDS = ("什么", "啥", "这些", "点", "些")
+
+
+def _asks_inventory(message: str, mentioned_names: list[str]) -> bool:
+    match = re.search(r"家里有(.{0,8})", message)
+    if match:
+        tail = match.group(1)
+        if tail.startswith(_INVENTORY_TAIL_WORDS):
+            return True
+        if any(name in message for name in mentioned_names):
+            return True
+    return False
+
+
+# 用户把「季节/时令」当成推荐理由来问（"秋天适合吃什么""现在应季的菜"）。
+# 和天气信号同款思路：只收明确的季节说法。
+_SEASON_HINTS = (
+    "季节", "应季", "时令", "当季", "入秋", "秋天", "秋季",
+    "立秋", "秋燥", "冬天", "冬季", "入冬", "夏天", "夏季", "春天",
+    "春季", "这个时节", "当下时节",
+)
+
+
+def _asks_about_season(message: str) -> bool:
+    return any(hint in message for hint in _SEASON_HINTS)
 
 
 def _is_question(message: str) -> bool:
@@ -560,7 +590,7 @@ def _route(
         for intent_label, phrases in _INTENT_KEYWORDS
         if intent_label == "cook_with_my_foods"
         for phrase in phrases
-    )
+    ) or _asks_inventory(message, mentioned_names)
 
     # An explicit new target overrides the previous turn's card type.
     if _wants_foods(message):
@@ -1669,6 +1699,7 @@ def _chat_once(
             else _answer_from_reasons(
                 chosen, picks, health_goal,
                 weather=weather, message=str(getattr(payload, "message", "") or ""),
+                month=month,
             )
         )
         answer = composed or _rule_answer(
@@ -2020,6 +2051,7 @@ def _answer_from_reasons(
     health_goal: Any,
     weather: Any = None,
     message: str = "",
+    month: int | None = None,
 ) -> str | None:
     """整餐复核换菜后，用同一轮模型给的逐菜理由重说一遍。
 
@@ -2056,6 +2088,9 @@ def _answer_from_reasons(
         # 用户问的就是天气，开头必须先把天气接住——否则推荐对，
         # 但用户看不出这些菜和今天的天气有什么关系。
         lead = f"今天{weather.description}，{weather.advice}。"
+    elif _asks_about_season(message) and month is not None:
+        season_char = scoring_service.season_char_of(month)
+        lead = f"现在是{month}月{season_char}季，按当季时令，"
     else:
         lead = "按你的情况，"
     return lead + "给你挑了这几道：" + "；".join(parts) + "。"
@@ -2309,6 +2344,11 @@ reason 写法（极简）：
 }}
 
 **reason 写法规则（这是整套推荐最关键的一步）：**
+- **第一条（通用）：先从用户的话里找出他最关心的角度**——天气、季节时令、
+  人群（老人/小孩/孕妇）、场合（宴客/日常）、快手省时、餐次（早/午/晚）、
+  食养目标……**reason 的第一句就从那个角度解释**，再补一个候选行里的具体数据。
+  用户用什么理由问，就用同一个理由答——他问"秋天吃什么"，理由就该讲应季，
+  而不是只报营养数据；
 - 必须**引用候选行里的具体数据**，不能凭空说「这道菜很适合」；
 - 对「健身减脂」：讲「蛋白 XXg、能量 XXkcal、钠 XXmg 符合饮食目标」；
 - 对「补气血/润燥」：讲「用了 XX、XX 等应季/带功效的食材」；
@@ -2325,6 +2365,9 @@ reason 写法（极简）：
 answer 写法规则：
 - 第一句先回应用户的核心诉求（感冒、健身、补气血、时间紧…），
   他说身体不舒服就要先接住这件事，不要从天气时令讲起；
+- 用户没有明确诉求时，第一句回应用户问题里的那个角度——
+  问了天气就先说今天天气，问了季节就先讲当季，问了快手就先讲快，
+  问了人群就先讲适不适合这类人，不要一律从营养数据讲起；
 - 每道菜都要带它的 reason 里的那个具体点，不要只重复 "时令/天气" 这种泛泛的话
   （用户就是在问天气的除外——那要按【用户在问天气】的要求把天气讲透）；
 - **answer 里提到的菜必须和 picks 一一对应，一道都不要落下** ——
