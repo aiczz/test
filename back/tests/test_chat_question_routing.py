@@ -70,3 +70,36 @@ def test_general_question_reports_upstream_busy(client, monkeypatch):
     assert "繁忙" in body["answer"]
     assert "繁忙" in body["trace"][-1]["summary"]
     assert body["recipes"] == []
+
+
+def test_food_recommendation_with_valid_model_picks_survives(client, monkeypatch):
+    """回归：食材链路在模型返回合法 picks 时曾直接 NameError 500。
+
+    旧代码在 _answer_food_recommendation 里裸用了不存在的 health_goal
+    （正确写法是 route.health_goal）。此前所有用例要么 use_ai=False、
+    要么模型调用失败或 picks 作废，从未覆盖「调用成功 + picks 合法」这个分支，
+    所以 517 个测试全绿但线上点一下就 500。
+    """
+    import re
+
+    from app.ai import client as ai_client
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    monkeypatch.setattr(settings, "ai_api_key", "test-only")
+
+    def network(messages, **kwargs):
+        prompt = messages[-1]["content"]
+        ids = re.findall(r"^(\d+) \|", prompt, re.M)
+        assert len(ids) >= 3, "食材提示词应包含候选清单"
+        return ai_client.AiResult(ok=True, data={
+            "answer": "这几样正当季，买回来简单做就很好吃。",
+            "picks": [{"id": int(i), "reason": "正当季，口感好"} for i in ids[:3]],
+        })
+
+    monkeypatch.setattr(ai_client, "_network_complete_json", network)
+    body = client.post("/api/ai/chat", json={
+        "message": "推荐几种当季食材", "use_ai": True}).json()
+    assert body["intent"] == "recommend_foods"
+    assert body["foods"], "应返回食材卡片"
+    assert body["source"] == "ai"

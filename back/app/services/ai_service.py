@@ -1081,7 +1081,9 @@ def _answer_food_recommendation(
                 picks = []
                 raw_answer = ""
             else:
-                _patch_picks(picks, allowed, candidates, count, health_goal)
+                # ★ 必须用 route.health_goal —— 早前误写成裸的 health_goal，
+                #   模型返回合法 picks 时直接 NameError，推荐食材整条链路 500。
+                _patch_picks(picks, allowed, candidates, count, route.health_goal)
             if raw_answer:
                 answer, rejected_claim = checked_text(
                     raw_answer, '',

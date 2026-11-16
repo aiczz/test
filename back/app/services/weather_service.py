@@ -217,13 +217,14 @@ def current_weather(
 def _fetch(
     latitude: float, longitude: float, *, city: str | None, today: str, month: int
 ) -> WeatherContext:
-    """请求一次实时天气；网络抖动时重试一次再退回估算。
+    """请求实时天气；网络抖动时最多重试两次（共 3 次）再退回估算。
 
     实测 Open-Meteo 在国内直连下 SSL 握手偶发超时（6s timeout 打满），
-    连续 3 次成功 0 次也出现过。单次重试成本很低（失败路径才走），
-    却能把「拿到实时天气」的概率提上来——尤其聊天里用户就等着这句天气。
+    有时连着 2 次都失败、几分钟后再试就通了 —— 所以重试要「多打几轮
+    且拉开间隔」，共 3 次（间隔 0.5s / 1.0s）。失败结果只缓存 10 分钟，
+    到期自动再试真实请求，不会把估算钉死一整天。
     """
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             with httpx.Client(timeout=settings.weather_timeout_seconds) as client:
                 response = client.get(
@@ -262,8 +263,8 @@ def _fetch(
             logger.warning(
                 "天气查询失败（第 %s 次）：%s", attempt + 1, exc
             )
-            if attempt == 0:
-                time.sleep(0.5)
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1))
     return _estimated(city, month, today)
 
 
