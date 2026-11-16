@@ -217,43 +217,54 @@ def current_weather(
 def _fetch(
     latitude: float, longitude: float, *, city: str | None, today: str, month: int
 ) -> WeatherContext:
-    try:
-        with httpx.Client(timeout=settings.weather_timeout_seconds) as client:
-            response = client.get(
-                settings.weather_base_url,
-                params={
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "current": "temperature_2m,precipitation,weather_code",
-                    "timezone": "Asia/Shanghai",
-                },
+    """请求一次实时天气；网络抖动时重试一次再退回估算。
+
+    实测 Open-Meteo 在国内直连下 SSL 握手偶发超时（6s timeout 打满），
+    连续 3 次成功 0 次也出现过。单次重试成本很低（失败路径才走），
+    却能把「拿到实时天气」的概率提上来——尤其聊天里用户就等着这句天气。
+    """
+    for attempt in range(2):
+        try:
+            with httpx.Client(timeout=settings.weather_timeout_seconds) as client:
+                response = client.get(
+                    settings.weather_base_url,
+                    params={
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "current": "temperature_2m,precipitation,weather_code",
+                        "timezone": "Asia/Shanghai",
+                    },
+                )
+            if response.status_code != 200:
+                logger.warning("天气接口返回 %s", response.status_code)
+                return _estimated(city, month, today)
+
+            current: dict[str, Any] = response.json().get("current") or {}
+            temperature = current.get("temperature_2m")
+            code = current.get("weather_code")
+            temperature = float(temperature) if temperature is not None else None
+            code = int(code) if code is not None else None
+
+            kind = _kind_from(temperature=temperature, code=code, month=month)
+            label = _wmo_text(code)
+            temp_text = f"{round(temperature)}°C" if temperature is not None else "气温未知"
+
+            return WeatherContext(
+                city=city,
+                date=today,
+                kind=kind,
+                description=f"{label} {temp_text}",
+                temperature_c=temperature,
+                source="live",
+                advice=_ADVICE[kind],
             )
-        if response.status_code != 200:
-            logger.warning("天气接口返回 %s", response.status_code)
-            return _estimated(city, month, today)
-
-        current: dict[str, Any] = response.json().get("current") or {}
-        temperature = current.get("temperature_2m")
-        code = current.get("weather_code")
-        temperature = float(temperature) if temperature is not None else None
-        code = int(code) if code is not None else None
-
-        kind = _kind_from(temperature=temperature, code=code, month=month)
-        label = _wmo_text(code)
-        temp_text = f"{round(temperature)}°C" if temperature is not None else "气温未知"
-
-        return WeatherContext(
-            city=city,
-            date=today,
-            kind=kind,
-            description=f"{label} {temp_text}",
-            temperature_c=temperature,
-            source="live",
-            advice=_ADVICE[kind],
-        )
-    except Exception as exc:  # noqa: BLE001 —— 外部接口，任何错都退回估算
-        logger.warning("天气查询失败，改用季节估算：%s", exc)
-        return _estimated(city, month, today)
+        except Exception as exc:  # noqa: BLE001 —— 外部接口，任何错都退回估算
+            logger.warning(
+                "天气查询失败（第 %s 次）：%s", attempt + 1, exc
+            )
+            if attempt == 0:
+                time.sleep(0.5)
+    return _estimated(city, month, today)
 
 
 def reset_cache() -> None:

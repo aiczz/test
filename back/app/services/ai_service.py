@@ -120,6 +120,18 @@ def _is_follow_up(message: str) -> bool:
     )) or bool(re.match(r"^(?:其他条件?不变|其他不变|继续保留|换掉这|不要这|不喜欢这)", text))
 
 
+# 用户把「天气」当成推荐理由来问（"今天天气适合吃什么""降温了吃什么"）。
+# 只收明确的天气词，不收单字"冷/热"——「想吃点凉的」不是在问天气。
+_WEATHER_HINTS = (
+    "天气", "降温", "变天", "换季", "下雨", "雨天", "下雪", "雪天",
+    "阴天", "晴天", "天冷", "天热", "转凉", "转暖", "起风", "台风", "回南天",
+)
+
+
+def _asks_about_weather(message: str) -> bool:
+    return any(hint in message for hint in _WEATHER_HINTS)
+
+
 def _is_question(message: str) -> bool:
     """Explanations and other topics must not turn into recipe searches."""
     return bool(re.search(
@@ -886,6 +898,7 @@ reason 写法规则：
 - 对「健身」：讲「蛋白含量高 / 低脂」；
 - 对「补铁补钙」：讲「含铁量 / 钙量」；
 - 对「时令诉求」：讲「本月正应季」；
+- 对「天气诉求」：讲「和今天天气的搭配」，如"阴冷天，炖汤食材暖身"；
 - ✅ 好例子："蛋白 24.6g，健身首选"
 - ✅ 好例子："11 月应季，润燥"
 - ❌ 坏例子："营养丰富，老少咸宜"
@@ -1653,7 +1666,10 @@ def _chat_once(
         # 那会跟"只展示配料符合条件的菜谱"自相矛盾。
         composed = (
             None if constraints.required_foods
-            else _answer_from_reasons(chosen, picks, health_goal)
+            else _answer_from_reasons(
+                chosen, picks, health_goal,
+                weather=weather, message=str(getattr(payload, "message", "") or ""),
+            )
         )
         answer = composed or _rule_answer(
             session=session,
@@ -2002,6 +2018,8 @@ def _answer_from_reasons(
     chosen: list[ScoredItem],
     picks: list[dict[str, Any]],
     health_goal: Any,
+    weather: Any = None,
+    message: str = "",
 ) -> str | None:
     """整餐复核换菜后，用同一轮模型给的逐菜理由重说一遍。
 
@@ -2032,7 +2050,14 @@ def _answer_from_reasons(
         parts.append(f"{item.name}——{head[:36]}")
     if len(parts) < 2:
         return None
-    lead = f"按你说的「{health_goal.name}」，" if health_goal is not None else "按你的情况，"
+    if health_goal is not None:
+        lead = f"按你说的「{health_goal.name}」，"
+    elif weather is not None and _asks_about_weather(message):
+        # 用户问的就是天气，开头必须先把天气接住——否则推荐对，
+        # 但用户看不出这些菜和今天的天气有什么关系。
+        lead = f"今天{weather.description}，{weather.advice}。"
+    else:
+        lead = "按你的情况，"
     return lead + "给你挑了这几道：" + "；".join(parts) + "。"
 
 
@@ -2243,13 +2268,29 @@ reason 写法（极简）：
 - 这是食养方向的饮食建议，**不要做诊断、不要承诺治疗作用**，
   说「有…的食材/有助于…」而不是「能治好…」。"""
 
+    # 用户直接拿天气当理由问（"今天天气适合吃什么"）时，天气就不是背景板，
+    # 而是要正面回答的问题。没有这段，reason 规则只教模型引营养数据，
+    # 它就答"低钠118mg"——推荐确实按天气选的，但为什么，一句话都讲不出来。
+    weather_block = ""
+    if health_goal is None and _asks_about_weather(message):
+        weather_block = f"""
+【★ 用户在问天气 · 优先回应】今天{city or '当地'} {weather.description}，{weather.advice}
+展开要求：
+- 回答的**第一句**就点明今天的具体天气（直接用上面给的温度/天气现象），
+  不要笼统说「最近天气」「换季时节」；
+- 每道菜的 reason 都要讲清「这道菜为什么配今天的天气」：
+  冷/阴 → 热汤热炖暖身；雨雪/湿 → 祛湿暖胃；热 → 清爽少油；燥 → 润肺生津。
+  天气讲完还要带一个候选行里的具体数据（用了什么食材/多久能出锅）；
+- 挑菜时优先选天气适配标签强的候选行，别推出和天气意图相反的菜
+  （阴冷天不推凉拌菜）。"""
+
     return f"""【用户的话】{message}
 【意图】{intent}
 【家庭约束】{_constraints_block(constraints)}
 【选菜要求】{_selection_requirements(constraints, preferences or [])}
 【今天】{month} 月（{scoring_service.season_char_of(month)}季）{city or ''}
 【天气】{weather.description} —— {weather.advice}
-{goal_block}
+{goal_block}{weather_block}
 【时令知识 · 来自我们的时令数据库】
 {_facts_block(session, month)}
 
@@ -2284,7 +2325,8 @@ reason 写法（极简）：
 answer 写法规则：
 - 第一句先回应用户的核心诉求（感冒、健身、补气血、时间紧…），
   他说身体不舒服就要先接住这件事，不要从天气时令讲起；
-- 每道菜都要带它的 reason 里的那个具体点，不要重复 "时令/天气" 这种泛泛的话；
+- 每道菜都要带它的 reason 里的那个具体点，不要只重复 "时令/天气" 这种泛泛的话
+  （用户就是在问天气的除外——那要按【用户在问天气】的要求把天气讲透）；
 - **answer 里提到的菜必须和 picks 一一对应，一道都不要落下** ——
   界面上会展示 picks 里的每一道菜，少说一道看起来就像漏推了；
 - picks 选 {min(count, len(candidates))} 个——数组长度**必须等于**这个数，
