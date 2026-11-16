@@ -706,7 +706,7 @@ def test_ai_picks_outside_candidates_are_dropped():
     from app.services.ai_service import _coerce_picks
 
     allowed = {101, 102, 103}
-    picked = _coerce_picks(
+    picked, malformed = _coerce_picks(
         [
             {"id": 101, "reason": "当季"},
             {"id": 999999, "reason": "编造的菜"},  # 库里不存在
@@ -719,6 +719,23 @@ def test_ai_picks_outside_candidates_are_dropped():
         3,
     )
     assert [entry["id"] for entry in picked] == [101, 102, 103]
+    # 幻觉 id / 重复 id 属于结构性错误：结果照样收敛，但必须标记 malformed，
+    # 让调用方丢弃整次输出（answer 也别信），不能被自动补齐"洗白"。
+    assert malformed is True
+
+
+def test_ai_picks_partial_missing_can_be_patched():
+    """只少给了几个（没有重复/越界）→ 不算 malformed，允许自动补齐。"""
+    from app.services.ai_service import _coerce_picks
+
+    allowed = {101, 102, 103}
+    picked, malformed = _coerce_picks(
+        [{"id": 101, "reason": "当季"}],
+        allowed,
+        3,
+    )
+    assert [entry["id"] for entry in picked] == [101]
+    assert malformed is False
 
 
 def test_ai_daily_cache_serves_the_whole_region_for_the_day(session):

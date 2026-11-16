@@ -15,6 +15,11 @@ pydantic-settings==2.15.0
 # 清洗数据库使用 MySQL；SQLite 本地开发不依赖它。
 PyMySQL==1.1.2
 
+# 向量检索（RAG 语义召回 + 诉求语义匹配）必需。
+# 之前漏了它：import numpy 失败被 except 静默吞掉，表现为「语义匹配
+# 从来不生效」，很难查 —— 新装环境一定要有这一行。
+numpy==2.5.5
+
 # 认证：JWT + 密码哈希
 python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4

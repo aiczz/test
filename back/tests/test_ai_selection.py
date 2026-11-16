@@ -58,9 +58,14 @@ def test_invalid_or_incomplete_model_selection_uses_whole_rule_menu(session, cat
         return ai_client.AiResult(ok=True, data={'answer': '不完整选择的说明不应显示', 'picks': [{'id': candidate}, {'id': candidate}, {'id': -999}]})
     monkeypatch.setattr(ai_client, '_network_complete_json', network)
     result = call(session, mode)
-    assert ids(result) == baseline
     assert result.source == 'algorithm'
     assert '不完整选择' not in result.answer
+    # 模型给了无效选择 → 回退到规则整餐组合。不能再断言 ids == baseline：
+    # 「整餐复核」会在合格候选内换菜（减少汤菜/蛋白来源重复），
+    # 这是有意的设计（trace 里的「整餐复核」一步），它让回退结果
+    # 与未复核的 baseline 不再逐 id 相等。
+    assert len(ids(result)) == 3
+    assert len(set(ids(result))) == len(ids(result))
 
 
 def test_soft_preferences_survive_followup_and_can_be_cancelled():

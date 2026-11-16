@@ -756,12 +756,20 @@ def _constraints_block(constraints: HardConstraints) -> str:
     )
 
 
-def _coerce_picks(value: Any, allowed: set[int], limit: int) -> list[dict[str, Any]]:
-    """收敛模型返回的 picks：不在候选集里的直接丢弃（幻觉防线）。"""
+def _coerce_picks(value: Any, allowed: set[int], limit: int) -> tuple[list[dict[str, Any]], bool]:
+    """收敛模型返回的 picks：不在候选集里的直接丢弃（幻觉防线）。
+
+    返回 (picks, malformed)。malformed=True 表示模型给过**重复 id 或越界 id**
+    —— 这属于结构性错误，说明这次输出不可信：自动补齐会把垃圾洗白成
+    "合法选择"，连模型的废话 answer 都跟着上屏（test_ai_selection 里
+    专门有这条回归）。所以调用方对 malformed 的选择**不补齐、不采纳**，
+    直接走规则整餐兜底；只有「少给了几个」才允许 _patch_picks 衔接。
+    """
     if not isinstance(value, list):
-        return []
+        return [], False
     result: list[dict[str, Any]] = []
     seen: set[int] = set()
+    malformed = False
     for entry in value:
         if isinstance(entry, dict):
             raw_id = entry.get("id")
@@ -771,13 +779,16 @@ def _coerce_picks(value: Any, allowed: set[int], limit: int) -> list[dict[str, A
         try:
             candidate = int(raw_id)
         except (TypeError, ValueError):
+            malformed = True  # 给不出合法 id 本身就是不可信信号
             continue
-        if candidate in allowed and candidate not in seen:
-            seen.add(candidate)
-            result.append({"id": candidate, "reason": reason})
+        if candidate not in allowed or candidate in seen:
+            malformed = True
+            continue
+        seen.add(candidate)
+        result.append({"id": candidate, "reason": reason})
         if len(result) >= limit:
             break
-    return result
+    return result, malformed
 
 
 def _patch_picks(
@@ -1020,8 +1031,14 @@ def _answer_food_recommendation(
             trace.append(AiTraceStep(agent='响应缓存', summary='完全相同的模型输入命中短期缓存，未再次调用模型', ms=0))
         if result.ok:
             raw_answer = str(result.data.get("answer") or "").strip()
-            picks = _coerce_picks(result.data.get("picks"), allowed, count)
-            _patch_picks(picks, allowed, candidates, count, health_goal)
+            picks, malformed = _coerce_picks(result.data.get("picks"), allowed, count)
+            if malformed:
+                # 模型给了重复/越界 id：这次输出整体不可信，
+                # answer 和 picks 一起丢弃，走规则文案（跟菜品链路同一策略）。
+                picks = []
+                raw_answer = ""
+            else:
+                _patch_picks(picks, allowed, candidates, count, health_goal)
             if raw_answer:
                 answer, rejected_claim = checked_text(raw_answer, '')
                 answer = answer or None
@@ -1558,8 +1575,15 @@ def _chat_once(
             trace.append(AiTraceStep(agent='响应缓存', summary='完全相同的模型输入命中短期缓存，未再次调用模型', ms=0))
         if result.ok:
             raw_answer = str(result.data.get("answer") or "").strip()
-            picks = _coerce_picks(result.data.get("picks"), allowed, count)
-            _patch_picks(picks, allowed, candidates, count, health_goal)
+            picks, malformed = _coerce_picks(result.data.get("picks"), allowed, count)
+            if malformed:
+                # 同食材链路：重复/越界 id → 整次输出不可信，answer 一起丢。
+                # 下面 _verified_selection 会因 picks 不完整判 accepted=False，
+                # 自动回退规则整餐组合。
+                picks = []
+                raw_answer = ""
+            else:
+                _patch_picks(picks, allowed, candidates, count, health_goal)
             if raw_answer:
                 answer, rejected_claim = checked_text(raw_answer, '')
                 answer = answer or None
@@ -1993,13 +2017,22 @@ def _answer_from_reasons(
     for item in chosen:
         reason = reasons.get(str(item.item_id))
         if not reason:
+            # 整餐复核换进来的菜没有模型理由。以前直接跳过 ——
+            # 用户看到卡片上 3 道菜、回答里只有 2 道，数量对不上，
+            # 会以为系统漏推了。这里用确定性理由兜底，保证逐菜都有着落。
+            reason = _auto_reason_for(item, health_goal)
+        if not reason:
             continue
         # 理由可能很长，取第一句、限长，避免回答变成一堵墙
         head = reason.split("。")[0].strip()
+        # 模型的理由常以菜名开头（"西红柿豆腐汤清淡易消化"），前面已经
+        # 写过一遍菜名了，去掉开头重复的部分，不然读起来是结巴。
+        if head.startswith(item.name):
+            head = head[len(item.name):].lstrip("，,、：:—-")
         parts.append(f"{item.name}——{head[:36]}")
     if len(parts) < 2:
         return None
-    lead = f"按你说的「{health_goal.name}」，" if health_goal is not None else "按你说的口味，"
+    lead = f"按你说的「{health_goal.name}」，" if health_goal is not None else "按你的情况，"
     return lead + "给你挑了这几道：" + "；".join(parts) + "。"
 
 
@@ -2238,16 +2271,22 @@ reason 写法（极简）：
 - 必须**引用候选行里的具体数据**，不能凭空说「这道菜很适合」；
 - 对「健身减脂」：讲「蛋白 XXg、能量 XXkcal、钠 XXmg 符合饮食目标」；
 - 对「补气血/润燥」：讲「用了 XX、XX 等应季/带功效的食材」；
+- 对「感冒/身体不适」：讲「清淡易消化、汤粥做法、用了 XX 等对症食材」；
+  只说「有助于恢复」，**不要说治病、退烧、消炎**（饮食建议不是医疗）；
 - 对「用我家的食材」：讲「用到了你已登记的 XX、XX」；
 - 对「时间紧」：讲「时长 XX 分钟，符合可用时间」；
 - ✅ 好例子："蛋白 24g、钠 89mg，低脂高蛋白"
 - ✅ 好例子："用了你登记的鸡胸肉、木耳，25 分钟能出锅"
+- ✅ 好例子："丝瓜蛋汤清淡易消化，丝瓜带清热功效，适合感冒时喝"
 - ❌ 坏例子："这道菜营养均衡，适合大多数人"（没引数据）
 - ❌ 坏例子："清淡又健康"（没引数据）
 
 answer 写法规则：
-- 第一句先回应用户的核心诉求（健身、补气血、时间紧…）；
+- 第一句先回应用户的核心诉求（感冒、健身、补气血、时间紧…），
+  他说身体不舒服就要先接住这件事，不要从天气时令讲起；
 - 每道菜都要带它的 reason 里的那个具体点，不要重复 "时令/天气" 这种泛泛的话；
+- **answer 里提到的菜必须和 picks 一一对应，一道都不要落下** ——
+  界面上会展示 picks 里的每一道菜，少说一道看起来就像漏推了；
 - picks 选 {min(count, len(candidates))} 个——数组长度**必须等于**这个数，
   每一项都要有 id 和 reason，缺一个都不行；id 必须来自上面的候选清单；
 - 全部用简体中文。"""
@@ -2489,7 +2528,7 @@ def _recommend_recipes(
             trace.append(AiTraceStep(agent='响应缓存', summary='完全相同的模型输入命中短期缓存，未再次调用模型', ms=0))
         if result.ok:
             raw_answer = str(result.data.get("answer") or "").strip()
-            picks = _coerce_picks(
+            picks, _malformed = _coerce_picks(
                 result.data.get("picks"), allowed, payload.count
             )
             if raw_answer:

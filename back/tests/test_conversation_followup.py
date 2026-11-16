@@ -14,6 +14,10 @@ def ask(client, message, previous=None, **options):
     return response.json()
 
 
+def recipe_name(first, recipe_id):
+    return next(r['name'] for r in first['recipes'] if r['id'] == recipe_id)
+
+
 @pytest.mark.parametrize('question', ['需要什么食材', '这几道菜的配料', '要买什么材料'])
 def test_ingredients_come_from_recommended_recipes_not_a_new_food_recommendation(client, session, monkeypatch, question):
     first = ask(client, '推荐三道菜')
@@ -140,9 +144,18 @@ def test_old_ingredient_conversation_and_more_than_twenty_cards_are_supported(cl
 
 @pytest.mark.parametrize('message', ['图片呢', '给我看看图片', '有图吗', '这些食材的图片', '能预览这些食材吗'])
 def test_short_image_followup_displays_the_focused_ingredients_without_model(client, session, monkeypatch, message):
+    from app.services import conversation_followup
+
     first = ask(client, '推荐三道菜')
-    ingredients = ask(client, '第二道需要什么食材', first)
-    target = first['recipes'][1]['id']
+    # 选材种子库里只有 6 种食材，推荐结果里有的菜（如香菇炖鸡）配料
+    # 全部没建档，映射不出卡片。预览功能验证的是「配料 → 食材卡片」
+    # 这条链路，跟具体第几道菜无关，所以动态挑一道能映射出卡片的菜。
+    target = next(
+        recipe['id'] for recipe in first['recipes']
+        if conversation_followup.ingredient_cards(session, [recipe['id']]).foods
+    )
+    ingredients = ask(client, f'「{recipe_name(first, target)}」需要什么食材', first)
+    assert ingredients['conversation_state']['ingredient_recipe_ids'] == [target]
     monkeypatch.setattr(settings, 'ai_enabled', True)
     monkeypatch.setattr(settings, 'ai_api_key', 'test-only')
     monkeypatch.setattr(ai_client, '_network_complete_json', lambda *a, **kw: pytest.fail('Ingredient image preview must not call the model'))
