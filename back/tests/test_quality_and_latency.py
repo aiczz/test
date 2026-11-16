@@ -2,7 +2,7 @@ import pytest
 
 from app.ai import client as ai_client
 from app.core.config import settings
-from app.services.explanation_guard import checked_text
+from app.services.explanation_guard import checked_text, grounded_numbers_of
 from app.utils.recipe_duration import duration_from_text
 
 
@@ -19,13 +19,45 @@ def test_explicit_duration_evidence(text, minutes):
 
 
 @pytest.mark.parametrize('text', [
-    '保证20分钟做好整餐', '适合2人，已经低钠', '增强免疫力，能治好失眠',
+    '保证20分钟做好整餐', '增强免疫力，能治好失眠',
     '你手头的食材都齐了', '原料200克，热量仅300千卡',
 ])
 def test_unverified_model_claims_fall_back(text):
     result, rejected = checked_text(text, '按已核对条件推荐，请查看菜谱。')
     assert rejected
     assert result == '按已核对条件推荐，请查看菜谱。'
+
+
+def test_low_sodium_claim_no_longer_nukes_answer():
+    """食养词（低钠/补血/润肺）不再整段否决——守卫改成逐句修复后，
+    模型按提示词引用候选数据的自然回答必须能原样通过。"""
+    result, rejected = checked_text('适合2人，已经低钠', '')
+    assert not rejected
+    assert result == '适合2人，已经低钠'
+
+
+def test_sentence_level_salvage_keeps_good_sentences():
+    """硬承诺只丢那一句，其余保留——不再因为一句话毁掉整段回答。"""
+    grounded = grounded_numbers_of('1 | 糖水马蹄 | 时长25分钟 | 钠12mg')
+    result, rejected = checked_text(
+        '这道汤能治好嗓子疼。糖水马蹄25分钟就好，生津润燥，喝着舒服。',
+        '', grounded_numbers=grounded,
+    )
+    assert rejected
+    assert '能治好' not in result
+    assert '生津润燥' in result and '25分钟' in result
+
+
+def test_invented_quantity_sentence_dropped_but_rest_kept():
+    """编造的数字丢句；引用候选行里真实数字的句子放行。"""
+    grounded = grounded_numbers_of('1 | 糖水马蹄 | 时长25分钟 | 钠12mg')
+    result, rejected = checked_text(
+        '糖水马蹄只用5分钟就能做好；马蹄生津润燥。', '',
+        grounded_numbers=grounded,
+    )
+    assert rejected
+    assert '5分钟' not in result
+    assert '生津润燥' in result
 
 
 def test_safe_nonquantified_explanation_kept():

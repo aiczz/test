@@ -30,7 +30,7 @@ from sqlmodel import Session
 
 from app.ai import client
 from app.core.config import settings
-from app.services.explanation_guard import checked_text
+from app.services.explanation_guard import checked_text, grounded_numbers_of
 from app.repositories import catalog_insight_repository as catalog_insight
 from app.repositories import my_food_repository, recipe_repository
 from app.repositories.catalog_insight_repository import (
@@ -1083,10 +1083,13 @@ def _answer_food_recommendation(
             else:
                 _patch_picks(picks, allowed, candidates, count, health_goal)
             if raw_answer:
-                answer, rejected_claim = checked_text(raw_answer, '')
+                answer, rejected_claim = checked_text(
+                    raw_answer, '',
+                    grounded_numbers=grounded_numbers_of(*_food_candidate_lines(session, candidates)),
+                )
                 answer = answer or None
                 if rejected_claim:
-                    trace.append(AiTraceStep(agent='事实校验', summary='模型包含未核验的数量、时间或健康承诺，改用可核对文案', status='info'))
+                    trace.append(AiTraceStep(agent='事实校验', summary='模型回答里含未核验数据或硬承诺的句子已剔除，其余保留', status='info'))
                 source = "ai"
                 model_name = result.model
 
@@ -1122,7 +1125,13 @@ def _answer_food_recommendation(
     chosen = _order_candidates(candidates, [p["id"] for p in picks], count)
     if len(chosen) < count:
         answer = f"你要 {count} 种食材，当前条件下只找到 {len(chosen)} 种。" + answer
-    reason_by_id = {int(p["id"]): checked_text(str(p.get("reason") or ""), '')[0] for p in picks}
+    reason_by_id = {
+        int(p["id"]): checked_text(
+            str(p.get("reason") or ""), '',
+            grounded_numbers=grounded_numbers_of(*_food_candidate_lines(session, candidates)),
+        )[0]
+        for p in picks
+    }
     foods = [
         HomeFoodItem(
             **home_service.food_brief_payload(item),
@@ -1628,10 +1637,15 @@ def _chat_once(
             else:
                 _patch_picks(picks, allowed, candidates, count, health_goal)
             if raw_answer:
-                answer, rejected_claim = checked_text(raw_answer, '')
+                answer, rejected_claim = checked_text(
+                    raw_answer, '',
+                    grounded_numbers=grounded_numbers_of(
+                        *_candidate_lines(session, candidates, food_ids)
+                    ),
+                )
                 answer = answer or None
                 if rejected_claim:
-                    trace.append(AiTraceStep(agent='事实校验', summary='模型包含未核验的数量、时间或健康承诺，改用可核对文案', status='info'))
+                    trace.append(AiTraceStep(agent='事实校验', summary='模型回答里含未核验数据或硬承诺的句子已剔除，其余保留', status='info'))
                 source = "ai"
                 model_name = result.model
         if answer is None:
@@ -1719,7 +1733,10 @@ def _chat_once(
 
     notes = (
         {} if intent == "cook_with_my_foods" else
-        {entry["id"]: checked_text(entry["reason"], '')[0] for entry in picks if entry.get("reason")}
+        {entry["id"]: checked_text(
+            entry["reason"], '',
+            grounded_numbers=grounded_numbers_of(*_candidate_lines(session, candidates, food_ids)),
+        )[0] for entry in picks if entry.get("reason")}
     )
     recipes = []
     for item in chosen:
@@ -2083,7 +2100,12 @@ def _answer_from_reasons(
     if len(parts) < 2:
         return None
     if health_goal is not None:
-        lead = f"按你说的「{health_goal.name}」，"
+        # 只在用户原话里真的出现过这个诉求（或它的说法）时才复读名字；
+        # 「嗓子疼」→内部匹配到「润燥润肺」，复读内部名既机械又像识别错了。
+        goal_name = getattr(health_goal, "name", "") or ""
+        goal_phrases = tuple(getattr(health_goal, "phrases", None) or ())
+        said_it = goal_name in message or any(p and p in message for p in goal_phrases)
+        lead = f"按你说的「{goal_name}」，" if said_it else "结合你的情况，"
     elif weather is not None and _asks_about_weather(message):
         # 用户问的就是天气，开头必须先把天气接住——否则推荐对，
         # 但用户看不出这些菜和今天的天气有什么关系。
@@ -2617,10 +2639,18 @@ def _recommend_recipes(
                 result.data.get("picks"), allowed, payload.count
             )
             if raw_answer:
-                answer, rejected_claim = checked_text(raw_answer, '')
+                answer, rejected_claim = checked_text(
+                    raw_answer, '',
+                    grounded_numbers=grounded_numbers_of(
+                        *_candidate_lines(
+                            session, candidates,
+                            food_ids if food_ids is not None else payload.food_ids,
+                        )
+                    ),
+                )
                 answer = answer or None
                 if rejected_claim:
-                    trace.append(AiTraceStep(agent='事实校验', summary='模型包含未核验的数量、时间或健康承诺，改用可核对文案', status='info'))
+                    trace.append(AiTraceStep(agent='事实校验', summary='模型回答里含未核验数据或硬承诺的句子已剔除，其余保留', status='info'))
                 source = "ai"
                 model_name = result.model
         if answer is None:
@@ -2645,7 +2675,18 @@ def _recommend_recipes(
     meal_summary = meal_selection.summary(chosen, set(food_ids))
     if constraints.required_foods:
         answer, picks = None, []
-    notes = {p["id"]: checked_text(p["reason"], '')[0] for p in picks if p.get("reason")}
+    notes = {
+        p["id"]: checked_text(
+            p["reason"], '',
+            grounded_numbers=grounded_numbers_of(
+                *_candidate_lines(
+                    session, candidates,
+                    food_ids if food_ids is not None else payload.food_ids,
+                )
+            ),
+        )[0]
+        for p in picks if p.get("reason")
+    }
 
     if answer is None:
         if food_names:
