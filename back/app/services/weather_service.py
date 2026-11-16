@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from datetime import date as date_cls
 from typing import Any
@@ -151,8 +152,12 @@ def _estimated(city: str | None, month: int, today: str) -> WeatherContext:
 
 
 # 同一天同一地点只请求一次 —— 首页是热点接口，不能每次刷新都打外部 API。
-_cache: dict[str, WeatherContext] = {}
+# 但**失败（estimated）的结果不能缓存一整天**：Open-Meteo 国内访问偶发超时，
+# 一次网络抖动就把「未取到实时天气」钉死 24 小时，之后聊天里永远是估算。
+# 所以 live 结果按天缓存，estimated 结果只缓存 10 分钟，到期重试真实请求。
+_cache: dict[str, tuple[WeatherContext, float]] = {}
 _cache_lock = threading.Lock()
+_ESTIMATED_TTL_SECONDS = 600
 
 
 def _coords_for(city: str | None, lat: float | None, lon: float | None):
@@ -187,19 +192,25 @@ def current_weather(
 
     cache_key = f"{round(latitude, 2)},{round(longitude, 2)}:{today}"
     with _cache_lock:
-        cached = _cache.get(cache_key)
-    if cached is not None:
-        # 缓存命中也要带上这次请求的城市名，否则换个城市会显示上一个名字
-        cached.city = city
-        return cached
+        hit = _cache.get(cache_key)
+    if hit is not None:
+        cached, cached_at = hit
+        fresh_enough = (
+            cached.source == "live"
+            or time.monotonic() - cached_at < _ESTIMATED_TTL_SECONDS
+        )
+        if fresh_enough:
+            # 缓存命中也要带上这次请求的城市名，否则换个城市会显示上一个名字
+            cached.city = city
+            return cached
 
     context = _fetch(latitude, longitude, city=city, today=today, month=month)
     with _cache_lock:
-        _cache[cache_key] = context
+        _cache[cache_key] = (context, time.monotonic())
         # 缓存不做复杂淘汰：一天一个 key，量级是「城市数」，不会涨。
         if len(_cache) > 512:
             _cache.clear()
-            _cache[cache_key] = context
+            _cache[cache_key] = (context, time.monotonic())
     return context
 
 
