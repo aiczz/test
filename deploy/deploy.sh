@@ -77,7 +77,18 @@ if [ ! -f "$BACK_DIR/.env" ]; then
   echo "  已从 .env.example 生成 back/.env"
 fi
 
-if grep -q '^SECRET_KEY=dev-only-change-me' "$BACK_DIR/.env"; then
+# SECRET_KEY 要处理两种「不安全」：
+#   ① 有这一行但还是模板默认值  → 换成随机值（下面 elif 分支）
+#   ② 压根没有这一行            → 追加一行随机值（本分支）
+# 为什么必须管第 ② 种：项目负责人的本机 .env 里只有 AI/Embedding 那几行，
+# 没有 SECRET_KEY。运维如果直接拿这份 .env 覆盖模板，缺行 → 服务退回代码里的
+# 公开默认值 `dev-only-change-me`，任何人都能伪造管理员 token。
+# 原脚本只写了 ①，正好漏掉这种「自带 .env」的交付方式。
+if ! grep -qE '^SECRET_KEY=.+' "$BACK_DIR/.env"; then
+  NEW_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+  printf '\n# deploy.sh 自动追加：JWT 签名密钥（原 .env 缺这一行）\nSECRET_KEY=%s\n' "$NEW_SECRET" >> "$BACK_DIR/.env"
+  echo "  .env 里没有 SECRET_KEY，已追加随机值（不追加的话默认值能伪造管理员登录）"
+elif grep -q '^SECRET_KEY=dev-only-change-me' "$BACK_DIR/.env"; then
   NEW_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
   # 用 python 改，避免 sed 把值里的特殊字符吃坏
   python3 - "$BACK_DIR/.env" "$NEW_SECRET" <<'PY'
@@ -101,11 +112,23 @@ fi
 #   1) 异常堆栈直接返回给前端；
 #   2) 管理员首次播种用公开口令 admin123456（见 app/data/seed.py）。
 # 运维忘了改就是公网可登管理员，所以这里直接兜底改掉，不等人工确认。
-if grep -qE '^DEBUG=(true|True|1)$' "$BACK_DIR/.env"; then
+# 同样要管「缺行」：自带 .env 里没有 DEBUG 时，代码默认值是 True。
+if ! grep -qE '^DEBUG=' "$BACK_DIR/.env"; then
+  printf '\n# deploy.sh 自动追加：生产必须关闭调试\nDEBUG=false\n' >> "$BACK_DIR/.env"
+  echo "  .env 里没有 DEBUG，已追加 DEBUG=false"
+elif grep -qE '^DEBUG=(true|True|1)$' "$BACK_DIR/.env"; then
   warn "back/.env 里 DEBUG=true —— 生产环境会暴露内部错误，且管理员口令会退回公开默认值。"
   sed -i.bak -E 's/^DEBUG=(true|True|1)$/DEBUG=false/' "$BACK_DIR/.env"
   rm -f "$BACK_DIR/.env.bak"
   echo "  已自动改为 DEBUG=false"
+fi
+
+# DEBUG=false 且没配 ADMIN_INITIAL_PASSWORD 时，后端会随机生成管理员口令并只打印一次。
+# 这句话必须说清楚，否则运维会以为「管理员密码是 admin123456」然后登不进去。
+if ! grep -qE '^DEBUG=true' "$BACK_DIR/.env" && ! grep -qE '^ADMIN_INITIAL_PASSWORD=.+' "$BACK_DIR/.env"; then
+  warn "未设置 ADMIN_INITIAL_PASSWORD —— 首次建库会随机生成管理员口令，只打印一次。"
+  warn "  部署完成后执行下面这句把它找出来（账号已存在时不会重新生成）："
+  warn "  journalctl -u shishi-backend | grep -A2 '管理员'"
 fi
 
 # ---------------------------------------------------------------------
