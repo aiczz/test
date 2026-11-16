@@ -150,16 +150,21 @@ sudo systemctl restart shishi-backend
 ## 4. 内容数据（菜谱库）
 
 后端需要内容表（`ingredients` / `dishes` / `dish_ingredients` / 时令三表）。
-仓库里带的是**清洗好的 CSV**（`sql/cleaned_v2/*.csv`），`deploy.sh` 会自动导入。
+`deploy.sh` 自动导入的是**精选目录** `sql/catalog_v1/*.csv`（700 道菜）；
+`sql/cleaned_v2/` 是完整清洗库（10000 道），**不参与部署**，只是留档/备用。
 
 导入后的规模（供核对）：
 
 | 表 | 行数 |
 |---|---|
 | `ingredients` | 8087（其中 590 个是面向用户展示的核心食材）|
-| `dishes` | 10000 |
-| `dish_ingredients` | 77886 |
-| `seasonal_calendar` / `seasonal_food` / `seasonal_dish_links` | 52 / 544 / 101 |
+| `dishes` | 700 |
+| `dish_ingredients` | 8697 |
+| `seasonal_calendar` / `seasonal_food` / `seasonal_dish_links` | 52 / 544 / 72 |
+
+> 想让线上跑完整的 10000 道，把 `deploy.sh` 里的 `CONTENT_DIR` 指向
+> `sql/cleaned_v2` 即可 —— 但首屏要拉 3.5 MB，且约 9500 道没有配图，
+> 视觉效果会明显变差，属于产品取舍，不要随手改。
 
 > 这个导入是**一次性**的：脚本会检测表是否已存在，已导入就跳过。
 > 想强制重导：`sudo bash deploy/deploy.sh --reload-data`

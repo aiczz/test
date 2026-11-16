@@ -94,3 +94,9 @@ front/output/
 # 别再提交它：真正给服务器用的那份由 CI 构建、发布在 Release 的 web-latest 上。
 # 仓库里留一份旧的会造成「以为它是最新的」——名字还和 Release 资产一模一样。
 web-build.tar.gz
+
+# ---- 交给运维的部署包（deploy/package_release.py 生成）----
+_release/
+
+# ---- 编辑器 / 工具产生的本地目录 ----
+.trae/

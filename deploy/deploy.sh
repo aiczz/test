@@ -97,6 +97,17 @@ if ! grep -qE '^AI_API_KEY=.+' "$BACK_DIR/.env"; then
   warn "  → 要开 AI：向项目负责人索取 key，填进 $BACK_DIR/.env 的 AI_API_KEY 后重启服务。"
 fi
 
+# .env.example 默认 DEBUG=true 是为了本地开发方便，但它会带来两个生产事故：
+#   1) 异常堆栈直接返回给前端；
+#   2) 管理员首次播种用公开口令 admin123456（见 app/data/seed.py）。
+# 运维忘了改就是公网可登管理员，所以这里直接兜底改掉，不等人工确认。
+if grep -qE '^DEBUG=(true|True|1)$' "$BACK_DIR/.env"; then
+  warn "back/.env 里 DEBUG=true —— 生产环境会暴露内部错误，且管理员口令会退回公开默认值。"
+  sed -i.bak -E 's/^DEBUG=(true|True|1)$/DEBUG=false/' "$BACK_DIR/.env"
+  rm -f "$BACK_DIR/.env.bak"
+  echo "  已自动改为 DEBUG=false"
+fi
+
 # ---------------------------------------------------------------------
 say "2/7 准备 Python 环境"
 # ---------------------------------------------------------------------
