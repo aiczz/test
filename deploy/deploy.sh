@@ -212,7 +212,8 @@ fi
 # ---------------------------------------------------------------------
 say "4/7 注册 systemd 服务"
 # ---------------------------------------------------------------------
-sed "s#^ExecStart=.*#ExecStart=$PY -m uvicorn app.main:app --host $BIND_HOST --port $BIND_PORT#" \
+sed -e "s#^ExecStart=.*#ExecStart=$PY -m uvicorn app.main:app --host $BIND_HOST --port $BIND_PORT#" \
+  -e "s#/opt/test/#$REPO_DIR/#g" \
   "$REPO_DIR/deploy/${SERVICE_NAME}.service" > "$SERVICE_FILE"
 echo "  监听地址：$BIND_HOST:$BIND_PORT"
 if [ "$BIND_HOST" = "0.0.0.0" ]; then
@@ -244,6 +245,14 @@ if [ "$DO_WEB" -eq 0 ]; then
   echo "  --no-web：跳过"
 else
   mkdir -p "$WEB_DIR"
+  # 旧产物先备份再覆盖：下面那两处 find -delete 是不可逆的，
+  # 一旦新产物有问题（白屏、CI 出了坏包），没有备份就只能重新构建。
+  # 只留最近 2 份，避免小机器磁盘被 279 MB × N 撑爆。
+  if [ -f "$WEB_DIR/index.html" ]; then
+    WEB_BAK="$WEB_DIR.bak-$(date +%m%d-%H%M)"
+    cp -a "$WEB_DIR" "$WEB_BAK" && echo "  已备份旧前端 → $WEB_BAK"
+    ls -1d "$WEB_DIR".bak-* 2>/dev/null | sort | head -n -2 | xargs -r rm -rf
+  fi
   if [ "$WEB_FROM_RELEASE" -eq 0 ] && [ -f "$LOCAL_WEB/index.html" ]; then
     find "$WEB_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
     cp -a "$LOCAL_WEB/." "$WEB_DIR/"

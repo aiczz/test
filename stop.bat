@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 echo ======= ShiShi Stopper =======
 echo.
 
